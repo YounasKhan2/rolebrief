@@ -42,12 +42,14 @@ model Company {
   slug              String   @unique
   canonicalName     String
   domain            String?
+  logoUrl           String?
   verificationState String   @default("unknown")
   aliases           String[] @default([])
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
-  jobs Job[]
+  jobs            Job[]
+  providerRecords ProviderRecord[]
 
   @@index([canonicalName])
 }
@@ -78,17 +80,87 @@ model Job {
   updatedAt         DateTime  @updatedAt
   expiresAt         DateTime?
   companyId         String?
+  sourceId          String?
   primaryOccurrenceId String?  @unique
 
   company     Company?        @relation(fields: [companyId], references: [id])
+  source      Source?         @relation(fields: [sourceId], references: [id])
   occurrences JobOccurrence[]
+  providerRecords ProviderRecord[]
+  locations   JobLocation[]
   salaries    Salary[]
   savedItems  SavedItem[]
   applications Application[]
 
   @@index([status, publishedAt])
   @@index([companyId])
+  @@index([sourceId])
   @@index([workMode])
+}
+
+model Location {
+  id        String   @id @default(cuid())
+  alpha2    String?
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  jobs JobLocation[]
+
+  @@index([name])
+}
+
+model JobLocation {
+  jobId      String
+  locationId String
+
+  job      Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  location Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@id([jobId, locationId])
+}
+
+model Source {
+  id                String   @id @default(cuid())
+  slug              String   @unique
+  name              String
+  baseUrl           String
+  attributionPolicy String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  jobs            Job[]
+  providerRecords ProviderRecord[]
+}
+
+model ProviderRecord {
+  id                String   @id @default(cuid())
+  providerId        String
+  externalId        String
+  recordType        String
+  sourceId          String
+  jobId             String?
+  companyId         String?
+  sourceUrl         String
+  applicationUrl    String?
+  rawPayload        Json
+  schemaVersion     String
+  contentHash       String
+  providerPublishedAt DateTime?
+  providerUpdatedAt   DateTime?
+  fetchedAt         DateTime @default(now())
+  lastSeenAt        DateTime @default(now())
+  observedState     String   @default("active")
+
+  source  Source   @relation(fields: [sourceId], references: [id])
+  job     Job?     @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  company Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+
+  @@unique([providerId, externalId, recordType])
+  @@index([jobId])
+  @@index([companyId])
+  @@index([providerId, fetchedAt])
 }
 
 model JobOccurrence {

@@ -1,6 +1,7 @@
 import "reflect-metadata";
 import { NestFactory } from "@nestjs/core";
 import { Logger } from "nestjs-pino";
+import { HimalayasSchedulerService } from "./scheduler/himalayas-scheduler.service";
 import { SchedulerModule } from "./scheduler.module";
 
 async function bootstrap() {
@@ -8,6 +9,7 @@ async function bootstrap() {
     bufferLogs: true
   });
   app.useLogger(app.get(Logger));
+  await app.get(HimalayasSchedulerService).syncSchedule();
 
   const logger = app.get(Logger);
   process.on("SIGTERM", async () => {

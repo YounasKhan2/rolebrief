@@ -33,4 +33,19 @@ export class AppConfigService {
   get workerConcurrency() {
     return this.config.get("WORKER_CONCURRENCY", { infer: true });
   }
+
+  get himalayas() {
+    return {
+      enabled: this.config.get("HIMALAYAS_ENABLED", { infer: true }),
+      apiUrl: this.config.get("HIMALAYAS_API_URL", { infer: true }),
+      timeoutMs: this.config.get("HIMALAYAS_TIMEOUT_MS", { infer: true }),
+      pageLimit: this.config.get("HIMALAYAS_PAGE_LIMIT", { infer: true }),
+      maxPagesPerRun: this.config.get("HIMALAYAS_MAX_PAGES_PER_RUN", { infer: true }),
+      retryAttempts: this.config.get("HIMALAYAS_RETRY_ATTEMPTS", { infer: true }),
+      retryDelayMs: this.config.get("HIMALAYAS_RETRY_DELAY_MS", { infer: true }),
+      rateLimitDelayMs: this.config.get("HIMALAYAS_RATE_LIMIT_DELAY_MS", { infer: true }),
+      cron: this.config.get("HIMALAYAS_CRON", { infer: true }),
+      liveSmoke: this.config.get("HIMALAYAS_LIVE_SMOKE", { infer: true })
+    };
+  }
 }
