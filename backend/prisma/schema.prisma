@@ -1,0 +1,230 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum JobStatus {
+  ACTIVE
+  STALE
+  EXPIRED
+  SUSPICIOUS
+  UNKNOWN
+}
+
+enum WorkMode {
+  ONSITE
+  HYBRID
+  REMOTE
+  UNKNOWN
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String?  @unique
+  locale    String   @default("en")
+  timezone  String   @default("UTC")
+  role      String   @default("user")
+  status    String   @default("active")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  savedItems   SavedItem[]
+  applications Application[]
+  alerts       Alert[]
+}
+
+model Company {
+  id                String   @id @default(cuid())
+  slug              String   @unique
+  canonicalName     String
+  domain            String?
+  verificationState String   @default("unknown")
+  aliases           String[] @default([])
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  jobs Job[]
+
+  @@index([canonicalName])
+}
+
+model Job {
+  id                String    @id @default(cuid())
+  slug              String    @unique
+  canonicalTitle    String
+  normalizedRole    String?
+  seniority         String?
+  employmentType    String?
+  descriptionText   String?
+  descriptionHtml   String?
+  workMode          WorkMode  @default(UNKNOWN)
+  remoteScope       String?
+  remoteRestrictions Json?
+  requiredSkills    String[]  @default([])
+  preferredSkills   String[]  @default([])
+  authorization     Json?
+  contentHash       String?
+  status            JobStatus @default(UNKNOWN)
+  moderationState   String    @default("pending")
+  sourceDisclosure  Json?
+  searchDocument    String?
+  publishedAt       DateTime?
+  discoveredAt      DateTime  @default(now())
+  verifiedAt        DateTime?
+  updatedAt         DateTime  @updatedAt
+  expiresAt         DateTime?
+  companyId         String?
+  primaryOccurrenceId String?  @unique
+
+  company     Company?        @relation(fields: [companyId], references: [id])
+  occurrences JobOccurrence[]
+  salaries    Salary[]
+  savedItems  SavedItem[]
+  applications Application[]
+
+  @@index([status, publishedAt])
+  @@index([companyId])
+  @@index([workMode])
+}
+
+model JobOccurrence {
+  id               String   @id @default(cuid())
+  providerId       String
+  externalId       String
+  sourceName       String
+  sourceUrl        String
+  applicationUrl   String?
+  rawPayload       Json?
+  schemaVersion    String
+  attributionPolicy String?
+  retentionPolicy  String?
+  providerPublishedAt DateTime?
+  providerUpdatedAt   DateTime?
+  fetchedAt        DateTime @default(now())
+  observedState    String   @default("unknown")
+  contentHash      String?
+  jobId            String
+
+  job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@unique([providerId, externalId])
+  @@index([jobId])
+  @@index([providerId, fetchedAt])
+}
+
+model Salary {
+  id        String  @id @default(cuid())
+  jobId     String
+  currency  String?
+  min       Int?
+  max       Int?
+  period    String?
+  source    String?
+  ambiguity String  @default("unknown")
+
+  job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+}
+
+model SavedItem {
+  id        String   @id @default(cuid())
+  userId    String
+  itemType  String
+  itemId    String
+  jobId     String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  job  Job? @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, itemType, itemId])
+}
+
+model Application {
+  id         String   @id @default(cuid())
+  userId     String
+  jobId      String?
+  roleTitle  String
+  companyName String?
+  stage      String   @default("saved")
+  nextAction String?
+  notes      String?
+  appliedAt  DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  job  Job? @relation(fields: [jobId], references: [id])
+}
+
+model Alert {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  filters   Json
+  cadence   String   @default("daily")
+  channels  String[] @default([])
+  status    String   @default("active")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deliveries AlertDelivery[]
+}
+
+model AlertDelivery {
+  id        String   @id @default(cuid())
+  alertId   String
+  itemType  String
+  itemId    String
+  dedupeKey String   @unique
+  status    String
+  sentAt    DateTime?
+  createdAt DateTime @default(now())
+
+  alert Alert @relation(fields: [alertId], references: [id], onDelete: Cascade)
+}
+
+model IngestionRun {
+  id          String   @id @default(cuid())
+  providerId  String
+  partition   String
+  status      String
+  recordsFetched  Int @default(0)
+  recordsAccepted Int @default(0)
+  recordsRejected Int @default(0)
+  startedAt   DateTime @default(now())
+  finishedAt  DateTime?
+  metadata    Json?
+
+  @@index([providerId, startedAt])
+}
+
+model FreshnessEvent {
+  id        String   @id @default(cuid())
+  targetType String
+  targetId   String
+  eventType  String
+  evidence   Json?
+  occurredAt DateTime @default(now())
+
+  @@index([targetType, targetId, occurredAt])
+}
+
+model AuditEvent {
+  id        String   @id @default(cuid())
+  actorId   String?
+  actorType String
+  action    String
+  targetType String
+  targetId   String?
+  requestId String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([actorType, createdAt])
+  @@index([targetType, targetId])
+}

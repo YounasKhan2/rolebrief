@@ -1,0 +1,10 @@
+{
+  "description": "Streamline your design process with an intuitive platform that allows users to create, collaborate, and share stunning frontend designs effortlessly.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}

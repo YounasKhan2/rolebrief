@@ -1,0 +1,137 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: rolebrief
+      POSTGRES_USER: rolebrief
+      POSTGRES_PASSWORD: rolebrief_dev_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - rolebrief_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rolebrief -d rolebrief"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - rolebrief_redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    image: rolebrief-backend:dev
+    build:
+      context: ./backend
+    command: node dist/main.js
+    env_file:
+      - ./backend/.env.example
+    environment:
+      DATABASE_URL: postgresql://rolebrief:rolebrief_dev_password@postgres:5432/rolebrief?schema=public
+      REDIS_URL: redis://redis:6379
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/api/v1/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    image: rolebrief-backend:dev
+    build:
+      context: ./backend
+    command: node dist/worker.js
+    env_file:
+      - ./backend/.env.example
+    environment:
+      DATABASE_URL: postgresql://rolebrief:rolebrief_dev_password@postgres:5432/rolebrief?schema=public
+      REDIS_URL: redis://redis:6379
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  scheduler:
+    image: rolebrief-backend:dev
+    build:
+      context: ./backend
+    command: node dist/scheduler.js
+    env_file:
+      - ./backend/.env.example
+    environment:
+      DATABASE_URL: postgresql://rolebrief:rolebrief_dev_password@postgres:5432/rolebrief?schema=public
+      REDIS_URL: redis://redis:6379
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  migrate:
+    image: rolebrief-backend:dev
+    build:
+      context: ./backend
+    command: ./node_modules/.bin/prisma migrate deploy
+    profiles: ["tools"]
+    env_file:
+      - ./backend/.env.example
+    environment:
+      DATABASE_URL: postgresql://rolebrief:rolebrief_dev_password@postgres:5432/rolebrief?schema=public
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  seed:
+    image: rolebrief-backend:dev
+    build:
+      context: ./backend
+    command: ./node_modules/.bin/tsx prisma/seed.ts
+    profiles: ["tools"]
+    env_file:
+      - ./backend/.env.example
+    environment:
+      DATABASE_URL: postgresql://rolebrief:rolebrief_dev_password@postgres:5432/rolebrief?schema=public
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  adminer:
+    image: adminer:4
+    profiles: ["tools"]
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  rolebrief_postgres:
+  rolebrief_redis:

@@ -1,0 +1,187 @@
+@import url('https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap');
+@import 'tailwindcss';
+
+@theme {
+  /* Core palette (spec §4.1) */
+  --color-ink: #151a23;
+  --color-navy: #172554;
+  --color-paper: #f7f4ee;
+  --color-surface: #ffffff;
+  --color-indigo: #4f46e5;
+  --color-indigo-strong: #4338ca;
+  --color-cyan: #0e7490;
+  --color-emerald: #047857;
+  --color-amber: #b45309;
+  --color-red: #b91c1c;
+  --color-slate: #667085;
+  --color-line: #d8dee8;
+  --color-soft: #f5f7fb;
+
+  /* Tint surfaces for status backgrounds */
+  --color-indigo-tint: #eef0fe;
+  --color-cyan-tint: #e5f2f5;
+  --color-emerald-tint: #e6f4ee;
+  --color-amber-tint: #fbf1e3;
+  --color-red-tint: #fbeaea;
+
+  --font-sans: 'Inter', Arial, sans-serif;
+  --font-serif: 'Newsreader', Georgia, serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+
+  --radius-control: 10px;
+  --radius-card: 16px;
+  --radius-feature: 24px;
+
+  --shadow-raised: 0 12px 32px rgba(21, 26, 35, 0.08);
+  --shadow-sheet: 0 -8px 40px rgba(21, 26, 35, 0.12);
+
+  --ease-enter: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    color: var(--color-ink);
+    background: var(--color-surface);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Visible 2px focus indicator (WCAG 2.2 AA, spec §14) */
+  :focus-visible {
+    outline: 2px solid var(--color-indigo);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  ::selection {
+    background: var(--color-indigo-tint);
+    color: var(--color-navy);
+  }
+}
+
+@layer utilities {
+  /* Editorial display type */
+  .font-display {
+    font-family: var(--font-serif);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .font-data {
+    font-family: var(--font-mono);
+    font-feature-settings: 'tnum' 1;
+  }
+
+  /* Kicker / eyebrow — the only sanctioned uppercase (spec §5.3) */
+  .kicker {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 1;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--color-slate);
+  }
+
+  /* Hide scrollbars until scrolling */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-line) transparent;
+  }
+
+  .paper-grain {
+    background-color: var(--color-paper);
+    background-image: radial-gradient(rgba(21, 26, 35, 0.022) 1px, transparent 1px);
+    background-size: 4px 4px;
+  }
+
+  .reading-measure {
+    max-width: 68ch;
+  }
+}
+
+/* ---- Hero & marquee animations ----------------------------------------- */
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes marquee-scroll {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+@keyframes marquee-ltr {
+  0% { transform: translateX(-50%); }
+  100% { transform: translateX(0); }
+}
+
+@keyframes marquee-scroll-third {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-33.333%); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@layer utilities {
+  .animate-fade-in-up {
+    animation: fade-in-up 0.8s var(--ease-enter) both;
+  }
+
+  .animate-marquee {
+    animation: marquee-scroll 32s linear infinite;
+  }
+
+  .animate-marquee-ltr {
+    animation: marquee-ltr 32s linear infinite;
+  }
+
+  .animate-marquee-editorial {
+    animation: marquee-scroll 38s linear infinite;
+  }
+
+  .animate-marquee-editorial:hover,
+  .animate-marquee-ltr:hover,
+  .animate-marquee:hover {
+    animation-play-state: paused;
+  }
+
+  .animate-marquee-triple {
+    animation: marquee-scroll-third 30s linear infinite;
+  }
+
+  .animate-shimmer {
+    background-size: 200% 100%;
+    animation: shimmer 3s ease-in-out infinite;
+  }
+}
+
+/* Reduced motion (spec §13.3) */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
