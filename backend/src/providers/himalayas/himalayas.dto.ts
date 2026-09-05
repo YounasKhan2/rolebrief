@@ -1,42 +1,46 @@
 import { z } from "zod";
 
 export const himalayasLocationObjectSchema = z.object({
-  alpha2: z.string().min(1).optional().nullable(),
+  alpha2: z.string().min(1).nullable().optional(),
   name: z.string().min(1),
   slug: z.string().min(1)
 });
+const locationRestrictionSchema = z.union([himalayasLocationObjectSchema, z.string().min(1)]);
 
-export const himalayasLocationSchema = z.union([z.string().min(1), himalayasLocationObjectSchema]);
+const employmentTypeSchema = z.enum(["Full Time", "Part Time", "Contractor", "Temporary", "Intern", "Volunteer", "Other"]);
+const salaryPeriodSchema = z.enum(["hourly", "weekly", "fortnightly", "monthly", "annual"]);
+const senioritySchema = z.enum(["Entry-level", "Mid-level", "Senior", "Manager", "Director", "Executive"]);
+const timestampMsSchema = z.number().int().nonnegative();
 
 export const himalayasJobSchema = z.object({
   title: z.string().min(1),
-  excerpt: z.string().optional().nullable(),
+  excerpt: z.string(),
   companyName: z.string().min(1),
   companySlug: z.string().min(1),
-  companyLogo: z.string().url().optional().nullable(),
-  employmentType: z.string().optional().nullable(),
-  minSalary: z.number().nullable().optional(),
-  maxSalary: z.number().nullable().optional(),
-  salaryPeriod: z.string().optional().nullable(),
-  seniority: z.union([z.string(), z.array(z.string())]).optional().nullable(),
-  currency: z.string().optional().nullable(),
-  locationRestrictions: z.array(himalayasLocationSchema).default([]),
-  timezoneRestrictions: z.array(z.union([z.string(), z.number()])).default([]),
-  categories: z.array(z.string()).default([]),
-  parentCategories: z.array(z.string()).default([]),
-  description: z.string().optional().nullable(),
-  pubDate: z.union([z.string(), z.number()]).optional().nullable(),
-  expiryDate: z.union([z.string(), z.number()]).optional().nullable(),
+  companyLogo: z.string().nullable().optional(),
+  employmentType: employmentTypeSchema,
+  minSalary: z.number().nullable(),
+  maxSalary: z.number().nullable(),
+  salaryPeriod: salaryPeriodSchema.default("annual"),
+  seniority: z.array(senioritySchema),
+  currency: z.string().length(3).nullable(),
+  locationRestrictions: z.array(locationRestrictionSchema),
+  timezoneRestrictions: z.array(z.union([z.string(), z.number()])),
+  categories: z.array(z.string()),
+  parentCategories: z.array(z.string()),
+  description: z.string(),
+  pubDate: timestampMsSchema,
+  expiryDate: timestampMsSchema,
   applicationLink: z.string().url(),
   guid: z.string().min(1)
 });
 
 export const himalayasResponseSchema = z.object({
-  updatedAt: z.union([z.string(), z.number()]).optional(),
+  updatedAt: timestampMsSchema,
   nextCursor: z.string().optional().nullable(),
-  offset: z.number().optional(),
-  limit: z.number().optional(),
-  totalCount: z.number().optional(),
+  offset: z.number().int().nonnegative(),
+  limit: z.number().int().min(1).max(20),
+  totalCount: z.number().int().nonnegative(),
   jobs: z.array(himalayasJobSchema)
 });
 

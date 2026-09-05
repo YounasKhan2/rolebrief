@@ -6,8 +6,8 @@ import { Button, FilterChip, Kicker, EmptyState, IconButton } from "../../compon
 import { Input, SegmentedControl } from "../../components/ui/form";
 import { Sheet } from "../../components/ui/overlay";
 import { JobCard } from "../../components/rolebrief/JobCard";
-import { jobs, disciplines, companies } from "../../lib/fixtures";
-import type { Job } from "../../lib/fixtures";
+import { useJobs, disciplines } from "../../lib/jobs";
+import type { Job } from "../../lib/jobs";
 import { useToast } from "../../components/ui/toast";
 import { classNames } from "../../lib/format";
 
@@ -43,6 +43,8 @@ export function Component() {
   const senior = getMulti("senior");
   const elig = getMulti("elig");
   const salaryOnly = params.get("salary") === "1";
+  const cursor = params.get("cursor");
+  const { data: jobs, loading, error, nextCursor, retry } = useJobs({ cursor, limit: 20 });
 
   function update(next: Record<string, string | null>) {
     const p = new URLSearchParams(params);
@@ -60,7 +62,6 @@ export function Component() {
 
   const results = useMemo(() => {
     return jobs.filter((j) => {
-      if (j.flags?.includes("expired")) return false;
       if (q && !`${j.title} ${j.skills.join(" ")}`.toLowerCase().includes(q.toLowerCase())) return false;
       if (disc.size && !disc.has(j.discipline)) return false;
       if (remote.size && !remote.has(j.remoteEligibility)) return false;
@@ -112,11 +113,8 @@ export function Component() {
           <FilterChip key={e.key} active={elig.has(e.key)} onClick={() => toggleMulti("elig", e.key)}>{e.label}</FilterChip>
         ))}
       </FilterGroup>
-      <FilterGroup title="Salary & company">
+      <FilterGroup title="Salary">
         <FilterChip active={salaryOnly} onClick={() => update({ salary: salaryOnly ? null : "1" })}>Employer-provided salary</FilterChip>
-        {companies.slice(0, 2).map((c) => (
-          <FilterChip key={c.slug}>{c.name}</FilterChip>
-        ))}
       </FilterGroup>
     </div>
   );
@@ -176,19 +174,42 @@ export function Component() {
             </Button>
           </div>
 
-          {sorted.length === 0 ? (
+          {loading ? (
+            <JobListSkeleton density={density} />
+          ) : error ? (
+            <EmptyState
+              icon={<FileX size={40} />}
+              title="Could not load jobs"
+              body={error.message}
+              action={<Button variant="secondary" onClick={retry}>Retry</Button>}
+            />
+          ) : sorted.length === 0 ? (
             <EmptyState
               icon={<FileX size={40} />}
               title="No roles match those filters"
-              body="Try removing the eligibility or remote filters, or broaden your discipline selection."
+              body={jobs.length === 0 ? "No stored Himalayas jobs are available yet. Run the provider sync, then refresh this page." : "Try removing the eligibility or remote filters, or broaden your discipline selection."}
               action={<Button variant="secondary" onClick={clearAll} icon={<ArrowUpDown size={16} />}>Clear filters</Button>}
             />
           ) : (
-            <div className={classNames(density === "compact" ? "space-y-2.5" : "space-y-4")}>
-              {sorted.map((j) => (
-                <JobCard key={j.slug} job={j} variant={density === "compact" ? "compact" : "comfortable"} saved={saved.has(j.slug)} onSave={() => toggleSave(j.slug)} />
-              ))}
-            </div>
+            <>
+              <div className={classNames(density === "compact" ? "space-y-2.5" : "space-y-4")}>
+                {sorted.map((j) => (
+                  <JobCard key={j.slug} job={j} variant={density === "compact" ? "compact" : "comfortable"} saved={saved.has(j.slug)} onSave={() => toggleSave(j.slug)} />
+                ))}
+              </div>
+              <div className="mt-5 flex justify-end">
+                {nextCursor && (
+                  <Button variant="secondary" onClick={() => update({ cursor: nextCursor })}>
+                    Next page
+                  </Button>
+                )}
+                {cursor && !nextCursor && (
+                  <Button variant="secondary" onClick={() => update({ cursor: null })}>
+                    First page
+                  </Button>
+                )}
+              </div>
+            </>
           )}
         </div>
       </div>
@@ -201,7 +222,7 @@ export function Component() {
         footer={
           <>
             <Button variant="secondary" className="grow" onClick={clearAll}>Clear all</Button>
-            <Button className="grow" onClick={() => setFiltersOpen(false)}>Show {sorted.length} results</Button>
+            <Button className="grow" onClick={() => setFiltersOpen(false)}>Show {loading ? "" : sorted.length} results</Button>
           </>
         }
       >
@@ -216,6 +237,25 @@ export function Component() {
 
 function latest(j: Job) {
   return [...j.freshness].sort((a, b) => +new Date(b.at) - +new Date(a.at))[0].at;
+}
+
+function JobListSkeleton({ density }: { density: "comfortable" | "compact" }) {
+  return (
+    <div className={classNames(density === "compact" ? "space-y-2.5" : "space-y-4")}>
+      {Array.from({ length: 4 }).map((_, index) => (
+        <div key={index} className="rounded-[var(--radius-card)] border border-line bg-white p-5">
+          <div className="flex gap-3.5">
+            <div className="size-11 rounded-[10px] bg-soft animate-pulse" />
+            <div className="grow space-y-2">
+              <div className="h-5 w-2/3 rounded bg-soft animate-pulse" />
+              <div className="h-4 w-4/5 rounded bg-soft animate-pulse" />
+            </div>
+          </div>
+          {density === "comfortable" && <div className="mt-4 h-14 rounded-[10px] bg-soft animate-pulse" />}
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function FilterGroup({ title, children, onClear }: { title: string; children: React.ReactNode; onClear?: () => void }) {

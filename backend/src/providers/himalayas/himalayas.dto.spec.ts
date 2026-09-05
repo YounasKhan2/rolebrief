@@ -1,31 +1,16 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { himalayasResponseSchema } from "./himalayas.dto";
+import { sampleHimalayasResponse } from "./himalayas.test-fixtures";
 
 test("validates Himalayas response DTOs", () => {
-  const parsed = himalayasResponseSchema.parse({
-    updatedAt: Date.now(),
-    nextCursor: "next",
-    jobs: [
-      {
-        title: "Senior Engineer",
-        companyName: "Acme",
-        companySlug: "acme",
-        employmentType: "Full Time",
-        locationRestrictions: [],
-        timezoneRestrictions: [],
-        categories: ["Engineering"],
-        parentCategories: ["Software"],
-        description: "<p>Hello</p>",
-        pubDate: Date.now(),
-        expiryDate: Date.now() + 1000,
-        applicationLink: "https://himalayas.app/jobs/acme-senior-engineer",
-        guid: "guid-1"
-      }
-    ]
-  });
+  const parsed = himalayasResponseSchema.parse(sampleHimalayasResponse({ nextCursor: "next" }));
 
   assert.equal(parsed.jobs[0].guid, "guid-1");
+  assert.deepEqual(parsed.jobs[0].seniority, ["Senior"]);
+  assert.equal(parsed.jobs[0].salaryPeriod, "annual");
+  const firstRestriction = parsed.jobs[0].locationRestrictions[0];
+  assert.equal(typeof firstRestriction === "object" ? firstRestriction.name : firstRestriction, "United States");
 });
 
 test("rejects incomplete Himalayas job records", () => {

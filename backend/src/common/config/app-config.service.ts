@@ -18,6 +18,14 @@ export class AppConfigService {
     return this.config.get("LOG_LEVEL", { infer: true });
   }
 
+  get frontendOrigins() {
+    return this.config
+      .get("FRONTEND_ORIGIN", { infer: true })
+      .split(",")
+      .map((origin) => origin.trim())
+      .filter(Boolean);
+  }
+
   get databaseUrl() {
     return this.config.get("DATABASE_URL", { infer: true });
   }
@@ -39,8 +47,9 @@ export class AppConfigService {
       enabled: this.config.get("HIMALAYAS_ENABLED", { infer: true }),
       apiUrl: this.config.get("HIMALAYAS_API_URL", { infer: true }),
       timeoutMs: this.config.get("HIMALAYAS_TIMEOUT_MS", { infer: true }),
-      pageLimit: this.config.get("HIMALAYAS_PAGE_LIMIT", { infer: true }),
-      maxPagesPerRun: this.config.get("HIMALAYAS_MAX_PAGES_PER_RUN", { infer: true }),
+      initialBackfillPages: this.config.get("HIMALAYAS_INITIAL_BACKFILL_PAGES", { infer: true }),
+      recurringSyncPages: this.config.get("HIMALAYAS_RECURRING_SYNC_PAGES", { infer: true }),
+      unchangedStopThreshold: this.config.get("HIMALAYAS_UNCHANGED_STOP_THRESHOLD", { infer: true }),
       retryAttempts: this.config.get("HIMALAYAS_RETRY_ATTEMPTS", { infer: true }),
       retryDelayMs: this.config.get("HIMALAYAS_RETRY_DELAY_MS", { infer: true }),
       rateLimitDelayMs: this.config.get("HIMALAYAS_RATE_LIMIT_DELAY_MS", { infer: true }),

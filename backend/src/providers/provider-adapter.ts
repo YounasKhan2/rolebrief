@@ -3,6 +3,7 @@ export interface ProviderPage<TRecord> {
   nextCursor: string | null;
   fetchedAt: Date;
   partialFailures: ProviderFailure[];
+  terminal: boolean;
 }
 
 export interface ProviderFailure {

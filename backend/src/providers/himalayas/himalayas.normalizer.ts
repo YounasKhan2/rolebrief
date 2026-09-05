@@ -15,31 +15,51 @@ export interface NormalizedHimalayasJob {
   seniority: string | null;
   workMode: WorkMode;
   remoteScope: string;
-  remoteRestrictions: Record<string, unknown>;
+  remoteRestrictions: {
+    countries: { alpha2: string | null; name: string; slug: string }[];
+    labels: string[];
+    timezones: string[];
+  };
   publishedAt: Date | null;
   expiresAt: Date | null;
   applicationUrl: string;
   sourceUrl: string;
   contentHash: string;
   categories: string[];
+  parentCategories: string[];
   locations: { alpha2: string | null; name: string; slug: string }[];
   salary: { min: number | null; max: number | null; currency: string | null; period: string | null } | null;
   raw: HimalayasJobDto;
 }
 
 export function normalizeHimalayasJob(job: HimalayasJobDto): NormalizedHimalayasJob {
-  const seniority = Array.isArray(job.seniority) ? job.seniority.join(", ") : job.seniority ?? null;
-  const locations = job.locationRestrictions.map((location) =>
-    typeof location === "string"
-      ? { alpha2: null, name: location, slug: slugify(location) }
-      : {
-          alpha2: location.alpha2 ?? null,
-          name: location.name,
-          slug: location.slug
-        }
+  const seniority = job.seniority.length > 0 ? job.seniority.join(", ") : null;
+  const { locations, locationLabels } = normalizeLocationRestrictions(job.locationRestrictions);
+  const timezoneRestrictions = job.timezoneRestrictions.map((timezone) => String(timezone));
+  const contentHash = hash(
+    JSON.stringify({
+      title: job.title,
+      excerpt: job.excerpt,
+      companyName: job.companyName,
+      companySlug: job.companySlug,
+      companyLogo: job.companyLogo,
+      employmentType: job.employmentType,
+      minSalary: job.minSalary,
+      maxSalary: job.maxSalary,
+      salaryPeriod: job.salaryPeriod,
+      seniority: job.seniority,
+      currency: job.currency,
+      locationRestrictions: job.locationRestrictions,
+      timezoneRestrictions: job.timezoneRestrictions,
+      categories: job.categories,
+      parentCategories: job.parentCategories,
+      description: job.description,
+      pubDate: job.pubDate,
+      expiryDate: job.expiryDate,
+      applicationLink: job.applicationLink
+    })
   );
-  const contentHash = hash([job.guid, job.title, job.companySlug, job.description ?? "", job.pubDate ?? ""].join("|"));
-  const slug = `${slugify(job.companySlug)}-${slugify(job.title)}-${contentHash.slice(0, 8)}`;
+  const slug = `${slugify(job.companySlug)}-${hash(job.guid).slice(0, 12)}`;
 
   return {
     externalId: job.guid,
@@ -48,34 +68,56 @@ export function normalizeHimalayasJob(job: HimalayasJobDto): NormalizedHimalayas
     companySlug: slugify(job.companySlug),
     companyName: job.companyName,
     companyLogo: job.companyLogo ?? null,
-    descriptionHtml: job.description ?? null,
-    descriptionText: stripHtml(job.description ?? job.excerpt ?? ""),
+    descriptionHtml: job.description,
+    descriptionText: stripHtml(job.excerpt || job.description),
     employmentType: job.employmentType ?? null,
     seniority,
     workMode: WorkMode.REMOTE,
     remoteScope: locations.length === 0 ? "worldwide" : "restricted",
     remoteRestrictions: {
       countries: locations,
-      timezones: job.timezoneRestrictions.map(String)
+      labels: locationLabels,
+      timezones: timezoneRestrictions
     },
     publishedAt: parseProviderDate(job.pubDate),
     expiresAt: parseProviderDate(job.expiryDate),
     applicationUrl: job.applicationLink,
     sourceUrl: job.applicationLink,
     contentHash,
-    categories: [...job.categories, ...job.parentCategories],
+    categories: job.categories,
+    parentCategories: job.parentCategories,
     locations,
     salary:
-      job.minSalary || job.maxSalary
+      job.minSalary !== null || job.maxSalary !== null
         ? {
             min: job.minSalary ?? null,
             max: job.maxSalary ?? null,
             currency: job.currency ?? null,
-            period: job.salaryPeriod ?? "annual"
+            period: job.salaryPeriod
           }
         : null,
     raw: job
   };
+}
+
+function normalizeLocationRestrictions(restrictions: HimalayasJobDto["locationRestrictions"]) {
+  const locations: { alpha2: string | null; name: string; slug: string }[] = [];
+  const locationLabels: string[] = [];
+
+  for (const restriction of restrictions) {
+    if (typeof restriction === "string") {
+      locationLabels.push(restriction);
+      continue;
+    }
+
+    locations.push({
+      alpha2: restriction.alpha2 ?? null,
+      name: restriction.name,
+      slug: restriction.slug
+    });
+  }
+
+  return { locations, locationLabels };
 }
 
 function slugify(value: string) {

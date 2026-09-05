@@ -20,18 +20,11 @@ type QueueItem = {
   severity: "high" | "medium";
 };
 
-const reports: QueueItem[] = [
-  { id: "r1", title: "Senior React Developer (Remote)", company: "Brightpay Solutions", location: "Worldwide remote", reason: "Asks for payment", detail: "3 users reported an upfront 'training fee' request in the application.", reportedAt: "2026-09-02T04:20:00Z", severity: "high" },
-  { id: "r2", title: "Data Entry — Work From Home", company: "QuickHire Ltd", location: "Karachi, PK", reason: "Misleading pay", detail: "Salary listed as PKR 250k but description says commission-only.", reportedAt: "2026-09-01T18:00:00Z", severity: "medium" },
-];
+const reports: QueueItem[] = [];
 
-const suspicious: QueueItem[] = [
-  { id: "s1", title: "Urgent Hiring!! Software Engineer $$$", company: "Unverified poster", location: "Dubai, UAE", reason: "Fraud signals", detail: "All-caps title, personal Gmail contact, no company domain match.", reportedAt: "2026-09-02T02:11:00Z", severity: "high" },
-];
+const suspicious: QueueItem[] = [];
 
-const duplicates = [
-  { id: "d1", title: "Frontend Engineer", company: "Meridian Labs", sources: ["LinkedIn", "Indeed", "Careers page"], location: "Lahore, PK", firstSeen: "2026-08-30T09:00:00Z" },
-];
+const duplicates: Array<{ id: string; title: string; company: string; sources: string[]; location: string; firstSeen: string }> = [];
 
 export function Component() {
   const toast = useToast();

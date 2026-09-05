@@ -39,70 +39,7 @@ const kindMeta: Record<Kind, { icon: typeof Bell; tint: string; text: string; la
   news: { icon: Newspaper, tint: "bg-cyan-tint", text: "text-cyan", label: "News" },
 };
 
-const seed: Note[] = [
-  {
-    id: "1",
-    kind: "match",
-    title: "3 fresh roles match “Worldwide remote frontend”",
-    body: "New roles from Meridian Labs and Atlas Health cleared your alert. All three are eligible for your remote scope.",
-    at: "2026-09-02T07:10:00Z",
-    company: "Meridian Labs",
-    to: "/radar",
-    unread: true,
-    labelled: "From your Smart Alert",
-  },
-  {
-    id: "2",
-    kind: "deadline",
-    title: "Interview prep due for Senior frontend engineer",
-    body: "Your reminder to prepare the system-design round is set for 4 Sep.",
-    at: "2026-09-02T06:00:00Z",
-    company: "Meridian Labs",
-    to: "/tracker",
-    unread: true,
-  },
-  {
-    id: "3",
-    kind: "momentum",
-    title: "Meridian Labs momentum shifted upward",
-    body: "Openings rose after a $40M Series B. Treat future hiring as inference, not a guarantee.",
-    at: "2026-09-01T09:00:00Z",
-    company: "Meridian Labs",
-    to: "/companies/meridian-labs",
-    unread: true,
-    labelled: "Inference — labelled",
-  },
-  {
-    id: "4",
-    kind: "eligibility",
-    title: "Eligibility changed on a saved role",
-    body: "Backend engineer at Qamar now shows an on-site conflict with your remote-only preference.",
-    at: "2026-08-31T14:00:00Z",
-    company: "Qamar Fintech",
-    to: "/jobs/backend-engineer-qamar",
-    unread: false,
-  },
-  {
-    id: "5",
-    kind: "freshness",
-    title: "A saved role expired",
-    body: "Machine learning engineer at Meridian was removed from its source. We've kept the record and can suggest similar roles.",
-    at: "2026-08-30T06:00:00Z",
-    company: "Meridian Labs",
-    to: "/saved",
-    unread: false,
-  },
-  {
-    id: "6",
-    kind: "news",
-    title: "UAE widens Golden Visa for senior tech roles",
-    body: "May ease relocation for UAE-based roles you follow. Effect on any single employer is unclear.",
-    at: "2026-08-28T09:00:00Z",
-    to: "/news/uae-golden-visa-tech",
-    unread: false,
-    labelled: "AI summary",
-  },
-];
+const seed: Note[] = [];
 
 type Filter = "all" | "unread" | "alerts" | "companies";
 

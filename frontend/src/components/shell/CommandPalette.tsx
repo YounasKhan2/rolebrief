@@ -31,7 +31,7 @@ type Item = {
 };
 
 const navItems: Item[] = [
-  { id: "n-radar", label: "Radar", sub: "Your ranked briefing", group: "Go to", to: "/radar", icon: <Radar size={16} /> },
+  { id: "n-radar", label: "Radar", sub: "Your ranked briefing", group: "Go to", to: "/app/radar", icon: <Radar size={16} /> },
   { id: "n-jobs", label: "Jobs", sub: "Search and filter roles", group: "Go to", to: "/jobs", icon: <Search size={16} /> },
   { id: "n-news", label: "Market Pulse", sub: "Career news", group: "Go to", to: "/news", icon: <Newspaper size={16} /> },
   { id: "n-tracker", label: "Tracker", sub: "Your applications", group: "Go to", to: "/tracker", icon: <ListChecks size={16} /> },

@@ -5,9 +5,7 @@ import { PageContainer } from "../../components/shell/AppShell";
 import { Kicker, Button, SectionRule, EmptyState, Skeleton, CompanyLogo } from "../../components/ui/primitives";
 import { SegmentedControl } from "../../components/ui/form";
 import { JobCard } from "../../components/rolebrief/JobCard";
-import { NewsCard } from "../../components/rolebrief/NewsCard";
-import { CompanyMomentum } from "../../components/rolebrief/CompanyMomentum";
-import { jobs, news, companies, companyName } from "../../lib/fixtures";
+import { useJobs } from "../../lib/jobs";
 import { useToast } from "../../components/ui/toast";
 import { relativeTime } from "../../lib/format";
 
@@ -17,16 +15,19 @@ export function Component() {
   const toast = useToast();
   const [lens, setLens] = useState<Lens>("Best match");
   const [refreshing, setRefreshing] = useState(false);
-  const [saved, setSaved] = useState<Set<string>>(new Set(["senior-frontend-engineer-meridian"]));
+  const { data: jobs, loading, error, retry } = useJobs({ limit: 20 });
+  const [saved, setSaved] = useState<Set<string>>(new Set());
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
 
-  const activeJobs = jobs.filter((j) => !dismissed.has(j.slug) && !j.flags?.includes("expired"));
+  const activeJobs = jobs.filter((j) => !dismissed.has(j.slug));
   const lensJobs =
     lens === "Eligible only" ? activeJobs.filter((j) => j.eligibility.state === "eligible") : activeJobs;
+  const companyNames = Array.from(new Set(activeJobs.map((job) => job.companyName))).slice(0, 3);
 
   function refresh() {
     setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 1100);
+    retry();
+    setTimeout(() => setRefreshing(false), 700);
   }
   function toggleSave(slug: string) {
     setSaved((prev) => {
@@ -45,10 +46,10 @@ export function Component() {
       {/* Briefing header */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <Kicker className="mb-2">Tuesday · 2 September · your daily brief</Kicker>
-          <h1 className="font-display text-4xl text-navy">Good morning, Ayesha.</h1>
+          <Kicker className="mb-2">Live provider brief</Kicker>
+          <h1 className="font-display text-4xl text-navy">RoleBrief Radar</h1>
           <p className="text-slate mt-2 max-w-xl">
-            <span className="text-ink font-medium">4 new matches</span> since yesterday, 2 followed companies moved, and one saved role has a deadline this week.
+            <span className="text-ink font-medium">{activeJobs.length} stored role{activeJobs.length === 1 ? "" : "s"}</span> from the Himalayas-backed Jobs API. Matching, deadlines and company moves stay unavailable until those backend features exist.
           </p>
         </div>
         <Button variant="secondary" onClick={refresh} icon={<RefreshCw size={16} className={refreshing ? "animate-spin" : ""} />}>
@@ -58,15 +59,15 @@ export function Component() {
 
       {/* Summary tiles */}
       <div className="mt-6 grid gap-3 sm:grid-cols-3">
-        <SummaryTile tone="indigo" title="4 new matches" body="Ranked and eligibility-checked" />
-        <SummaryTile tone="cyan" title="2 company moves" body="Meridian raised · Qamar reorg" />
-        <SummaryTile tone="amber" title="1 deadline" body="Meridian frontend · in 3 days" icon={<CalendarClock size={18} />} />
+        <SummaryTile tone="indigo" title={`${activeJobs.length} stored roles`} body="Read from the backend Jobs API" />
+        <SummaryTile tone="cyan" title="Company moves unavailable" body="No live news provider connected" />
+        <SummaryTile tone="amber" title="Deadlines unavailable" body="Tracker data remains demo-only" icon={<CalendarClock size={18} />} />
       </div>
 
       {/* Provider outage notice (partial state) */}
       <div className="mt-4 flex items-center gap-3 rounded-[var(--radius-card)] border border-amber/30 bg-amber-tint px-4 py-3 text-[13px] text-ink">
         <AlertTriangle size={16} className="text-amber shrink-0" />
-        One source (Bayt.com) is slow right now — some UAE roles may be delayed. Everything else is current.
+        Company momentum, saved-job deadlines and personalized match scores are not fabricated. They appear only when backend support exists.
       </div>
 
       <div className="mt-8 grid lg:grid-cols-[1fr_320px] gap-8 items-start">
@@ -80,7 +81,7 @@ export function Component() {
             <SegmentedControl value={lens} onChange={setLens} size="sm" options={(["Best match", "Freshest", "Eligible only"] as Lens[]).map((l) => ({ value: l, label: l }))} />
           </div>
 
-          {refreshing ? (
+          {loading || refreshing ? (
             <div className="space-y-4">
               {Array.from({ length: 3 }).map((_, i) => (
                 <div key={i} className="rounded-[var(--radius-card)] border border-line p-5">
@@ -95,6 +96,13 @@ export function Component() {
                 </div>
               ))}
             </div>
+          ) : error ? (
+            <EmptyState
+              icon={<AlertTriangle size={40} className="text-amber" />}
+              title="Radar could not load jobs"
+              body={error.message}
+              action={<Button variant="secondary" onClick={refresh}>Retry</Button>}
+            />
           ) : lensJobs.length === 0 ? (
             <EmptyState
               icon={<CheckCircle2 size={40} className="text-emerald" />}
@@ -115,7 +123,7 @@ export function Component() {
                       saved={saved.has(j.slug)}
                       onSave={() => toggleSave(j.slug)}
                       onDismiss={() => dismiss(j.slug)}
-                      onHideCompany={() => toast({ kind: "info", message: `Hidden ${companyName(j.companySlug)} from Radar.` })}
+                      onHideCompany={() => toast({ kind: "info", message: `Hidden ${j.companyName} from Radar.` })}
                       onReport={() => toast({ kind: "warning", message: "Thanks — we'll review this listing." })}
                     />
                   ))}
@@ -124,7 +132,7 @@ export function Component() {
 
               <div>
                 <SectionLabel>Focused news · from companies you follow</SectionLabel>
-                <NewsCard item={news[0]} variant="standard" />
+                <EmptyState title="Focused news unavailable" body="News remains demo-only and is not mixed with live provider jobs." />
               </div>
 
               <div>
@@ -137,7 +145,7 @@ export function Component() {
                       saved={saved.has(j.slug)}
                       onSave={() => toggleSave(j.slug)}
                       onDismiss={() => dismiss(j.slug)}
-                      onHideCompany={() => toast({ kind: "info", message: `Hidden ${companyName(j.companySlug)} from Radar.` })}
+                      onHideCompany={() => toast({ kind: "info", message: `Hidden ${j.companyName} from Radar.` })}
                     />
                   ))}
                 </div>
@@ -145,7 +153,11 @@ export function Component() {
 
               <div>
                 <SectionLabel>Worth exploring · a small stretch</SectionLabel>
-                <JobCard job={jobs[1]} variant="compact" saved={saved.has(jobs[1].slug)} onSave={() => toggleSave(jobs[1].slug)} />
+                {lensJobs[0] ? (
+                  <JobCard job={lensJobs[0]} variant="compact" saved={saved.has(lensJobs[0].slug)} onSave={() => toggleSave(lensJobs[0].slug)} />
+                ) : (
+                  <EmptyState title="Nothing to explore yet" body="No stored provider job is available for this section." />
+                )}
               </div>
             </div>
           )}
@@ -156,24 +168,25 @@ export function Component() {
           <div className="rounded-[var(--radius-card)] border border-line p-5">
             <SectionLabel>Followed companies</SectionLabel>
             <div className="space-y-3">
-              {companies.slice(0, 3).map((c) => (
-                <Link key={c.slug} to={`/companies/${c.slug}`} className="flex items-center gap-3 group">
-                  <CompanyLogo name={c.name} size={36} />
+              {companyNames.length === 0 && <p className="text-[13px] text-slate">No followed-company data is connected yet.</p>}
+              {companyNames.map((name) => (
+                <div key={name} className="flex items-center gap-3">
+                  <CompanyLogo name={name} size={36} />
                   <div className="min-w-0">
-                    <p className="text-sm font-medium text-ink group-hover:text-indigo truncate">{c.name}</p>
-                    <p className="text-[12px] text-slate truncate">{c.momentum.summary.split(".")[0]}.</p>
+                    <p className="text-sm font-medium text-ink truncate">{name}</p>
+                    <p className="text-[12px] text-slate truncate">Appears in stored provider jobs.</p>
                   </div>
-                </Link>
+                </div>
               ))}
             </div>
           </div>
 
           <div className="rounded-[var(--radius-card)] border border-line p-5">
             <SectionLabel>Company momentum</SectionLabel>
-            <CompanyMomentum company={companies[0]} variant="strip" />
+            <p className="text-sm text-slate">Unavailable. The backend has not connected live company news or momentum signals.</p>
             <SectionRule className="my-4" />
-            <Link to={`/companies/${companies[0].slug}`} className="text-[13px] text-indigo font-medium inline-flex items-center gap-1">
-              Open {companies[0].name} <ArrowRight size={14} />
+            <Link to="/jobs" className="text-[13px] text-indigo font-medium inline-flex items-center gap-1">
+              Browse stored jobs <ArrowRight size={14} />
             </Link>
           </div>
 
@@ -192,6 +205,7 @@ export function Component() {
                 </Link>
               );
             })}
+            {saved.size === 0 && <p className="text-[13px] text-slate">No real saved-job records are connected yet.</p>}
           </div>
         </aside>
       </div>

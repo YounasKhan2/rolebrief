@@ -53,7 +53,7 @@ export function Component() {
           tabs={[
             { value: "jobs", label: "Jobs", count: savedJobs.length },
             { value: "searches", label: "Searches", count: savedSearches.length },
-            { value: "companies", label: "Companies", count: 3 },
+            { value: "companies", label: "Companies", count: companies.length },
           ]}
         />
       </div>

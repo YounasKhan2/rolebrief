@@ -15,11 +15,7 @@ import { PageContainer, PageHeader } from "../../components/shell/AppShell";
 import { Kicker, Badge, SectionRule, LinkButton } from "../../components/ui/primitives";
 
 const sources = [
-  { name: "Company career sites", kind: "Primary", note: "Crawled directly; treated as the canonical source when available." },
-  { name: "LinkedIn Jobs", kind: "Aggregator", note: "Deduplicated against the company source." },
-  { name: "Indeed", kind: "Aggregator", note: "Regional coverage for Pakistan and UAE." },
-  { name: "Rozee.pk", kind: "Regional", note: "Pakistan-focused listings." },
-  { name: "Bayt.com", kind: "Regional", note: "UAE and wider Gulf listings." },
+  { name: "Himalayas", kind: "Provider API", note: "Canonical jobs are stored by the backend and read through /api/v1/jobs." },
 ];
 
 const freshnessStages = [
@@ -71,8 +67,8 @@ export function Component() {
           <Database size={20} className="text-indigo" /> Where our data comes from
         </h2>
         <p className="text-slate reading-measure mb-5">
-          We index roles from company sites and job boards, then deduplicate so a single opening doesn't appear five
-          times. We do not post jobs ourselves, and we always send you to the employer's own site to apply.
+          We currently index roles from the Himalayas provider, then store canonical jobs in the backend. We do not post
+          jobs ourselves, and we always send you to the original source domain to apply.
         </p>
         <div className="rounded-[var(--radius-card)] border border-line overflow-hidden">
           {sources.map((s, i) => (
@@ -84,7 +80,7 @@ export function Component() {
           ))}
         </div>
         <p className="mt-3 text-[12px] text-slate inline-flex items-center gap-1.5">
-          <Copy size={13} /> Duplicate detection merges the same role across sources into one canonical listing.
+          <Copy size={13} /> Duplicate detection is handled in the backend before roles are exposed to the frontend.
         </p>
       </section>
 
@@ -117,8 +113,8 @@ export function Component() {
           <ShieldCheck size={20} className="text-emerald" /> How the Eligibility Shield works
         </h2>
         <p className="text-slate reading-measure mb-5">
-          We compare the role's stated requirements to your profile and return one of four states — always with the
-          evidence behind it, and always as guidance rather than a guarantee.
+          Profile-based eligibility is not connected yet. Live provider jobs show Check required or Unknown until the
+          backend can compare stated requirements to a real user profile.
         </p>
         <div className="space-y-3">
           {eligibilityStates.map((e) => (
@@ -139,9 +135,8 @@ export function Component() {
             <FileSearch size={18} className="text-indigo" /> Match Brief
           </h2>
           <p className="text-[14px] text-slate reading-measure">
-            The match score is never a mystery number. It's always broken into dimensions — required skills, preferred
-            skills, experience, role similarity, location and freshness — each with the evidence, what's missing and
-            what's ambiguous.
+            Match scoring is not calculated yet for live provider jobs. The frontend shows Profile required or Not
+            calculated instead of fabricating a compatibility score.
           </p>
         </div>
         <div>
@@ -149,10 +144,8 @@ export function Component() {
             <TrendingUp size={18} className="text-cyan" /> Company Momentum
           </h2>
           <p className="text-[14px] text-slate reading-measure">
-            We connect hiring, funding, office and policy news to the roles it affects. Each signal is labelled{" "}
-            <span className="font-medium text-emerald">evidence</span> or{" "}
-            <span className="font-medium text-amber">inference</span>, and we declare the coverage window. Future hiring
-            is never presented as guaranteed.
+            Company momentum is unavailable until live company-news ingestion exists. The frontend keeps the UI section
+            visible and labels the missing data instead of inferring funding or hiring movement.
           </p>
         </div>
       </section>
@@ -163,7 +156,7 @@ export function Component() {
           <AlertCircle size={18} className="text-amber" /> Where our confidence ends
         </h2>
         <ul className="space-y-2 text-[14px] text-ink/90">
-          <li>Coverage is strongest in Pakistan, the UAE and worldwide-remote roles — thinner elsewhere, and we mark it.</li>
+          <li>Coverage is limited to stored Himalayas provider jobs until additional providers are implemented.</li>
           <li>AI summaries can miss nuance; we link the source so you can read the original.</li>
           <li>Employers don't always state salary, remote scope or authorization — we show “unknown” rather than assume.</li>
         </ul>

@@ -74,7 +74,7 @@
   .font-display {
     font-family: var(--font-serif);
     font-weight: 600;
-    letter-spacing: -0.01em;
+    letter-spacing: 0;
   }
   .font-data {
     font-family: var(--font-mono);
@@ -105,6 +105,75 @@
 
   .reading-measure {
     max-width: 68ch;
+  }
+
+  .job-description {
+    color: color-mix(in srgb, var(--color-ink) 88%, transparent);
+    line-height: 1.75;
+  }
+
+  .job-description h1,
+  .job-description h2,
+  .job-description h3 {
+    margin-top: 1.75rem;
+    margin-bottom: 0.625rem;
+    font-family: var(--font-serif);
+    font-weight: 600;
+    line-height: 1.25;
+    letter-spacing: 0;
+    color: var(--color-navy);
+  }
+
+  .job-description h1 {
+    font-size: 1.75rem;
+  }
+
+  .job-description h2 {
+    font-size: 1.375rem;
+  }
+
+  .job-description h3 {
+    font-size: 1.125rem;
+  }
+
+  .job-description p,
+  .job-description ul,
+  .job-description ol {
+    margin-top: 0.875rem;
+  }
+
+  .job-description ul,
+  .job-description ol {
+    padding-left: 1.25rem;
+  }
+
+  .job-description li {
+    margin-top: 0.5rem;
+  }
+
+  .job-description ul li {
+    list-style: disc;
+  }
+
+  .job-description ol li {
+    list-style: decimal;
+  }
+
+  .job-description a {
+    color: var(--color-cyan);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  .job-description strong,
+  .job-description b {
+    color: var(--color-ink);
+    font-weight: 600;
+  }
+
+  .job-description em,
+  .job-description i {
+    color: color-mix(in srgb, var(--color-ink) 80%, transparent);
   }
 }
 

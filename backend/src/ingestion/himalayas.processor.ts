@@ -16,6 +16,7 @@ export class HimalayasProcessor extends WorkerHost {
       return { skipped: true, reason: `Unsupported ingestion job ${job.name}` };
     }
 
-    return this.himalayas.ingest();
+    const data = job.data as { mode?: "initial-backfill" | "recurring-sync" | "live-smoke"; pageLimit?: number };
+    return this.himalayas.ingest({ mode: data.mode, pageLimit: data.pageLimit });
   }
 }

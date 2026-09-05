@@ -10,8 +10,7 @@ import {
   X,
   Sparkles,
 } from "lucide-react";
-import type { Job } from "../../lib/fixtures";
-import { companyName } from "../../lib/fixtures";
+import type { Job } from "../../lib/jobs";
 import { classNames } from "../../lib/format";
 import { CompanyLogo, SourceBadge, IconButton, Badge } from "../ui/primitives";
 import { EligibilityShield } from "./EligibilityShield";
@@ -23,7 +22,7 @@ export function JobMetaRow({ job }: { job: Job }) {
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[13px] text-slate">
       <span className="inline-flex items-center gap-1.5">
-        <Building2 size={14} /> {companyName(job.companySlug)}
+        <Building2 size={14} /> {job.companyName}
       </span>
       <span className="inline-flex items-center gap-1.5">
         <MapPin size={14} /> {job.locations.join(" · ")}
@@ -39,7 +38,7 @@ export function JobMetaRow({ job }: { job: Job }) {
             {!job.salary.provided && " (not employer-provided)"}
           </span>
         ) : (
-          <span className="text-slate italic">Salary not provided</span>
+          <span className="text-slate italic">Not disclosed</span>
         )}
       </span>
     </div>
@@ -99,7 +98,7 @@ export function JobCard({
         </div>
       )}
       <div className="flex items-start gap-3.5">
-        <CompanyLogo name={companyName(job.companySlug)} size={compact ? 36 : 44} />
+        <CompanyLogo name={job.companyName} size={compact ? 36 : 44} />
         <div className="min-w-0 grow">
           <div className="flex items-start justify-between gap-3">
             <h3 className={classNames("font-semibold text-ink leading-snug", compact ? "text-base" : "text-lg")}>

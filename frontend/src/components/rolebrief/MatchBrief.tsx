@@ -1,5 +1,5 @@
 import { Check, Minus, HelpCircle, Lightbulb } from "lucide-react";
-import type { MatchBriefData } from "../../lib/fixtures";
+import type { MatchBriefData } from "../../lib/jobs";
 import { classNames } from "../../lib/format";
 import { Kicker } from "../ui/primitives";
 

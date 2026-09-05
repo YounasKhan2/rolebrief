@@ -13,34 +13,28 @@ import {
   FileSearch,
   ExternalLink,
 } from "lucide-react";
-import { LinkButton, Kicker, Badge, CompanyLogo } from "../../components/ui/primitives";
+import { LinkButton, Kicker, Badge, CompanyLogo, EmptyState, Skeleton } from "../../components/ui/primitives";
 import { JobCard } from "../../components/rolebrief/JobCard";
-import { NewsCard } from "../../components/rolebrief/NewsCard";
-import { jobs, news, companyName } from "../../lib/fixtures";
+import { useJobs, type Job } from "../../lib/jobs";
 import { classNames } from "../../lib/format";
 
 export function Component() {
+  const { data: jobs, loading, error, retry } = useJobs({ limit: 6 });
   return (
     <>
-      <Hero />
+      <Hero jobsCount={jobs.length} loading={loading} />
       <LiveStrip />
       <Signals />
-      <StoryBlock />
+      <StoryBlock jobs={jobs} loading={loading} error={error?.message ?? null} onRetry={retry} />
       <Coverage />
       <Trust />
       <Workflow />
       <AlertValue />
       <Faq />
-      <FinalCta />
+      <FinalCta jobs={jobs} />
     </>
   );
 }
-
-const HERO_STATS = [
-  { value: "2,400+", label: "Fresh roles weekly" },
-  { value: "5", label: "Intelligence signals" },
-  { value: "3", label: "Coverage regions" },
-];
 
 const KINETIC_EDITORIAL_ITEMS = [
   {
@@ -64,9 +58,9 @@ const KINETIC_EDITORIAL_ITEMS = [
     tag: "EVIDENCE-LED",
   },
   {
-    lead: "24 roles reviewed,",
-    accent: "4 worth your attention",
-    tag: "CURATED SIGNAL",
+    lead: "Stored provider roles,",
+    accent: "not sample listings",
+    tag: "LIVE DATA",
     isEmerald: true,
   },
   {
@@ -86,7 +80,13 @@ const KINETIC_EDITORIAL_ITEMS = [
   },
 ];
 
-function Hero() {
+function Hero({ jobsCount, loading }: { jobsCount: number; loading: boolean }) {
+  const stats = [
+    { value: loading ? "..." : String(jobsCount), label: "Stored live roles" },
+    { value: "1", label: "Connected provider" },
+    { value: "0", label: "News providers" },
+  ];
+
   return (
     <section className="relative overflow-hidden bg-paper">
       {/* Soft decorative blurs */}
@@ -188,7 +188,7 @@ function Hero() {
           className="animate-fade-in-up mt-14 grid grid-cols-3 gap-8 sm:gap-16 border-t border-line pt-10 w-full max-w-lg"
           style={{ animationDelay: "0.4s" }}
         >
-          {HERO_STATS.map((s) => (
+          {stats.map((s) => (
             <div key={s.label} className="text-center">
               <p className="font-display text-3xl sm:text-4xl text-navy">{s.value}</p>
               <p className="mt-1 text-[12px] text-slate font-data">{s.label}</p>
@@ -312,7 +312,7 @@ function Signals() {
   );
 }
 
-function StoryBlock() {
+function StoryBlock({ jobs, loading, error, onRetry }: { jobs: Job[]; loading: boolean; error: string | null; onRetry: () => void }) {
   return (
     <section className="bg-white border-y border-line">
       <div className="mx-auto max-w-[1248px] px-5 sm:px-8 py-20 grid lg:grid-cols-2 gap-12 items-start">
@@ -327,13 +327,25 @@ function StoryBlock() {
             articles.
           </p>
           <div className="mt-6 space-y-3">
-            {jobs.slice(2, 4).map((j) => (
+            {loading && Array.from({ length: 2 }).map((_, index) => (
+              <Skeleton key={index} className="h-36 w-full rounded-[var(--radius-card)]" />
+            ))}
+            {!loading && !error && jobs.slice(0, 2).map((j) => (
               <JobCard key={j.slug} job={j} variant="compact" />
             ))}
+            {!loading && error && (
+              <EmptyState title="Jobs API unavailable" body={error} action={<button className="text-indigo font-medium" onClick={onRetry}>Retry</button>} />
+            )}
+            {!loading && !error && jobs.length === 0 && (
+              <EmptyState title="No stored jobs yet" body="Run the Himalayas provider sync, then refresh to see live provider roles here." />
+            )}
           </div>
         </div>
         <div className="space-y-4">
-          <NewsCard item={news[0]} variant="feature" />
+          <EmptyState
+            title="Company momentum unavailable"
+            body="News ingestion is not connected to live backend data yet, so RoleBrief does not infer funding, hiring, deadline or momentum claims here."
+          />
         </div>
       </div>
     </section>
@@ -342,9 +354,9 @@ function StoryBlock() {
 
 function Coverage() {
   const regions = [
-    { place: "Pakistan", detail: "Karachi · Lahore · Islamabad", note: "Local currency, on-site and country-remote roles." },
-    { place: "United Arab Emirates", detail: "Dubai · Abu Dhabi", note: "Golden-visa aware, relocation and hybrid roles." },
-    { place: "Worldwide remote", detail: "Async-first employers", note: "Explicit remote eligibility, marked when unclear." },
+    { place: "Himalayas", detail: "Connected provider", note: "Stored roles are read from the backend Jobs API." },
+    { place: "Company enrichment", detail: "Unavailable", note: "Momentum and company intelligence stay labelled until a backend source exists." },
+    { place: "Remote metadata", detail: "Provider supplied", note: "Missing restrictions are shown as unavailable rather than inferred." },
   ];
   return (
     <section id="coverage" className="scroll-mt-20">
@@ -479,7 +491,9 @@ function Faq() {
   );
 }
 
-function FinalCta() {
+function FinalCta({ jobs }: { jobs: Job[] }) {
+  const indexedCompanies = Array.from(new Map(jobs.map((job) => [job.companySlug, job.companyName])).entries()).slice(0, 4);
+
   return (
     <section className="bg-paper">
       <div className="mx-auto max-w-[1248px] px-5 sm:px-8 py-24 text-center">
@@ -496,13 +510,15 @@ function FinalCta() {
           </LinkButton>
         </div>
         <div className="mt-12 flex flex-wrap items-center justify-center gap-6 opacity-80">
-          {["meridian-labs", "qamar-fintech", "atlas-health", "northwind-cloud"].map((c) => (
-            <span key={c} className="inline-flex items-center gap-2 text-[13px] text-slate">
-              <CompanyLogo name={companyName(c)} size={24} /> {companyName(c)}
+          {indexedCompanies.map(([slug, name]) => (
+            <span key={slug} className="inline-flex items-center gap-2 text-[13px] text-slate">
+              <CompanyLogo name={name} size={24} /> {name}
             </span>
           ))}
         </div>
-        <p className="mt-3 text-[12px] text-slate">Companies currently indexed in your coverage regions.</p>
+        <p className="mt-3 text-[12px] text-slate">
+          {indexedCompanies.length > 0 ? "Companies currently stored from the backend Jobs API." : "No provider companies are stored yet."}
+        </p>
       </div>
     </section>
   );

@@ -5,7 +5,7 @@ import { HimalayasJobDto, himalayasResponseSchema } from "./himalayas.dto";
 
 @Injectable()
 export class HimalayasAdapter implements ProviderAdapter<HimalayasJobDto> {
-  readonly providerId = "himalayas";
+  readonly providerId = "himalayas.guid";
 
   constructor(private readonly config: AppConfigService) {}
 
@@ -19,7 +19,7 @@ export class HimalayasAdapter implements ProviderAdapter<HimalayasJobDto> {
 
       try {
         const url = new URL(settings.apiUrl);
-        url.searchParams.set("limit", String(settings.pageLimit));
+        url.searchParams.set("limit", "20");
         if (cursor) {
           url.searchParams.set("cursor", cursor);
         }
@@ -27,7 +27,7 @@ export class HimalayasAdapter implements ProviderAdapter<HimalayasJobDto> {
         const response = await fetch(url, { signal: controller.signal });
         if (response.status === 429) {
           failures.push({ cursor, status: 429, message: "Himalayas rate limit exceeded", retryable: true });
-          await this.delay(settings.rateLimitDelayMs);
+          await this.delay(this.retryDelayFrom(response) ?? settings.rateLimitDelayMs);
           continue;
         }
 
@@ -48,7 +48,8 @@ export class HimalayasAdapter implements ProviderAdapter<HimalayasJobDto> {
           records: parsed.jobs,
           nextCursor: parsed.nextCursor ?? null,
           fetchedAt: new Date(),
-          partialFailures: failures
+          partialFailures: failures,
+          terminal: !parsed.nextCursor
         };
       } catch (error) {
         failures.push({
@@ -64,10 +65,19 @@ export class HimalayasAdapter implements ProviderAdapter<HimalayasJobDto> {
       }
     }
 
-    return { records: [], nextCursor: null, fetchedAt: new Date(), partialFailures: failures };
+    return { records: [], nextCursor: null, fetchedAt: new Date(), partialFailures: failures, terminal: true };
   }
 
-  private delay(ms: number) {
+  protected delay(ms: number) {
     return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  private retryDelayFrom(response: Response) {
+    const retryAfter = response.headers.get("retry-after");
+    if (!retryAfter) return null;
+    const seconds = Number(retryAfter);
+    if (Number.isFinite(seconds)) return Math.max(seconds, 0) * 1000;
+    const date = new Date(retryAfter);
+    return Number.isNaN(date.getTime()) ? null : Math.max(date.getTime() - Date.now(), 0);
   }
 }

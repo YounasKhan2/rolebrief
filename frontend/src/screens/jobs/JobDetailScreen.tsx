@@ -10,24 +10,45 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { PageContainer } from "../../components/shell/AppShell";
-import { Button, Kicker, Badge, CompanyLogo, SourceBadge, SectionRule, EmptyState } from "../../components/ui/primitives";
+import { Button, Kicker, Badge, CompanyLogo, SourceBadge, SectionRule, EmptyState, Skeleton } from "../../components/ui/primitives";
 import { EligibilityShield } from "../../components/rolebrief/EligibilityShield";
 import { MatchBrief } from "../../components/rolebrief/MatchBrief";
 import { FreshnessTimeline } from "../../components/rolebrief/FreshnessTimeline";
 import { JobMetaRow, ReasonChips } from "../../components/rolebrief/JobCard";
-import { NewsCard } from "../../components/rolebrief/NewsCard";
 import { JobCard } from "../../components/rolebrief/JobCard";
-import { getJob, jobs, news, companyName, getCompany } from "../../lib/fixtures";
+import { useJob, useSimilarJobs } from "../../lib/jobs";
 import { domainFromUrl } from "../../lib/format";
 import { useToast } from "../../components/ui/toast";
 
 export function Component() {
   const { slug } = useParams();
   const toast = useToast();
-  const job = getJob(slug ?? "");
+  const { data: job, loading, error, notFound, retry } = useJob(slug);
+  const similar = useSimilarJobs(job);
   const [saved, setSaved] = useState(false);
 
-  if (!job) {
+  if (loading) {
+    return (
+      <PageContainer>
+        <div className="grid lg:grid-cols-[1fr_336px] gap-8 lg:gap-12">
+          <div className="space-y-5">
+            <Skeleton className="h-5 w-80" />
+            <Skeleton className="h-16 w-full max-w-3xl" />
+            <Skeleton className="h-5 w-2/3" />
+            <SectionRule className="my-8" />
+            <Skeleton className="h-40 w-full" />
+            <Skeleton className="h-32 w-full" />
+          </div>
+          <div className="hidden lg:block space-y-5">
+            <Skeleton className="h-56 w-full rounded-[var(--radius-feature)]" />
+            <Skeleton className="h-44 w-full rounded-[var(--radius-card)]" />
+          </div>
+        </div>
+      </PageContainer>
+    );
+  }
+
+  if (!job && notFound) {
     return (
       <PageContainer>
         <EmptyState title="Role not found" body="This listing may have expired or moved." action={<Link to="/jobs" className="text-indigo font-medium">Back to jobs</Link>} />
@@ -35,12 +56,17 @@ export function Component() {
     );
   }
 
-  const company = getCompany(job.companySlug);
+  if (!job || error) {
+    return (
+      <PageContainer>
+        <EmptyState title="Could not load this role" body={error?.message ?? "The jobs API did not return a role."} action={<Button variant="secondary" onClick={retry}>Retry</Button>} />
+      </PageContainer>
+    );
+  }
+
   const expired = job.flags?.includes("expired");
   const suspicious = job.flags?.includes("suspicious");
   const domain = domainFromUrl(job.applyUrl);
-  const related = news.filter((n) => n.companies.includes(job.companySlug));
-  const similar = jobs.filter((j) => j.slug !== job.slug && j.discipline === job.discipline && !j.flags?.includes("expired")).slice(0, 2);
 
   const applyBar = (
     <>
@@ -72,7 +98,7 @@ export function Component() {
         <nav className="flex items-center gap-1.5 text-[13px] text-slate mb-6" aria-label="Breadcrumb">
           <Link to="/jobs" className="hover:text-ink">Jobs</Link>
           <ChevronRight size={13} />
-          <Link to={`/companies/${job.companySlug}`} className="hover:text-ink">{companyName(job.companySlug)}</Link>
+          <span className="hover:text-ink">{job.companyName}</span>
           <ChevronRight size={13} />
           <span className="text-ink truncate">{job.title}</span>
         </nav>
@@ -97,7 +123,7 @@ export function Component() {
           <article>
             <header>
               <div className="flex items-start gap-4">
-                <CompanyLogo name={companyName(job.companySlug)} size={52} />
+                <CompanyLogo name={job.companyName} size={52} />
                 <div>
                   <Kicker className="mb-2">{job.discipline} · {job.employmentType}</Kicker>
                   <h1 className="font-display text-3xl sm:text-[40px] leading-tight text-navy">{job.title}</h1>
@@ -119,11 +145,13 @@ export function Component() {
 
             <SectionRule className="my-8" />
 
-            <Section title="Overview"><p className="text-ink/85 reading-measure">{job.description.overview}</p></Section>
-            <Section title="Responsibilities"><Bullets items={job.description.responsibilities} /></Section>
-            <Section title="Required"><Bullets items={job.description.required} /></Section>
-            <Section title="Preferred"><Bullets items={job.description.preferred} /></Section>
-            <Section title="Benefits"><Bullets items={job.description.benefits} /></Section>
+            <Section title={job.description.html ? "Description" : "About the role"}>
+              {job.description.html ? (
+                <div className="text-ink/85 reading-measure job-description" dangerouslySetInnerHTML={{ __html: job.description.html }} />
+              ) : (
+                <p className="text-ink/85 reading-measure">{job.description.overview}</p>
+              )}
+            </Section>
             <Section title="Work authorization">
               <p className="text-ink/85 reading-measure">{job.description.workAuthorization}</p>
             </Section>
@@ -145,18 +173,16 @@ export function Component() {
               </p>
             </div>
 
-            {related.length > 0 && (
-              <div className="mt-10">
-                <h2 className="text-lg font-semibold text-ink mb-4">Related company news</h2>
-                <NewsCard item={related[0]} variant="standard" />
-              </div>
-            )}
+            <div className="mt-10">
+              <h2 className="text-lg font-semibold text-ink mb-4">Related company news</h2>
+              <EmptyState title="Company news unavailable" body="News ingestion is still demo-only and is not mixed into real provider jobs." />
+            </div>
 
-            {similar.length > 0 && (
+            {similar.data.length > 0 && (
               <div className="mt-10">
-                <h2 className="text-lg font-semibold text-ink mb-4">Similar eligible roles</h2>
+                <h2 className="text-lg font-semibold text-ink mb-4">Similar stored roles</h2>
                 <div className="space-y-4">
-                  {similar.map((j) => <JobCard key={j.slug} job={j} variant="compact" />)}
+                  {similar.data.map((j) => <JobCard key={j.slug} job={j} variant="compact" />)}
                 </div>
               </div>
             )}
@@ -178,18 +204,13 @@ export function Component() {
               <Kicker className="mb-3">Freshness</Kicker>
               <FreshnessTimeline events={job.freshness} variant="expanded" />
             </div>
-            {company && (
-              <div className="rounded-[var(--radius-card)] border border-line p-5">
-                <Kicker className="mb-2">About {company.name}</Kicker>
-                <div className="flex items-center gap-2 mb-2">
-                  <Badge tone="slate">{company.sector}</Badge>
-                  <Badge tone="slate">{company.sizeBand}</Badge>
-                </div>
-                <Link to={`/companies/${company.slug}`} className="text-[13px] text-indigo font-medium inline-flex items-center gap-1">
-                  Company Momentum <ChevronRight size={14} />
-                </Link>
+            <div className="rounded-[var(--radius-card)] border border-line p-5">
+              <Kicker className="mb-2">About {job.companyName}</Kicker>
+              <div className="flex items-center gap-2 mb-2">
+                <Badge tone="slate">Company profile unavailable</Badge>
               </div>
-            )}
+              <p className="text-[13px] text-slate">Company momentum is incomplete because news and company enrichment are not connected to real provider data yet.</p>
+            </div>
             <button onClick={() => toast({ kind: "warning", message: "Thanks — we'll review this listing." })} className="inline-flex items-center gap-1.5 text-[13px] text-slate hover:text-red px-1">
               <Flag size={14} /> Report this job
             </button>
@@ -219,15 +240,3 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function Bullets({ items }: { items: string[] }) {
-  return (
-    <ul className="space-y-2 reading-measure">
-      {items.map((t) => (
-        <li key={t} className="flex items-start gap-2.5 text-ink/85">
-          <span className="mt-2 size-1.5 rounded-full bg-indigo shrink-0" aria-hidden />
-          {t}
-        </li>
-      ))}
-    </ul>
-  );
-}

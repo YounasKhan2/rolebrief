@@ -1,0 +1,6 @@
+ALTER TABLE "IngestionRun" ADD COLUMN "pagesFetched" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "IngestionRun" ADD COLUMN "recordsCreated" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "IngestionRun" ADD COLUMN "recordsUpdated" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "IngestionRun" ADD COLUMN "recordsUnchanged" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "IngestionRun" ADD COLUMN "terminalCursor" TEXT;
+ALTER TABLE "IngestionRun" ADD COLUMN "stopReason" TEXT;

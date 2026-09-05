@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ShieldCheck, ShieldAlert, ShieldX, ShieldQuestion, ChevronDown } from "lucide-react";
-import type { EligibilityState } from "../../lib/fixtures";
+import type { EligibilityState } from "../../lib/jobs";
 import { classNames } from "../../lib/format";
 
 // Status always uses icon + text + color together (never color alone). Never claims

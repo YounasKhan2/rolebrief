@@ -5,6 +5,9 @@ import { PrismaService } from "../../prisma/prisma.service";
 import { HimalayasAdapter } from "./himalayas.adapter";
 import { normalizeHimalayasJob, NormalizedHimalayasJob } from "./himalayas.normalizer";
 
+type IngestionMode = "initial-backfill" | "recurring-sync" | "live-smoke";
+type PersistOutcome = "created" | "updated" | "unchanged";
+
 @Injectable()
 export class HimalayasIngestionService {
   private readonly logger = new Logger(HimalayasIngestionService.name);
@@ -21,37 +24,58 @@ export class HimalayasIngestionService {
     private readonly adapter: HimalayasAdapter
   ) {}
 
-  async ingest() {
+  async ingest(options: { mode?: IngestionMode; pageLimit?: number } = {}) {
     const settings = this.config.himalayas;
     if (!settings.enabled) {
       return { skipped: true, reason: "Himalayas provider disabled", fetched: 0, accepted: 0, rejected: 0 };
     }
 
+    const mode = options.mode ?? "recurring-sync";
+    const pageLimit =
+      options.pageLimit ??
+      (mode === "initial-backfill" ? settings.initialBackfillPages : mode === "live-smoke" ? 1 : settings.recurringSyncPages);
     const run = await this.prisma.ingestionRun.create({
-      data: { providerId: this.adapter.providerId, partition: "jobs", status: "running" }
+      data: { providerId: this.adapter.providerId, partition: `jobs:${mode}`, status: "running" }
     });
 
     let cursor: string | null = null;
+    let pagesFetched = 0;
     let fetched = 0;
     let accepted = 0;
     let rejected = 0;
+    let created = 0;
+    let updated = 0;
+    let unchanged = 0;
+    let consecutiveUnchanged = 0;
+    let stopReason = "page_limit";
     const failures: Prisma.InputJsonValue[] = [];
 
     try {
-      for (let page = 0; page < settings.maxPagesPerRun; page += 1) {
+      for (let page = 0; page < pageLimit; page += 1) {
         const providerPage = await this.adapter.fetchPage(cursor);
+        pagesFetched += 1;
         failures.push(...providerPage.partialFailures.map((failure) => ({ ...failure }) as Prisma.InputJsonObject));
 
         if (providerPage.records.length === 0 && providerPage.partialFailures.length > 0) {
-          rejected += 1;
+          stopReason = "provider_error";
           break;
         }
 
         for (const record of providerPage.records) {
           fetched += 1;
           try {
-            await this.persist(normalizeHimalayasJob(record));
+            const outcome = await this.persist(normalizeHimalayasJob(record));
             accepted += 1;
+            if (outcome === "created") {
+              created += 1;
+              consecutiveUnchanged = 0;
+            } else if (outcome === "updated") {
+              updated += 1;
+              consecutiveUnchanged = 0;
+            } else {
+              unchanged += 1;
+              consecutiveUnchanged += 1;
+            }
           } catch (error) {
             rejected += 1;
             this.logger.warn(error instanceof Error ? error.message : "Failed to persist Himalayas record");
@@ -59,39 +83,58 @@ export class HimalayasIngestionService {
         }
 
         cursor = providerPage.nextCursor;
-        if (!cursor) break;
+        if (providerPage.terminal || !cursor) {
+          stopReason = "terminal_cursor";
+          break;
+        }
+        if (mode === "recurring-sync" && consecutiveUnchanged >= settings.unchangedStopThreshold) {
+          stopReason = "unchanged_threshold";
+          break;
+        }
       }
 
       await this.prisma.ingestionRun.update({
         where: { id: run.id },
         data: {
           status: failures.length > 0 ? "partial" : "succeeded",
+          pagesFetched,
           recordsFetched: fetched,
           recordsAccepted: accepted,
           recordsRejected: rejected,
+          recordsCreated: created,
+          recordsUpdated: updated,
+          recordsUnchanged: unchanged,
+          terminalCursor: cursor,
+          stopReason,
           finishedAt: new Date(),
-          metadata: { failures } as Prisma.InputJsonObject
+          metadata: { mode, pageLimit, failures } as Prisma.InputJsonObject
         }
       });
 
-      return { skipped: false, fetched, accepted, rejected, failures };
+      return { skipped: false, mode, pagesFetched, fetched, accepted, rejected, created, updated, unchanged, terminalCursor: cursor, stopReason, failures };
     } catch (error) {
       await this.prisma.ingestionRun.update({
         where: { id: run.id },
         data: {
           status: "failed",
+          pagesFetched,
           recordsFetched: fetched,
           recordsAccepted: accepted,
           recordsRejected: rejected,
+          recordsCreated: created,
+          recordsUpdated: updated,
+          recordsUnchanged: unchanged,
+          terminalCursor: cursor,
+          stopReason: "exception",
           finishedAt: new Date(),
-          metadata: { failures, error: error instanceof Error ? error.message : "unknown" } as Prisma.InputJsonObject
+          metadata: { mode, pageLimit, failures, error: error instanceof Error ? error.message : "unknown" } as Prisma.InputJsonObject
         }
       });
       throw error;
     }
   }
 
-  private async persist(job: NormalizedHimalayasJob) {
+  private async persist(job: NormalizedHimalayasJob): Promise<PersistOutcome> {
     const source = await this.prisma.source.upsert({
       where: { slug: this.source.slug },
       create: this.source,
@@ -113,6 +156,12 @@ export class HimalayasIngestionService {
       }
     });
 
+    const existingProviderRecord = await this.prisma.providerRecord.findUnique({
+      where: { providerId_externalId_recordType: { providerId: this.adapter.providerId, externalId: job.externalId, recordType: "job" } },
+      select: { contentHash: true, jobId: true }
+    });
+    const outcome: PersistOutcome = existingProviderRecord ? (existingProviderRecord.contentHash === job.contentHash ? "unchanged" : "updated") : "created";
+
     const savedJob = await this.prisma.job.upsert({
       where: { slug: job.slug },
       create: {
@@ -125,12 +174,12 @@ export class HimalayasIngestionService {
         workMode: job.workMode,
         remoteScope: job.remoteScope,
         remoteRestrictions: job.remoteRestrictions as Prisma.InputJsonValue,
-        requiredSkills: job.categories,
+        requiredSkills: [...job.categories, ...job.parentCategories],
         contentHash: job.contentHash,
         status: job.expiresAt && job.expiresAt < new Date() ? "EXPIRED" : "ACTIVE",
         moderationState: "approved",
-        sourceDisclosure: { provider: "himalayas", sourceUrl: job.sourceUrl },
-        searchDocument: [job.title, job.companyName, job.descriptionText, job.categories.join(" ")].filter(Boolean).join(" "),
+        sourceDisclosure: { provider: this.adapter.providerId, sourceUrl: job.sourceUrl, applicationUrl: job.applicationUrl },
+        searchDocument: [job.title, job.companyName, job.descriptionText, job.categories.join(" "), job.parentCategories.join(" ")].filter(Boolean).join(" "),
         publishedAt: job.publishedAt,
         expiresAt: job.expiresAt,
         companyId: company.id,
@@ -145,11 +194,11 @@ export class HimalayasIngestionService {
         workMode: job.workMode,
         remoteScope: job.remoteScope,
         remoteRestrictions: job.remoteRestrictions as Prisma.InputJsonValue,
-        requiredSkills: { set: job.categories },
+        requiredSkills: { set: [...job.categories, ...job.parentCategories] },
         contentHash: job.contentHash,
         status: job.expiresAt && job.expiresAt < new Date() ? "EXPIRED" : "ACTIVE",
-        sourceDisclosure: { provider: "himalayas", sourceUrl: job.sourceUrl },
-        searchDocument: [job.title, job.companyName, job.descriptionText, job.categories.join(" ")].filter(Boolean).join(" "),
+        sourceDisclosure: { provider: this.adapter.providerId, sourceUrl: job.sourceUrl, applicationUrl: job.applicationUrl },
+        searchDocument: [job.title, job.companyName, job.descriptionText, job.categories.join(" "), job.parentCategories.join(" ")].filter(Boolean).join(" "),
         publishedAt: job.publishedAt,
         expiresAt: job.expiresAt,
         companyId: company.id,
@@ -158,9 +207,9 @@ export class HimalayasIngestionService {
     });
 
     await this.prisma.providerRecord.upsert({
-      where: { providerId_externalId_recordType: { providerId: "himalayas", externalId: job.externalId, recordType: "job" } },
+      where: { providerId_externalId_recordType: { providerId: this.adapter.providerId, externalId: job.externalId, recordType: "job" } },
       create: {
-        providerId: "himalayas",
+        providerId: this.adapter.providerId,
         externalId: job.externalId,
         recordType: "job",
         sourceId: source.id,
@@ -203,6 +252,8 @@ export class HimalayasIngestionService {
           ambiguity: "provider_reported"
         }
       });
+    } else {
+      await this.prisma.salary.deleteMany({ where: { jobId: savedJob.id, source: "himalayas" } });
     }
 
     await this.prisma.jobLocation.deleteMany({ where: { jobId: savedJob.id } });
@@ -217,6 +268,6 @@ export class HimalayasIngestionService {
       });
     }
 
-    return savedJob;
+    return outcome;
   }
 }

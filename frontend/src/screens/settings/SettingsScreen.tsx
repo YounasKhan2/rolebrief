@@ -75,8 +75,8 @@ export function Component() {
         </SettingsCard>
 
         <SettingsCard icon={<Ban size={18} />} title="Muted & blocked">
-          <Row title="Hidden companies" description="Northwind Cloud hidden from Radar and search." control={<Button variant="tertiary" size="sm">Manage</Button>} />
-          <Row title="Blocked sources" description="LinkedIn reposts hidden from your feed." control={<Button variant="tertiary" size="sm">Manage</Button>} />
+          <Row title="Hidden companies" description="No hidden companies are stored yet." control={<Button variant="tertiary" size="sm">Manage</Button>} />
+          <Row title="Blocked sources" description="No blocked sources are stored yet." control={<Button variant="tertiary" size="sm">Manage</Button>} />
         </SettingsCard>
 
         <SectionRule className="my-2" />

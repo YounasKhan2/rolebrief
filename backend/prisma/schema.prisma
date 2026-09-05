@@ -265,9 +265,15 @@ model IngestionRun {
   providerId  String
   partition   String
   status      String
+  pagesFetched Int @default(0)
   recordsFetched  Int @default(0)
   recordsAccepted Int @default(0)
   recordsRejected Int @default(0)
+  recordsCreated  Int @default(0)
+  recordsUpdated  Int @default(0)
+  recordsUnchanged Int @default(0)
+  terminalCursor String?
+  stopReason String?
   startedAt   DateTime @default(now())
   finishedAt  DateTime?
   metadata    Json?

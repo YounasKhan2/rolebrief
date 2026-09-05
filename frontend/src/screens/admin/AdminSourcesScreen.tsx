@@ -19,11 +19,7 @@ type Source = {
 };
 
 const seed: Source[] = [
-  { id: "linkedin", name: "LinkedIn Jobs API", kind: "API", region: "Global", status: "healthy", lastSync: "2026-09-02T07:40:00Z", dedupe: 4.1, enabled: true },
-  { id: "indeed", name: "Indeed Feed", kind: "XML feed", region: "Global", status: "healthy", lastSync: "2026-09-02T07:12:00Z", dedupe: 5.8, enabled: true },
-  { id: "rozee", name: "Rozee.pk Scraper", kind: "Scraper", region: "Pakistan", status: "degraded", lastSync: "2026-09-02T05:02:00Z", dedupe: 9.2, enabled: true },
-  { id: "bayt", name: "Bayt.com Feed", kind: "XML feed", region: "UAE", status: "healthy", lastSync: "2026-09-02T06:55:00Z", dedupe: 6.0, enabled: true },
-  { id: "careers", name: "Company careers crawler", kind: "Crawler", region: "Global", status: "down", lastSync: "2026-09-01T22:10:00Z", dedupe: 3.3, enabled: false },
+  { id: "himalayas", name: "Himalayas provider", kind: "API", region: "Global remote", status: "healthy", lastSync: new Date().toISOString(), dedupe: 0, enabled: true },
 ];
 
 const statusMeta = {

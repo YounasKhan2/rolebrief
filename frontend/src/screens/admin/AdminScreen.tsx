@@ -6,11 +6,7 @@ import { companies } from "../../lib/fixtures";
 import { relativeTime } from "../../lib/format";
 
 const providers = [
-  { name: "LinkedIn Jobs API", status: "healthy" as const, lastSync: "2026-09-02T07:40:00Z", ingested: 1284, failed: 3 },
-  { name: "Indeed Feed", status: "healthy" as const, lastSync: "2026-09-02T07:12:00Z", ingested: 902, failed: 0 },
-  { name: "Rozee.pk Scraper", status: "degraded" as const, lastSync: "2026-09-02T05:02:00Z", ingested: 214, failed: 41 },
-  { name: "Bayt.com Feed", status: "healthy" as const, lastSync: "2026-09-02T06:55:00Z", ingested: 388, failed: 2 },
-  { name: "Company careers crawler", status: "down" as const, lastSync: "2026-09-01T22:10:00Z", ingested: 0, failed: 128 },
+  { name: "Himalayas provider", status: "healthy" as const, lastSync: new Date().toISOString(), ingested: 0, failed: 0 },
 ];
 
 const statusMeta = {
@@ -40,10 +36,10 @@ export function Component() {
       />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <Stat label="Active roles indexed" value="18,204" hint="+312 in last 24h" tone="text-ink" />
-        <Stat label="Ingested (24h)" value="2,788" hint="across 5 sources" />
-        <Stat label="Failed records (24h)" value="174" hint="mostly careers crawler" tone="text-red" />
-        <Stat label="Duplicate rate" value="6.4%" hint="post-dedupe" tone="text-amber" />
+        <Stat label="Active roles indexed" value="Unavailable" hint="Admin metrics API not connected" tone="text-slate" />
+        <Stat label="Ingested (24h)" value="Unavailable" hint="No live admin metric yet" />
+        <Stat label="Failed records (24h)" value="Unavailable" hint="No live admin metric yet" tone="text-slate" />
+        <Stat label="Duplicate rate" value="Unavailable" hint="No live admin metric yet" tone="text-slate" />
       </div>
 
       <div className="grid lg:grid-cols-[1fr_320px] gap-8 items-start">
@@ -75,16 +71,15 @@ export function Component() {
           <div className="rounded-[var(--radius-card)] border border-amber/30 bg-amber-tint/50 p-4">
             <div className="flex items-center gap-2 text-ink font-semibold text-sm"><AlertTriangle size={16} className="text-amber" /> Needs attention</div>
             <ul className="mt-2 space-y-2 text-[13px] text-ink/90">
-              <li>Company careers crawler is <strong>down</strong> — 128 failures since 22:10.</li>
-              <li>Rozee.pk scraper degraded — 41 parse errors.</li>
+              <li>No live admin incident feed is connected yet.</li>
             </ul>
             <Button variant="secondary" size="sm" className="mt-3">View incident log</Button>
           </div>
 
           <div className="rounded-[var(--radius-card)] border border-line p-4">
             <Kicker className="mb-2">Moderation queue</Kicker>
-            <p className="font-data text-2xl text-ink">12</p>
-            <p className="text-[12px] text-slate">7 reports · 5 suspected fraudulent</p>
+            <p className="font-data text-2xl text-ink">0</p>
+            <p className="text-[12px] text-slate">Moderation API not connected</p>
             <SectionRule className="my-3" />
             <Link to="/admin/moderation" className="text-[13px] text-indigo font-medium inline-flex items-center gap-1">Open moderation <ArrowRight size={14} /></Link>
           </div>

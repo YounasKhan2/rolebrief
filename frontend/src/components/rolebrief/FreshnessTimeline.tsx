@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Clock, Search, CheckCircle2, RefreshCw, Pencil, XOctagon, ChevronDown } from "lucide-react";
-import type { FreshnessEvent } from "../../lib/fixtures";
+import type { FreshnessEvent } from "../../lib/jobs";
 import { relativeTime, formatDate, classNames } from "../../lib/format";
 
 const kindMeta = {

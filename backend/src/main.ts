@@ -13,6 +13,12 @@ async function bootstrap() {
 
   app.useLogger(app.get(Logger));
   app.enableShutdownHooks();
+  app.enableCors({
+    origin: config.frontendOrigins,
+    methods: ["GET", "HEAD", "OPTIONS"],
+    allowedHeaders: ["Accept", "Content-Type"],
+    credentials: false
+  });
   app.use(helmet());
   app.setGlobalPrefix("api/v1");
   app.useGlobalPipes(
