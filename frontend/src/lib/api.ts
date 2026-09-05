@@ -53,6 +53,9 @@ export interface ApiJob {
   excerpt: string | null;
   publishedAt: string | null;
   expiresAt: string | null;
+  providerExpiresAt: string | null;
+  applicationDeadlineAt: string | null;
+  deadlineMetadata: unknown;
   applicationUrl: string | null;
   applyDomain: string | null;
   source: ApiSource | null;

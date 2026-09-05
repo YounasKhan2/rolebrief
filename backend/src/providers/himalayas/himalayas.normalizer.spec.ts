@@ -20,10 +20,11 @@ test("normalizes restriction objects and timestamp variants without flattening H
   assert.equal(normalized.descriptionHtml?.includes("<h3>Overview</h3>"), true);
   assert.equal(normalized.descriptionHtml?.includes("<script>alert(1)</script>"), true);
   assert.equal(normalized.descriptionText?.includes("<script>"), false);
-  assert.equal(normalized.remoteRestrictions.countries[0].name, "Canada");
-  assert.deepEqual(normalized.remoteRestrictions.timezones, ["-8", "-7"]);
-  assert.equal(normalized.publishedAt?.toISOString(), "2026-09-04T19:00:00.000Z");
-  assert.equal(normalized.expiresAt?.toISOString(), "2026-11-03T20:00:00.000Z");
+  assert.equal(normalized.remote.countries[0].name, "Canada");
+  assert.equal(normalized.remote.scope, "COUNTRY_AND_TIMEZONE_LIMITED");
+  assert.deepEqual(normalized.remote.timezones, ["-8", "-7"]);
+  assert.equal(normalized.sourcePublishedAt?.toISOString(), "2026-09-04T19:00:00.000Z");
+  assert.equal(normalized.providerExpiresAt?.toISOString(), "2026-11-03T20:00:00.000Z");
   assert.equal(normalized.salary?.min, 100000);
   assert.equal(normalized.salary?.period, "annual");
 });

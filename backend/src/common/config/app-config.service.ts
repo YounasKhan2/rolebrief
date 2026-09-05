@@ -46,15 +46,18 @@ export class AppConfigService {
     return {
       enabled: this.config.get("HIMALAYAS_ENABLED", { infer: true }),
       apiUrl: this.config.get("HIMALAYAS_API_URL", { infer: true }),
-      timeoutMs: this.config.get("HIMALAYAS_TIMEOUT_MS", { infer: true }),
-      initialBackfillPages: this.config.get("HIMALAYAS_INITIAL_BACKFILL_PAGES", { infer: true }),
-      recurringSyncPages: this.config.get("HIMALAYAS_RECURRING_SYNC_PAGES", { infer: true }),
+      pageLimit: this.config.get("HIMALAYAS_PAGE_LIMIT", { infer: true }),
+      timeoutMs: this.config.get("HIMALAYAS_TIMEOUT_MS", { infer: true }) ?? this.config.get("HIMALAYAS_REQUEST_TIMEOUT_MS", { infer: true }),
+      initialBackfillPages: this.config.get("HIMALAYAS_INITIAL_BACKFILL_MAX_PAGES", { infer: true }) ?? this.config.get("HIMALAYAS_INITIAL_BACKFILL_PAGES", { infer: true }),
+      recurringSyncPages: this.config.get("HIMALAYAS_SYNC_MAX_PAGES", { infer: true }) ?? this.config.get("HIMALAYAS_RECURRING_SYNC_PAGES", { infer: true }),
       unchangedStopThreshold: this.config.get("HIMALAYAS_UNCHANGED_STOP_THRESHOLD", { infer: true }),
-      retryAttempts: this.config.get("HIMALAYAS_RETRY_ATTEMPTS", { infer: true }),
+      retryAttempts: this.config.get("HIMALAYAS_RETRY_ATTEMPTS", { infer: true }) ?? this.config.get("HIMALAYAS_MAX_RETRIES", { infer: true }),
       retryDelayMs: this.config.get("HIMALAYAS_RETRY_DELAY_MS", { infer: true }),
       rateLimitDelayMs: this.config.get("HIMALAYAS_RATE_LIMIT_DELAY_MS", { infer: true }),
+      requestDelayMs: this.config.get("HIMALAYAS_REQUEST_DELAY_MS", { infer: true }),
       cron: this.config.get("HIMALAYAS_CRON", { infer: true }),
-      liveSmoke: this.config.get("HIMALAYAS_LIVE_SMOKE", { infer: true })
+      liveSmoke: this.config.get("HIMALAYAS_LIVE_SMOKE", { infer: true }),
+      liveSmokePersist: this.config.get("HIMALAYAS_LIVE_SMOKE_PERSIST", { infer: true })
     };
   }
 }

@@ -3,15 +3,16 @@
 export function relativeTime(iso: string, now: Date = new Date()): string {
   const then = new Date(iso).getTime();
   const diff = now.getTime() - then;
-  const mins = Math.round(diff / 60000);
+  const future = diff < 0;
+  const mins = Math.round(Math.abs(diff) / 60000);
   if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
+  if (mins < 60) return future ? `in ${mins}m` : `${mins}m ago`;
   const hrs = Math.round(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
+  if (hrs < 24) return future ? `in ${hrs}h` : `${hrs}h ago`;
   const days = Math.round(hrs / 24);
-  if (days < 30) return `${days}d ago`;
+  if (days < 30) return future ? `in ${days}d` : `${days}d ago`;
   const months = Math.round(days / 30);
-  return `${months}mo ago`;
+  return future ? `in ${months}mo` : `${months}mo ago`;
 }
 
 export function formatDate(iso: string): string {

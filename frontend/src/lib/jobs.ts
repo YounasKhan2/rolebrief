@@ -28,7 +28,7 @@ export interface MatchBriefData {
 }
 
 export interface FreshnessEvent {
-  kind: "published" | "discovered" | "verified" | "updated" | "rechecked" | "expired";
+  kind: "published" | "discovered" | "verified" | "updated" | "rechecked" | "deadline" | "provider-expiry" | "expired";
   at: string;
   note?: string;
 }
@@ -196,7 +196,9 @@ function mapApiJob(job: ApiJob): Job {
   const applicationUrl = job.applicationUrl || sourceUrl;
   const companyName = nonEmpty(job.company?.name) ?? "Unknown company";
   const publishedAt = job.publishedAt ?? new Date().toISOString();
-  const expired = job.expiresAt ? new Date(job.expiresAt).getTime() < Date.now() : false;
+  const providerExpired = job.providerExpiresAt ? new Date(job.providerExpiresAt).getTime() < Date.now() : false;
+  const applicationDeadlinePassed = job.applicationDeadlineAt ? new Date(job.applicationDeadlineAt).getTime() < Date.now() : false;
+  const expired = providerExpired || applicationDeadlinePassed;
   const sourceDomain = sourceUrl ? domainFromUrl(sourceUrl) : "source unavailable";
   const workModel = mapWorkMode(job.workMode);
   const remoteEligibility = mapRemoteEligibility(job.workMode, job.remoteScope);
@@ -223,7 +225,14 @@ function mapApiJob(job: ApiJob): Job {
     freshness: [
       { kind: "published", at: publishedAt, note: "Provider timestamp" },
       { kind: "discovered", at: publishedAt, note: "Stored from the Himalayas provider" },
-      ...(expired && job.expiresAt ? [{ kind: "expired" as const, at: job.expiresAt, note: "Provider expiry timestamp" }] : []),
+      ...(job.applicationDeadlineAt ? [{ kind: "deadline" as const, at: job.applicationDeadlineAt, note: "Apply by" }] : []),
+      ...(job.providerExpiresAt
+        ? [{
+            kind: providerExpired ? "expired" as const : "provider-expiry" as const,
+            at: job.providerExpiresAt,
+            note: "Provider expiry - listing may be removed from provider",
+          }]
+        : []),
     ],
     eligibility: {
       state: "check",
@@ -267,6 +276,7 @@ function mapRemoteEligibility(workMode: string | null, remoteScope: string | nul
   if (combined.includes("on") || combined.includes("office")) return "on-site";
   if (combined.includes("worldwide") || combined.includes("global")) return "worldwide";
   if (combined.includes("country")) return "country-eligible";
+  if (combined.includes("timezone")) return "country-eligible";
   if (combined.includes("remote")) return "unknown";
   return "unknown";
 }

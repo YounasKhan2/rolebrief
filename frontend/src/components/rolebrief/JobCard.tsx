@@ -1,4 +1,4 @@
-import { Link } from "react-router";
+import { Link, useLocation } from "react-router";
 import {
   MapPin,
   Building2,
@@ -71,6 +71,7 @@ export function JobCard({
   onDismiss,
   onHideCompany,
   onReport,
+  interactive = true,
 }: {
   job: Job;
   variant?: Variant;
@@ -79,9 +80,12 @@ export function JobCard({
   onDismiss?: () => void;
   onHideCompany?: () => void;
   onReport?: () => void;
+  interactive?: boolean;
 }) {
   const expired = job.flags?.includes("expired");
   const compact = variant === "compact";
+  const location = useLocation();
+  const detailPath = location.pathname.startsWith("/app") ? `/app/jobs/${job.slug}` : `/jobs/${job.slug}`;
 
   return (
     <article
@@ -102,9 +106,13 @@ export function JobCard({
         <div className="min-w-0 grow">
           <div className="flex items-start justify-between gap-3">
             <h3 className={classNames("font-semibold text-ink leading-snug", compact ? "text-base" : "text-lg")}>
-              <Link to={`/jobs/${job.slug}`} className="hover:text-indigo transition-colors before:absolute before:inset-0">
-                {job.title}
-              </Link>
+              {interactive ? (
+                <Link to={detailPath} className="hover:text-indigo transition-colors before:absolute before:inset-0">
+                  {job.title}
+                </Link>
+              ) : (
+                <span>{job.title}</span>
+              )}
             </h3>
             {onSave && (
               <IconButton

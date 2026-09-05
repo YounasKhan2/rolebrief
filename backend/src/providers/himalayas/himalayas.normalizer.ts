@@ -1,41 +1,15 @@
 import { createHash } from "node:crypto";
-import { JobStatus, WorkMode } from "@prisma/client";
+import { WorkMode } from "@prisma/client";
+import { CanonicalJobInput, CanonicalRemoteRestrictions } from "../provider-adapter";
 import { HimalayasJobDto } from "./himalayas.dto";
 
-export interface NormalizedHimalayasJob {
-  externalId: string;
-  slug: string;
-  title: string;
-  companySlug: string;
-  companyName: string;
-  companyLogo: string | null;
-  descriptionHtml: string | null;
-  descriptionText: string | null;
-  employmentType: string | null;
-  seniority: string | null;
-  workMode: WorkMode;
-  remoteScope: string;
-  remoteRestrictions: {
-    countries: { alpha2: string | null; name: string; slug: string }[];
-    labels: string[];
-    timezones: string[];
-  };
-  publishedAt: Date | null;
-  expiresAt: Date | null;
-  applicationUrl: string;
-  sourceUrl: string;
-  contentHash: string;
-  categories: string[];
-  parentCategories: string[];
-  locations: { alpha2: string | null; name: string; slug: string }[];
-  salary: { min: number | null; max: number | null; currency: string | null; period: string | null } | null;
-  raw: HimalayasJobDto;
-}
-
-export function normalizeHimalayasJob(job: HimalayasJobDto): NormalizedHimalayasJob {
+export function normalizeHimalayasJob(job: HimalayasJobDto): CanonicalJobInput<HimalayasJobDto> {
   const seniority = job.seniority.length > 0 ? job.seniority.join(", ") : null;
   const { locations, locationLabels } = normalizeLocationRestrictions(job.locationRestrictions);
   const timezoneRestrictions = job.timezoneRestrictions.map((timezone) => String(timezone));
+  const remote = normalizeRemoteRestrictions(locations, locationLabels, timezoneRestrictions);
+  const sourcePublishedAt = parseProviderDate(job.pubDate);
+  const providerExpiresAt = parseProviderDate(job.expiryDate);
   const contentHash = hash(
     JSON.stringify({
       title: job.title,
@@ -60,6 +34,10 @@ export function normalizeHimalayasJob(job: HimalayasJobDto): NormalizedHimalayas
     })
   );
   const slug = `${slugify(job.companySlug)}-${hash(job.guid).slice(0, 12)}`;
+  const applicationDomain = hostname(job.applicationLink);
+  const canonicalFingerprint = hash(
+    [slugify(job.companySlug), slugify(job.title), remote.scope, remote.countryCodes.join(","), remote.labels.join(","), applicationDomain].join("|")
+  );
 
   return {
     externalId: job.guid,
@@ -73,20 +51,17 @@ export function normalizeHimalayasJob(job: HimalayasJobDto): NormalizedHimalayas
     employmentType: job.employmentType ?? null,
     seniority,
     workMode: WorkMode.REMOTE,
-    remoteScope: locations.length === 0 ? "worldwide" : "restricted",
-    remoteRestrictions: {
-      countries: locations,
-      labels: locationLabels,
-      timezones: timezoneRestrictions
-    },
-    publishedAt: parseProviderDate(job.pubDate),
-    expiresAt: parseProviderDate(job.expiryDate),
+    remote,
+    sourcePublishedAt,
+    sourceUpdatedAt: sourcePublishedAt,
+    providerExpiresAt,
+    applicationDeadlineAt: null,
     applicationUrl: job.applicationLink,
     sourceUrl: job.applicationLink,
     contentHash,
+    canonicalFingerprint,
     categories: job.categories,
     parentCategories: job.parentCategories,
-    locations,
     salary:
       job.minSalary !== null || job.maxSalary !== null
         ? {
@@ -97,6 +72,30 @@ export function normalizeHimalayasJob(job: HimalayasJobDto): NormalizedHimalayas
           }
         : null,
     raw: job
+  };
+}
+
+function normalizeRemoteRestrictions(
+  countries: { alpha2: string | null; name: string; slug: string }[],
+  labels: string[],
+  timezones: string[]
+): CanonicalRemoteRestrictions {
+  const hasCountries = countries.length > 0 || labels.length > 0;
+  const hasTimezones = timezones.length > 0;
+  const scope = hasCountries && hasTimezones
+    ? "COUNTRY_AND_TIMEZONE_LIMITED"
+    : hasCountries
+      ? "COUNTRY_LIMITED"
+      : hasTimezones
+        ? "TIMEZONE_LIMITED"
+        : "WORLDWIDE";
+
+  return {
+    scope,
+    countries,
+    countryCodes: countries.map((country) => country.alpha2).filter((alpha2): alpha2 is string => Boolean(alpha2)),
+    labels,
+    timezones
   };
 }
 
@@ -136,6 +135,14 @@ function parseProviderDate(value: string | number | null | undefined) {
   if (value === null || value === undefined) return null;
   const date = typeof value === "number" ? new Date(value < 1_000_000_000_000 ? value * 1000 : value) : new Date(value);
   return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function hostname(value: string) {
+  try {
+    return new URL(value).hostname.replace(/^www\./, "");
+  } catch {
+    return "";
+  }
 }
 
 function hash(value: string) {

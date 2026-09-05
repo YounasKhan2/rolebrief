@@ -64,7 +64,11 @@ export class JobsService {
       seniority: job.seniority,
       workMode: job.workMode,
       remoteScope: job.remoteScope,
-      remoteRestrictions: job.remoteRestrictions,
+      remoteRestrictions: {
+        countryCodes: job.remoteCountryCodes,
+        labels: job.remoteRestrictionLabels,
+        timezones: job.remoteTimezoneRestrictions
+      },
       remoteRestrictionsText: this.formatRemoteRestrictions(job.remoteRestrictions),
       locations: job.locations.map(({ location }) => ({
         alpha2: location.alpha2,
@@ -83,6 +87,9 @@ export class JobsService {
       excerpt: job.descriptionText,
       publishedAt: job.publishedAt,
       expiresAt: job.expiresAt,
+      providerExpiresAt: job.providerExpiresAt,
+      applicationDeadlineAt: job.applicationDeadlineAt,
+      deadlineMetadata: job.deadlineMetadata,
       applicationUrl: job.providerRecords[0]?.applicationUrl ?? null,
       applyDomain: this.hostname(job.providerRecords[0]?.applicationUrl ?? null),
       source: job.source
@@ -175,9 +182,18 @@ export class JobsService {
       if (countries.length > 0) parts.push(`Location restricted to ${countries.join(", ")}`);
     }
     if (Array.isArray(restrictions.timezones) && restrictions.timezones.length > 0) {
-      const timezones = restrictions.timezones.map((timezone) => String(timezone)).filter(Boolean);
+      const timezones = restrictions.timezones.map((timezone) => formatTimezone(String(timezone))).filter(Boolean);
       if (timezones.length > 0) parts.push(`Timezone overlap required: ${timezones.join(", ")}`);
     }
-    return parts.length > 0 ? parts.join("; ") : "No location or timezone restrictions supplied.";
+    return parts.length > 0 ? parts.join("; ") : "Remote - Worldwide";
   }
+}
+
+function formatTimezone(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  if (/^utc/i.test(trimmed)) return trimmed.toUpperCase().replace("UTC+", "UTC+").replace("UTC-", "UTC-");
+  const numeric = Number(trimmed);
+  if (!Number.isFinite(numeric)) return trimmed;
+  return `UTC${numeric >= 0 ? "+" : ""}${trimmed}`;
 }

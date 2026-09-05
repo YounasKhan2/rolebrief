@@ -15,7 +15,9 @@ import {
 } from "lucide-react";
 import { LinkButton, Kicker, Badge, CompanyLogo, EmptyState, Skeleton } from "../../components/ui/primitives";
 import { JobCard } from "../../components/rolebrief/JobCard";
+import { NewsCard } from "../../components/rolebrief/NewsCard";
 import { useJobs, type Job } from "../../lib/jobs";
+import { news } from "../../lib/fixtures";
 import { classNames } from "../../lib/format";
 
 export function Component() {
@@ -26,6 +28,7 @@ export function Component() {
       <LiveStrip />
       <Signals />
       <StoryBlock jobs={jobs} loading={loading} error={error?.message ?? null} onRetry={retry} />
+      <NewsBlock />
       <Coverage />
       <Trust />
       <Workflow />
@@ -315,23 +318,22 @@ function Signals() {
 function StoryBlock({ jobs, loading, error, onRetry }: { jobs: Job[]; loading: boolean; error: string | null; onRetry: () => void }) {
   return (
     <section className="bg-white border-y border-line">
-      <div className="mx-auto max-w-[1248px] px-5 sm:px-8 py-20 grid lg:grid-cols-2 gap-12 items-start">
+      <div className="mx-auto max-w-[1248px] px-5 sm:px-8 py-20">
         <div>
-          <Kicker className="mb-3">Jobs and the news around them</Kicker>
+          <Kicker className="mb-3">Fresh roles</Kicker>
           <h2 className="font-display text-4xl text-navy leading-tight">
-            A role means more when you can see the company's momentum.
+            Start with the roles worth your attention.
           </h2>
           <p className="mt-4 text-ink/75 reading-measure">
-            RoleBrief reads career-relevant news — funding, hiring, new offices, layoffs, remote and visa policy — and
-            links it to the roles it affects. Signals are labelled as evidence or inference, and we never reproduce full
-            articles.
+            Stored provider roles with source links, freshness signals and clear eligibility uncertainty. Landing-page
+            previews are for scanning; open the jobs workspace when you are ready for the full brief.
           </p>
           <div className="mt-6 space-y-3">
             {loading && Array.from({ length: 2 }).map((_, index) => (
               <Skeleton key={index} className="h-36 w-full rounded-[var(--radius-card)]" />
             ))}
             {!loading && !error && jobs.slice(0, 2).map((j) => (
-              <JobCard key={j.slug} job={j} variant="compact" />
+              <JobCard key={j.slug} job={j} variant="compact" interactive={false} />
             ))}
             {!loading && error && (
               <EmptyState title="Jobs API unavailable" body={error} action={<button className="text-indigo font-medium" onClick={onRetry}>Retry</button>} />
@@ -341,11 +343,31 @@ function StoryBlock({ jobs, loading, error, onRetry }: { jobs: Job[]; loading: b
             )}
           </div>
         </div>
-        <div className="space-y-4">
-          <EmptyState
-            title="Company momentum unavailable"
-            body="News ingestion is not connected to live backend data yet, so RoleBrief does not infer funding, hiring, deadline or momentum claims here."
-          />
+      </div>
+    </section>
+  );
+}
+
+function NewsBlock() {
+  return (
+    <section className="border-b border-line">
+      <div className="mx-auto max-w-[1248px] px-5 sm:px-8 py-20">
+        <Kicker className="mb-3">The news around them</Kicker>
+        <h2 className="font-display text-4xl text-navy leading-tight">Company momentum, clearly labelled.</h2>
+        <p className="mt-4 text-ink/75 reading-measure">
+          Funding, hiring, new offices, layoffs and remote or visa policy, summarized without reproducing full articles.
+        </p>
+        <div className="mt-8">
+          {news.length > 0 ? (
+            <div className="grid gap-5 md:grid-cols-2">
+              {news.slice(0, 2).map((item) => <NewsCard key={item.slug} item={item} variant="standard" />)}
+            </div>
+          ) : (
+            <EmptyState
+              title="Company momentum unavailable"
+              body="News ingestion is not connected to live backend data yet, so RoleBrief does not infer funding, hiring, deadline or momentum claims here."
+            />
+          )}
         </div>
       </div>
     </section>

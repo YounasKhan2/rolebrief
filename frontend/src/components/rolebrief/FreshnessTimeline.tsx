@@ -9,6 +9,8 @@ const kindMeta = {
   verified: { label: "Verified", icon: CheckCircle2, klass: "text-emerald" },
   rechecked: { label: "Rechecked", icon: RefreshCw, klass: "text-cyan" },
   updated: { label: "Updated", icon: Pencil, klass: "text-indigo" },
+  deadline: { label: "Apply by", icon: Clock, klass: "text-amber" },
+  "provider-expiry": { label: "Provider expiry", icon: Clock, klass: "text-slate" },
   expired: { label: "Expired", icon: XOctagon, klass: "text-red" },
 } as const;
 

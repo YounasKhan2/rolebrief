@@ -33,7 +33,7 @@ test("fetchPage applies cursor pagination and retries rate limits", async () => 
     }
   } as never);
 
-  const page = await adapter.fetchPage("opaque");
+  const page = await adapter.fetchPage({ cursor: "opaque", limit: 20, mode: "incremental" });
 
   assert.equal(page.records.length, 1);
   assert.equal(page.nextCursor, "next-cursor");
@@ -72,7 +72,7 @@ test("fetchPage honors Retry-After on 429", async () => {
     }
   } as never);
 
-  await adapter.fetchPage(null);
+  await adapter.fetchPage({ cursor: null, limit: 20, mode: "incremental" });
   assert.equal(delayed, 2000);
 });
 
@@ -92,7 +92,7 @@ test("live smoke fetches one controlled Himalayas page only when explicitly enab
     }
   } as never);
 
-  const page = await adapter.fetchPage(null);
+  const page = await adapter.fetchPage({ cursor: null, limit: 1, mode: "smoke" });
   assert.ok(page.records.length <= 1);
   assert.equal(page.partialFailures.length, 0);
 });

@@ -25,7 +25,7 @@ export class HimalayasSchedulerService {
       { pattern: settings.cron },
       {
         name: INGEST_HIMALAYAS_JOB,
-        data: { providerId: "himalayas.guid", mode: "recurring-sync" },
+        data: { providerId: "himalayas.guid", mode: "incremental" },
         opts: { removeOnComplete: 25, removeOnFail: 50 }
       }
     );

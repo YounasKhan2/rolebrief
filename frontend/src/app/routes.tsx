@@ -59,6 +59,7 @@ export const router = createBrowserRouter([
       { path: "onboarding", lazy: () => import("../screens/onboarding/OnboardingScreen") },
       { path: "radar", lazy: () => import("../screens/radar/RadarScreen") },
       { path: "jobs", lazy: () => import("../screens/jobs/JobsScreen") },
+      { path: "jobs/:slug", lazy: () => import("../screens/jobs/JobDetailScreen") },
       { path: "saved", lazy: () => import("../screens/saved/SavedScreen") },
       { path: "compare", lazy: () => import("../screens/compare/CompareScreen") },
       { path: "alerts", lazy: () => import("../screens/alerts/AlertsScreen") },
@@ -66,6 +67,7 @@ export const router = createBrowserRouter([
       { path: "notifications", lazy: () => import("../screens/notifications/NotificationsScreen") },
       { path: "profile", lazy: () => import("../screens/profile/ProfileScreen") },
       { path: "settings", lazy: () => import("../screens/settings/SettingsScreen") },
+      { path: "settings/notifications", lazy: () => import("../screens/settings/SettingsScreen") },
     ],
   },
 
