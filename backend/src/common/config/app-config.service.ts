@@ -34,6 +34,33 @@ export class AppConfigService {
     return this.config.get("REDIS_URL", { infer: true });
   }
 
+  get auth() {
+    return {
+      accessTokenTtlSeconds: this.config.get("ACCESS_TOKEN_TTL", { infer: true }),
+      refreshSessionTtlSeconds: this.config.get("REFRESH_SESSION_TTL", { infer: true }),
+      cookieSecure: this.config.get("COOKIE_SECURE", { infer: true }),
+      cookieSameSite: this.config.get("COOKIE_SAME_SITE", { infer: true }),
+      frontendOrigin: this.frontendOrigins[0],
+      rateLimits: {
+        login: this.config.get("AUTH_RATE_LIMIT_LOGIN", { infer: true }),
+        signup: this.config.get("AUTH_RATE_LIMIT_SIGNUP", { infer: true }),
+        recovery: this.config.get("AUTH_RATE_LIMIT_RECOVERY", { infer: true }),
+        refresh: this.config.get("AUTH_RATE_LIMIT_REFRESH", { infer: true })
+      },
+      bootstrap: {
+        enabled: this.config.get("BOOTSTRAP_ADMIN_ENABLED", { infer: true }),
+        email: this.config.get("BOOTSTRAP_ADMIN_EMAIL", { infer: true }),
+        password: this.config.get("BOOTSTRAP_ADMIN_PASSWORD", { infer: true })
+      },
+      email: {
+        provider: this.config.get("EMAIL_PROVIDER", { infer: true }),
+        from: this.config.get("EMAIL_FROM", { infer: true }),
+        smtpUrl: this.config.get("SMTP_URL", { infer: true }),
+        resendApiKey: this.config.get("RESEND_API_KEY", { infer: true })
+      }
+    };
+  }
+
   get queuePrefix() {
     return this.config.get("QUEUE_PREFIX", { infer: true });
   }

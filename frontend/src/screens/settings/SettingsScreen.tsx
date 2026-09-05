@@ -1,10 +1,13 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Download, Trash2, Bell, Mail, Shield, Accessibility, Ban } from "lucide-react";
 import { PageContainer, PageHeader } from "../../components/shell/AppShell";
 import { Button, SectionRule } from "../../components/ui/primitives";
 import { Switch, SegmentedControl, Select } from "../../components/ui/form";
 import { Dialog } from "../../components/ui/overlay";
 import { useToast } from "../../components/ui/toast";
+import { useAuth } from "../../lib/auth";
+import * as authApi from "../../lib/auth-api";
+import type { AuthSession } from "../../lib/auth-api";
 
 function Row({ title, description, control }: { title: string; description?: string; control: React.ReactNode }) {
   return (
@@ -32,6 +35,8 @@ function SettingsCard({ icon, title, children }: { icon: React.ReactNode; title:
 
 export function Component() {
   const toast = useToast();
+  const { user, logout } = useAuth();
+  const [sessions, setSessions] = useState<AuthSession[]>([]);
   const [jobAlerts, setJobAlerts] = useState(true);
   const [marketing, setMarketing] = useState(false);
   const [productEmails, setProductEmails] = useState(true);
@@ -41,6 +46,10 @@ export function Component() {
   const [highContrast, setHighContrast] = useState(false);
   const [privateProfile, setPrivateProfile] = useState(true);
   const [confirmDelete, setConfirmDelete] = useState(false);
+
+  useEffect(() => {
+    void authApi.sessions().then((result) => setSessions(result.sessions)).catch(() => setSessions([]));
+  }, []);
 
   return (
     <PageContainer className="max-w-[820px]">
@@ -59,6 +68,8 @@ export function Component() {
         </SettingsCard>
 
         <SettingsCard icon={<Shield size={18} />} title="Privacy">
+          <Row title="Signed in as" description={user?.email ?? "Current account"} control={<Button variant="secondary" size="sm" onClick={() => void logout()}>Log out</Button>} />
+          <Row title="Active sessions" description={`${sessions.length} active ${sessions.length === 1 ? "session" : "sessions"}`} control={<Button variant="tertiary" size="sm" onClick={() => void authApi.logoutAll().then(() => logout())}>Log out all devices</Button>} />
           <Switch label="Private profile" description="Your profile powers matching only. It's private in the MVP." checked={privateProfile} onChange={setPrivateProfile} />
           <Row title="Search & activity history" description="Used to improve your Match Briefs." control={<Button variant="tertiary" size="sm" onClick={() => toast({ kind: "success", message: "Activity history cleared." })}>Clear history</Button>} />
         </SettingsCard>

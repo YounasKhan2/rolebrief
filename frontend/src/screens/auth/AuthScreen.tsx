@@ -1,10 +1,12 @@
-import { useLocation, Link, useNavigate, Navigate } from "react-router";
+import { useLocation, Link, useNavigate, Navigate, useSearchParams } from "react-router";
 import { useState } from "react";
-import { Mail, Lock, ArrowRight, CheckCircle2 } from "lucide-react";
+import { Mail, Lock, ArrowRight, CheckCircle2, User } from "lucide-react";
 import { Wordmark } from "../../components/rolebrief/Wordmark";
-import { Button, Kicker, SectionRule } from "../../components/ui/primitives";
+import { Button, Kicker } from "../../components/ui/primitives";
 import { Input } from "../../components/ui/form";
 import { useAuth } from "../../lib/auth";
+import * as authApi from "../../lib/auth-api";
+import { ApiError } from "../../lib/api";
 
 type Mode = "login" | "signup" | "forgot-password" | "reset-password" | "verify-email";
 
@@ -12,7 +14,7 @@ const copy: Record<Mode, { kicker: string; title: string; sub: string; cta: stri
   login: { kicker: "Welcome back", title: "Log in to RoleBrief", sub: "Pick up your brief where you left it.", cta: "Log in" },
   signup: { kicker: "Get started", title: "Create your account", sub: "Build an opportunity brief in a few minutes.", cta: "Create account" },
   "forgot-password": { kicker: "Account recovery", title: "Reset your password", sub: "We'll email you a secure reset link.", cta: "Send reset link" },
-  "reset-password": { kicker: "Account recovery", title: "Choose a new password", sub: "Use at least 10 characters.", cta: "Update password" },
+  "reset-password": { kicker: "Account recovery", title: "Choose a new password", sub: "Use at least 12 characters.", cta: "Update password" },
   "verify-email": { kicker: "One more step", title: "Verify your email", sub: "We sent a link to your inbox. Open it to activate alerts.", cta: "Resend email" },
 };
 
@@ -26,13 +28,20 @@ function safeReturnTo(raw: unknown): string | null {
 export function Component() {
   const { pathname, state } = useLocation();
   const navigate = useNavigate();
-  const { isAuthenticated, login, signup } = useAuth();
+  const [searchParams] = useSearchParams();
+  const { isAuthenticated, status, login, signup } = useAuth();
   const mode = (pathname.replace("/", "") || "login") as Mode;
   const c = copy[mode];
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
 
   const returnTo = safeReturnTo(state?.returnTo);
+
+  if (status === "loading") {
+    return <div className="mx-auto max-w-md px-5 sm:px-8 py-16 lg:py-24 text-center text-slate">Checking your session...</div>;
+  }
 
   // Already authenticated — redirect away from auth pages
   if (isAuthenticated && (mode === "login" || mode === "signup")) {
@@ -42,29 +51,51 @@ export function Component() {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
+    setError("");
+    setMessage("");
     try {
-      if (mode === "forgot-password" || mode === "verify-email") {
-        await new Promise((r) => setTimeout(r, 600));
+      const form = e.target as HTMLFormElement;
+      const fd = new FormData(form);
+      if (mode === "forgot-password") {
+        const result = await authApi.forgotPassword((fd.get("email") as string) ?? "");
+        setMessage(result.message);
+        setSent(true);
+      } else if (mode === "verify-email") {
+        const token = searchParams.get("token");
+        if (token) {
+          const result = await authApi.verifyEmail(token);
+          setMessage(result.message);
+        } else {
+          const result = await authApi.resendVerification((fd.get("email") as string) ?? "");
+          setMessage(result.message);
+        }
         setSent(true);
       } else if (mode === "signup") {
-        const form = e.target as HTMLFormElement;
-        const fd = new FormData(form);
-        await signup(
+        const result = await signup(
           (fd.get("name") as string) ?? "",
           (fd.get("email") as string) ?? "",
           (fd.get("password") as string) ?? "",
         );
-        navigate("/app/onboarding");
+        setMessage(result);
+        setSent(true);
+      } else if (mode === "reset-password") {
+        const token = searchParams.get("token");
+        const password = (fd.get("password") as string) ?? "";
+        const confirm = (fd.get("confirmPassword") as string) ?? "";
+        if (!token) throw new Error("Reset link is missing a token.");
+        if (password !== confirm) throw new Error("Passwords do not match.");
+        const result = await authApi.resetPassword(token, password);
+        setMessage(result.message);
+        setSent(true);
       } else {
-        // login or reset-password
-        const form = e.target as HTMLFormElement;
-        const fd = new FormData(form);
         await login(
           (fd.get("email") as string) ?? "",
           (fd.get("password") as string) ?? "",
         );
         navigate(returnTo ?? "/app/radar");
       }
+    } catch (err) {
+      setError(err instanceof ApiError || err instanceof Error ? err.message : "Something went wrong.");
     } finally {
       setLoading(false);
     }
@@ -82,29 +113,24 @@ export function Component() {
         <Kicker className="mb-2">{c.kicker}</Kicker>
         <h1 className="text-2xl font-semibold text-ink">{c.title}</h1>
         <p className="text-slate mt-1.5 text-[15px]">{c.sub}</p>
+        {error && <p className="mt-4 rounded-[var(--radius-card)] border border-red/30 bg-red-tint px-3 py-2 text-[13px] text-red" role="alert">{error}</p>}
 
-        {mode === "verify-email" ? (
+        {sent ? (
           <div className="mt-6">
             <div className="flex items-center gap-3 rounded-[var(--radius-card)] bg-emerald-tint border border-emerald/30 p-4">
               <CheckCircle2 className="text-emerald shrink-0" size={20} />
-              <p className="text-[14px] text-ink">Verification link sent to <span className="font-medium">you@example.com</span>.</p>
+              <p className="text-[14px] text-ink">{message || "Request complete. Check your inbox for next steps."}</p>
             </div>
-            <Button className="w-full mt-5" variant="secondary" loading={loading} onClick={() => submit(new Event("submit") as unknown as React.FormEvent)}>
-              {sent ? "Sent again" : c.cta}
-            </Button>
             <p className="text-center text-[13px] text-slate mt-4">
-              Entered the wrong address? <Link to="/signup" className="text-indigo font-medium">Start over</Link>
+              <Link to="/login" className="text-indigo font-medium">Return to login</Link>
             </p>
-          </div>
-        ) : sent ? (
-          <div className="mt-6 flex items-center gap-3 rounded-[var(--radius-card)] bg-emerald-tint border border-emerald/30 p-4">
-            <CheckCircle2 className="text-emerald shrink-0" size={20} />
-            <p className="text-[14px] text-ink">Check your inbox for a reset link. It expires in 30 minutes.</p>
           </div>
         ) : (
           <form onSubmit={submit} className="mt-6 space-y-4">
-            {mode === "signup" && <Input label="Full name" name="name" placeholder="Ayesha Khan" autoComplete="name" required />}
-            {mode !== "reset-password" && (
+            {mode === "signup" && (
+              <Input label="Name" name="name" type="text" placeholder="Your name" leading={<User size={16} />} autoComplete="name" required />
+            )}
+            {(mode !== "reset-password" && !(mode === "verify-email" && searchParams.get("token"))) && (
               <Input label="Email" name="email" type="email" placeholder="you@example.com" leading={<Mail size={16} />} autoComplete="email" required />
             )}
             {(mode === "login" || mode === "signup" || mode === "reset-password") && (
@@ -115,12 +141,12 @@ export function Component() {
                 placeholder="••••••••••"
                 leading={<Lock size={16} />}
                 autoComplete={mode === "login" ? "current-password" : "new-password"}
-                hint={mode === "login" ? undefined : "10+ characters"}
+                hint={mode === "login" ? undefined : "12+ characters"}
                 required
               />
             )}
             {mode === "reset-password" && (
-              <Input label="Confirm new password" type="password" placeholder="••••••••••" leading={<Lock size={16} />} required />
+              <Input label="Confirm new password" name="confirmPassword" type="password" placeholder="••••••••••" leading={<Lock size={16} />} required />
             )}
 
             {mode === "login" && (
@@ -136,17 +162,6 @@ export function Component() {
             </Button>
           </form>
         )}
-
-        {(mode === "login" || mode === "signup") && (
-          <>
-            <div className="my-6 flex items-center gap-3 text-[12px] text-slate">
-              <SectionRule className="grow" /> or <SectionRule className="grow" />
-            </div>
-            <button className="w-full h-11 rounded-[var(--radius-control)] border border-line hover:bg-soft transition-colors inline-flex items-center justify-center gap-2 text-sm font-medium">
-              <GoogleG /> Continue with Google
-            </button>
-          </>
-        )}
       </div>
 
       <p className="text-center text-[14px] text-slate mt-6">
@@ -157,16 +172,5 @@ export function Component() {
         )}
       </p>
     </div>
-  );
-}
-
-function GoogleG() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden>
-      <path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.6l6.7-6.7C35.6 2.6 30.2 0 24 0 14.6 0 6.4 5.4 2.5 13.3l7.9 6.1C12.2 13.7 17.6 9.5 24 9.5Z" />
-      <path fill="#4285F4" d="M46.1 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.4c-.5 2.9-2.1 5.3-4.6 7l7.1 5.5c4.1-3.8 6.5-9.4 6.5-16Z" />
-      <path fill="#FBBC05" d="M10.4 28.6a14.5 14.5 0 0 1 0-9.2l-7.9-6.1a24 24 0 0 0 0 21.4l7.9-6.1Z" />
-      <path fill="#34A853" d="M24 48c6.2 0 11.4-2 15.2-5.5l-7.1-5.5c-2 1.3-4.6 2.1-8.1 2.1-6.4 0-11.8-4.2-13.6-9.9l-7.9 6.1C6.4 42.6 14.6 48 24 48Z" />
-    </svg>
   );
 }

@@ -9,8 +9,10 @@ import {
 import Redis from "ioredis";
 import { AppConfigService } from "../common/config/app-config.service";
 import { PrismaService } from "../prisma/prisma.service";
+import { Public } from "../auth/auth.decorators";
 
 @Controller("health")
+@Public()
 export class HealthController {
   constructor(
     private readonly health: HealthCheckService,

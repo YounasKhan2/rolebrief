@@ -85,9 +85,9 @@ function joinSignals(controller: AbortController, signal?: AbortSignal) {
   signal.addEventListener("abort", () => controller.abort(signal.reason), { once: true });
 }
 
-async function requestJson<T>(
+export async function requestJson<T>(
   path: string,
-  options: { signal?: AbortSignal; timeoutMs?: number } = {},
+  options: { signal?: AbortSignal; timeoutMs?: number; method?: string; body?: unknown; headers?: Record<string, string>; credentials?: RequestCredentials } = {},
 ): Promise<T> {
   const controller = new AbortController();
   joinSignals(controller, options.signal);
@@ -95,8 +95,10 @@ async function requestJson<T>(
 
   try {
     const response = await fetch(`${API_BASE_URL}${path}`, {
-      method: "GET",
-      headers: { Accept: "application/json" },
+      method: options.method ?? "GET",
+      headers: { Accept: "application/json", ...(options.body ? { "Content-Type": "application/json" } : {}), ...options.headers },
+      body: options.body ? JSON.stringify(options.body) : undefined,
+      credentials: options.credentials,
       signal: controller.signal,
     });
 

@@ -10,6 +10,8 @@ import { MatchingModule } from "./modules/matching/matching.module";
 import { EligibilityModule } from "./modules/eligibility/eligibility.module";
 import { AlertsModule } from "./modules/alerts/alerts.module";
 import { TrackerModule } from "./modules/tracker/tracker.module";
+import { AuthModule } from "./auth/auth.module";
+import { AdminModule } from "./admin/admin.module";
 
 @Module({
   imports: [
@@ -17,6 +19,8 @@ import { TrackerModule } from "./modules/tracker/tracker.module";
     LoggingModule,
     QueueModule,
     HealthModule,
+    AuthModule,
+    AdminModule,
     CompaniesModule,
     JobsModule,
     NewsModule,

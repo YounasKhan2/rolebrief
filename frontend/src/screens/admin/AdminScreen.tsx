@@ -1,9 +1,13 @@
 import { Link } from "react-router";
+import { useEffect, useState } from "react";
 import { Activity, AlertTriangle, CheckCircle2, Database, RefreshCw, ShieldAlert, Layers, ArrowRight } from "lucide-react";
 import { PageContainer, PageHeader } from "../../components/shell/AppShell";
 import { Kicker, Badge, Button, SectionRule } from "../../components/ui/primitives";
 import { companies } from "../../lib/fixtures";
 import { relativeTime } from "../../lib/format";
+import { useAuth } from "../../lib/auth";
+import * as authApi from "../../lib/auth-api";
+import type { AdminUser, AuthRole, AuthStatus } from "../../lib/auth-api";
 
 const providers = [
   { name: "Himalayas provider", status: "healthy" as const, lastSync: new Date().toISOString(), ingested: 0, failed: 0 },
@@ -26,12 +30,46 @@ function Stat({ label, value, hint, tone }: { label: string; value: string; hint
 }
 
 export function Component() {
+  const { user } = useAuth();
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(true);
+  const [userError, setUserError] = useState("");
+
+  async function loadUsers() {
+    setLoadingUsers(true);
+    setUserError("");
+    try {
+      const result = await authApi.listAdminUsers();
+      setUsers(result.users);
+    } catch (error) {
+      setUserError(error instanceof Error ? error.message : "Could not load users.");
+    } finally {
+      setLoadingUsers(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadUsers();
+  }, []);
+
+  async function updateRole(target: AdminUser, role: AuthRole) {
+    if (!window.confirm(`Change ${target.email} to ${role}?`)) return;
+    await authApi.updateAdminUserRole(target.id, role);
+    await loadUsers();
+  }
+
+  async function updateStatus(target: AdminUser, status: AuthStatus) {
+    if (!window.confirm(`Change ${target.email} status to ${status}?`)) return;
+    await authApi.updateAdminUserStatus(target.id, status);
+    await loadUsers();
+  }
+
   return (
     <PageContainer>
       <PageHeader
         kicker="Operations · internal"
         title="System health & ingestion."
-        description="Provider status, ingestion volume and data quality across the pipeline. Desktop-first operational view."
+        description={`Signed in as ${user?.email ?? "administrator"}. Provider status, ingestion volume and data quality across the pipeline.`}
         actions={<Button variant="secondary" icon={<RefreshCw size={16} />}>Refresh now</Button>}
       />
 
@@ -64,6 +102,37 @@ export function Component() {
                 </div>
               );
             })}
+          </div>
+          <div className="mt-8 flex items-center justify-between mb-3">
+            <h2 className="text-lg font-semibold text-ink inline-flex items-center gap-2"><ShieldAlert size={18} className="text-indigo" /> Users</h2>
+          </div>
+          <div className="rounded-[var(--radius-card)] border border-line overflow-hidden">
+            <div className="hidden md:grid grid-cols-[1.7fr_0.7fr_1fr_1.1fr_1fr] gap-4 px-5 py-3 bg-soft text-[12px] font-semibold text-slate uppercase tracking-wide">
+              <span>Email</span><span>Role</span><span>Status</span><span>Verified</span><span>Created</span>
+            </div>
+            {loadingUsers ? (
+              <div className="px-5 py-5 text-sm text-slate">Loading users...</div>
+            ) : userError ? (
+              <div className="px-5 py-5 text-sm text-red">{userError}</div>
+            ) : users.length === 0 ? (
+              <div className="px-5 py-5 text-sm text-slate">No users found.</div>
+            ) : users.map((u) => (
+              <div key={u.id} className="grid md:grid-cols-[1.7fr_0.7fr_1fr_1.1fr_1fr] gap-2 md:gap-4 px-5 py-4 border-t border-line items-center">
+                <span className="font-medium text-ink">{u.email}</span>
+                <select className="rounded-[var(--radius-control)] border border-line bg-white text-sm px-2 h-9" value={u.role} onChange={(e) => void updateRole(u, e.target.value as AuthRole)}>
+                  <option value="USER">USER</option>
+                  <option value="ADMIN">ADMIN</option>
+                </select>
+                <select className="rounded-[var(--radius-control)] border border-line bg-white text-sm px-2 h-9" value={u.status} onChange={(e) => void updateStatus(u, e.target.value as AuthStatus)}>
+                  <option value="PENDING_VERIFICATION">Pending</option>
+                  <option value="ACTIVE">Active</option>
+                  <option value="LOCKED">Locked</option>
+                  <option value="DISABLED">Disabled</option>
+                </select>
+                <span className="font-data text-[13px] text-slate">{u.emailVerifiedAt ? relativeTime(u.emailVerifiedAt) : "Not verified"}</span>
+                <span className="font-data text-[13px] text-slate">{relativeTime(u.createdAt)}</span>
+              </div>
+            ))}
           </div>
         </section>
 

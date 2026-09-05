@@ -8,11 +8,13 @@ import { JobCard } from "../../components/rolebrief/JobCard";
 import { useJobs } from "../../lib/jobs";
 import { useToast } from "../../components/ui/toast";
 import { relativeTime } from "../../lib/format";
+import { useAuthGate } from "../../components/auth/AuthGateDialog";
 
 type Lens = "Best match" | "Freshest" | "Eligible only";
 
 export function Component() {
   const toast = useToast();
+  const authGate = useAuthGate();
   const [lens, setLens] = useState<Lens>("Best match");
   const [refreshing, setRefreshing] = useState(false);
   const { data: jobs, loading, error, retry } = useJobs({ limit: 20 });
@@ -30,10 +32,12 @@ export function Component() {
     setTimeout(() => setRefreshing(false), 700);
   }
   function toggleSave(slug: string) {
-    setSaved((prev) => {
-      const n = new Set(prev);
-      n.has(slug) ? n.delete(slug) : n.add(slug);
-      return n;
+    authGate.gate({
+      action: "save this role",
+      onAuthenticated: () => {
+        setSaved((prev) => new Set(prev));
+        toast({ kind: "info", message: `Saving jobs is unavailable until the next phase. ${slug} was not stored.` });
+      }
     });
   }
   function dismiss(slug: string) {
@@ -192,20 +196,7 @@ export function Component() {
 
           <div className="rounded-[var(--radius-card)] border border-line p-5">
             <SectionLabel>Saved with deadlines</SectionLabel>
-            {[...saved].slice(0, 2).map((slug) => {
-              const j = jobs.find((x) => x.slug === slug);
-              if (!j) return null;
-              return (
-                <Link key={slug} to={`/jobs/${slug}`} className="flex items-start gap-2.5 py-1.5 group">
-                  <Building2 size={15} className="text-slate mt-0.5" />
-                  <div>
-                    <p className="text-[13px] font-medium text-ink group-hover:text-indigo">{j.title}</p>
-                    <p className="text-[12px] text-slate">Verified {relativeTime(j.freshness[j.freshness.length - 1].at)}</p>
-                  </div>
-                </Link>
-              );
-            })}
-            {saved.size === 0 && <p className="text-[13px] text-slate">No real saved-job records are connected yet.</p>}
+            <p className="text-[13px] text-slate">No real saved-job records are connected yet.</p>
           </div>
         </aside>
       </div>

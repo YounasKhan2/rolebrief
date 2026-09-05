@@ -1,9 +1,7 @@
-import { useState } from "react";
 import { useParams, Link } from "react-router";
 import {
   ExternalLink,
   Bookmark,
-  BookmarkCheck,
   ListChecks,
   Flag,
   ShieldAlert,
@@ -19,13 +17,14 @@ import { JobCard } from "../../components/rolebrief/JobCard";
 import { useJob, useSimilarJobs } from "../../lib/jobs";
 import { domainFromUrl } from "../../lib/format";
 import { useToast } from "../../components/ui/toast";
+import { useAuthGate } from "../../components/auth/AuthGateDialog";
 
 export function Component() {
   const { slug } = useParams();
   const toast = useToast();
+  const authGate = useAuthGate();
   const { data: job, loading, error, notFound, retry } = useJob(slug);
   const similar = useSimilarJobs(job);
-  const [saved, setSaved] = useState(false);
 
   if (loading) {
     return (
@@ -72,12 +71,12 @@ export function Component() {
     <>
       <Button
         variant="secondary"
-        onClick={() => { setSaved((s) => !s); toast({ kind: saved ? "info" : "success", message: saved ? "Removed from saved." : "Saved to your hub." }); }}
-        icon={saved ? <BookmarkCheck size={16} className="text-indigo" /> : <Bookmark size={16} />}
+        onClick={() => authGate.gate({ action: "save this role", onAuthenticated: () => toast({ kind: "info", message: "Saving jobs is unavailable until the next phase." }) })}
+        icon={<Bookmark size={16} />}
       >
-        {saved ? "Saved" : "Save"}
+        Save
       </Button>
-      <Button variant="secondary" onClick={() => toast({ kind: "success", message: "Added to tracker as Saved." })} icon={<ListChecks size={16} />}>
+      <Button variant="secondary" onClick={() => toast({ kind: "info", message: "Tracker persistence is unavailable until a later phase." })} icon={<ListChecks size={16} />}>
         Track
       </Button>
       <a

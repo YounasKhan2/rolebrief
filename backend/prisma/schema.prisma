@@ -22,19 +22,115 @@ enum WorkMode {
   UNKNOWN
 }
 
+enum Role {
+  USER
+  ADMIN
+}
+
+enum UserStatus {
+  PENDING_VERIFICATION
+  ACTIVE
+  LOCKED
+  DISABLED
+}
+
 model User {
-  id        String   @id @default(cuid())
-  email     String?  @unique
-  locale    String   @default("en")
-  timezone  String   @default("UTC")
-  role      String   @default("user")
-  status    String   @default("active")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                  String      @id @default(cuid())
+  name                String
+  email               String      @unique
+  normalizedEmail     String      @unique
+  passwordHash        String
+  locale              String      @default("en")
+  timezone            String      @default("UTC")
+  role                Role        @default(USER)
+  status              UserStatus  @default(PENDING_VERIFICATION)
+  emailVerifiedAt     DateTime?
+  failedLoginAttempts Int         @default(0)
+  lockedUntil         DateTime?
+  passwordChangedAt   DateTime?
+  lastLoginAt         DateTime?
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
 
   savedItems   SavedItem[]
   applications Application[]
   alerts       Alert[]
+  sessions     Session[]
+  emailVerificationTokens EmailVerificationToken[]
+  passwordResetTokens PasswordResetToken[]
+  auditEvents AuthAuditEvent[] @relation("AuthAuditActor")
+  targetedAuditEvents AuthAuditEvent[] @relation("AuthAuditTarget")
+
+  @@index([role, status])
+  @@index([normalizedEmail])
+}
+
+model Session {
+  id                  String    @id @default(cuid())
+  userId              String
+  accessTokenHash     String    @unique
+  refreshTokenHash    String    @unique
+  tokenFamilyId       String
+  expiresAt           DateTime
+  accessExpiresAt     DateTime
+  revokedAt           DateTime?
+  revokedReason       String?
+  replacedBySessionId String?
+  lastUsedAt          DateTime  @default(now())
+  createdAt           DateTime  @default(now())
+  ipAddress           String?
+  userAgent           String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  replacement Session? @relation("SessionReplacement", fields: [replacedBySessionId], references: [id], onDelete: SetNull)
+  replacedSessions Session[] @relation("SessionReplacement")
+
+  @@index([userId, expiresAt])
+  @@index([tokenFamilyId])
+  @@index([revokedAt])
+}
+
+model EmailVerificationToken {
+  id          String    @id @default(cuid())
+  userId      String
+  tokenHash   String    @unique
+  expiresAt   DateTime
+  consumedAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+}
+
+model PasswordResetToken {
+  id          String    @id @default(cuid())
+  userId      String
+  tokenHash   String    @unique
+  expiresAt   DateTime
+  consumedAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+}
+
+model AuthAuditEvent {
+  id            String   @id @default(cuid())
+  actorUserId   String?
+  eventType     String
+  targetUserId  String?
+  success       Boolean
+  metadata      Json?
+  createdAt     DateTime @default(now())
+
+  actor User? @relation("AuthAuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  target User? @relation("AuthAuditTarget", fields: [targetUserId], references: [id], onDelete: SetNull)
+
+  @@index([eventType, createdAt])
+  @@index([actorUserId, createdAt])
+  @@index([targetUserId, createdAt])
 }
 
 model Company {

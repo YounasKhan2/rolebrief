@@ -9,7 +9,7 @@ RUN pnpm install --frozen-lockfile=false
 
 FROM deps AS build
 COPY . .
-ENV DATABASE_URL=postgresql://rolebrief:rolebrief_dev_password@localhost:5432/rolebrief?schema=public
+ENV DATABASE_URL=postgresql://rolebrief:replace-with-local-postgres-password@localhost:5432/rolebrief?schema=public
 RUN pnpm prisma:generate
 RUN pnpm build
 

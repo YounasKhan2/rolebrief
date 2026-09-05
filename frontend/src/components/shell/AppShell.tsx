@@ -9,10 +9,12 @@ import {
   Bell,
   Command,
   Settings,
+  Shield,
 } from "lucide-react";
 import { Wordmark } from "../rolebrief/Wordmark";
 import { classNames } from "../../lib/format";
 import { CommandPalette } from "./CommandPalette";
+import { useAuth } from "../../lib/auth";
 
 const primaryNav = [
   { to: "/app/radar", label: "Radar", icon: Radar },
@@ -32,6 +34,8 @@ const bottomNav = [
 
 export default function AppShell() {
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const { user, isAdmin } = useAuth();
+  const navItems = isAdmin ? [...primaryNav, { to: "/admin", label: "Admin", icon: Shield }] : primaryNav;
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -54,7 +58,7 @@ export default function AppShell() {
             <Wordmark size="sm" />
           </Link>
           <nav className="hidden md:flex items-center gap-1 grow">
-            {primaryNav.map((item) => (
+            {navItems.map((item) => (
               <NavLink
                 key={item.to}
                 to={item.to}
@@ -94,7 +98,7 @@ export default function AppShell() {
               <Settings size={18} />
             </NavLink>
             <NavLink to="/app/profile" aria-label="Profile" className="inline-flex items-center justify-center size-9 rounded-full bg-navy text-white text-[13px] font-semibold ml-1">
-              AK
+              {user?.initials ?? "RB"}
             </NavLink>
           </div>
         </div>

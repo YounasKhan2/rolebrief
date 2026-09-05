@@ -8,8 +8,12 @@ import { useAuth } from "../lib/auth";
  * - Authenticated but not admin → show Forbidden screen
  */
 export function RequireAdmin({ children }: { children: ReactNode }) {
-  const { isAuthenticated, isAdmin } = useAuth();
+  const { isAuthenticated, isAdmin, status } = useAuth();
   const location = useLocation();
+
+  if (status === "loading") {
+    return <div className="mx-auto max-w-md px-6 py-24 text-center text-slate">Checking your session...</div>;
+  }
 
   if (!isAuthenticated) {
     return (

@@ -1,7 +1,9 @@
 import { Controller, Get, NotFoundException, Param, Query } from "@nestjs/common";
+import { Public } from "../../auth/auth.decorators";
 import { JobsService } from "./jobs.service";
 
 @Controller("jobs")
+@Public()
 export class JobsController {
   constructor(private readonly jobs: JobsService) {}
 

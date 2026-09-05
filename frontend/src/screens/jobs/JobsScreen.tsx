@@ -10,6 +10,7 @@ import { useJobs, disciplines } from "../../lib/jobs";
 import type { Job } from "../../lib/jobs";
 import { useToast } from "../../components/ui/toast";
 import { classNames } from "../../lib/format";
+import { useAuthGate } from "../../components/auth/AuthGateDialog";
 
 const remoteFilters = [
   { key: "worldwide", label: "Worldwide remote" },
@@ -31,6 +32,7 @@ const eligibilityFilters = [
 export function Component() {
   const [params, setParams] = useSearchParams();
   const toast = useToast();
+  const authGate = useAuthGate();
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [saved, setSaved] = useState<Set<string>>(new Set());
 
@@ -88,7 +90,13 @@ export function Component() {
     update({ disc: null, remote: null, senior: null, elig: null, salary: null });
   }
   function toggleSave(slug: string) {
-    setSaved((prev) => { const n = new Set(prev); n.has(slug) ? n.delete(slug) : n.add(slug); return n; });
+    authGate.gate({
+      action: "save this role",
+      onAuthenticated: () => {
+        setSaved((prev) => new Set(prev));
+        toast({ kind: "info", message: `Saving jobs is unavailable until the next phase. ${slug} was not stored.` });
+      }
+    });
   }
 
   const filterRail = (
@@ -168,7 +176,7 @@ export function Component() {
               variant="tertiary"
               size="sm"
               icon={<Save size={15} />}
-              onClick={() => toast({ kind: "success", message: "Search saved. Turn it into an alert any time." })}
+              onClick={() => toast({ kind: "info", message: "Saved searches are unavailable until the next phase." })}
             >
               Save search
             </Button>

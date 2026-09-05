@@ -7,8 +7,12 @@ import { useAuth } from "../lib/auth";
  * state so they land back here after signing in.
  */
 export function RequireAuth({ children }: { children: ReactNode }) {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, status } = useAuth();
   const location = useLocation();
+
+  if (status === "loading") {
+    return <div className="mx-auto max-w-md px-6 py-24 text-center text-slate">Checking your session...</div>;
+  }
 
   if (!isAuthenticated) {
     return (

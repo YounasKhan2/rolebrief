@@ -4,7 +4,7 @@ import { envSchema } from "./env.schema";
 
 const requiredEnv = {
   PUBLIC_APP_URL: "http://localhost:8443",
-  DATABASE_URL: "postgresql://rolebrief:rolebrief_dev_password@localhost:5432/rolebrief?schema=public",
+  DATABASE_URL: "postgresql://rolebrief:not-a-real-secret@localhost:5432/rolebrief?schema=public",
   REDIS_URL: "redis://localhost:6379",
   AUTH_ISSUER: "http://localhost:3000",
   AUTH_AUDIENCE: "rolebrief-web",

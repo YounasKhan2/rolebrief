@@ -4,7 +4,7 @@ services:
     environment:
       POSTGRES_DB: rolebrief
       POSTGRES_USER: rolebrief
-      POSTGRES_PASSWORD: rolebrief_dev_password
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-replace-with-local-postgres-password}
     ports:
       - "5432:5432"
     volumes:
@@ -36,7 +36,7 @@ services:
     env_file:
       - ./backend/.env.example
     environment:
-      DATABASE_URL: postgresql://rolebrief:rolebrief_dev_password@postgres:5432/rolebrief?schema=public
+      DATABASE_URL: postgresql://rolebrief:${POSTGRES_PASSWORD:-replace-with-local-postgres-password}@postgres:5432/rolebrief?schema=public
       REDIS_URL: redis://redis:6379
     ports:
       - "3000:3000"
@@ -67,7 +67,7 @@ services:
     env_file:
       - ./backend/.env.example
     environment:
-      DATABASE_URL: postgresql://rolebrief:rolebrief_dev_password@postgres:5432/rolebrief?schema=public
+      DATABASE_URL: postgresql://rolebrief:${POSTGRES_PASSWORD:-replace-with-local-postgres-password}@postgres:5432/rolebrief?schema=public
       REDIS_URL: redis://redis:6379
     restart: unless-stopped
     depends_on:
@@ -84,7 +84,7 @@ services:
     env_file:
       - ./backend/.env.example
     environment:
-      DATABASE_URL: postgresql://rolebrief:rolebrief_dev_password@postgres:5432/rolebrief?schema=public
+      DATABASE_URL: postgresql://rolebrief:${POSTGRES_PASSWORD:-replace-with-local-postgres-password}@postgres:5432/rolebrief?schema=public
       REDIS_URL: redis://redis:6379
     restart: unless-stopped
     depends_on:
@@ -102,7 +102,7 @@ services:
     env_file:
       - ./backend/.env.example
     environment:
-      DATABASE_URL: postgresql://rolebrief:rolebrief_dev_password@postgres:5432/rolebrief?schema=public
+      DATABASE_URL: postgresql://rolebrief:${POSTGRES_PASSWORD:-replace-with-local-postgres-password}@postgres:5432/rolebrief?schema=public
       REDIS_URL: redis://redis:6379
     depends_on:
       postgres:
@@ -117,7 +117,7 @@ services:
     env_file:
       - ./backend/.env.example
     environment:
-      DATABASE_URL: postgresql://rolebrief:rolebrief_dev_password@postgres:5432/rolebrief?schema=public
+      DATABASE_URL: postgresql://rolebrief:${POSTGRES_PASSWORD:-replace-with-local-postgres-password}@postgres:5432/rolebrief?schema=public
       REDIS_URL: redis://redis:6379
     depends_on:
       postgres:
