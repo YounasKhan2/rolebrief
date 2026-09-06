@@ -32,16 +32,16 @@ type Item = {
 
 const navItems: Item[] = [
   { id: "n-radar", label: "Radar", sub: "Your ranked briefing", group: "Go to", to: "/app/radar", icon: <Radar size={16} /> },
-  { id: "n-jobs", label: "Jobs", sub: "Search and filter roles", group: "Go to", to: "/jobs", icon: <Search size={16} /> },
+  { id: "n-jobs", label: "Jobs", sub: "Search and filter roles", group: "Go to", to: "/app/jobs", icon: <Search size={16} /> },
   { id: "n-news", label: "Market Pulse", sub: "Career news", group: "Go to", to: "/news", icon: <Newspaper size={16} /> },
-  { id: "n-tracker", label: "Tracker", sub: "Your applications", group: "Go to", to: "/tracker", icon: <ListChecks size={16} /> },
-  { id: "n-saved", label: "Saved briefs", group: "Go to", to: "/saved", icon: <Bookmark size={16} /> },
-  { id: "n-alerts", label: "Smart Alerts", group: "Go to", to: "/alerts", icon: <Bell size={16} /> },
-  { id: "n-compare", label: "Compare briefs", sub: "Weigh 2–3 opportunities", group: "Go to", to: "/compare", icon: <GitCompareArrows size={16} /> },
-  { id: "n-notes", label: "Notifications", group: "Go to", to: "/notifications", icon: <Bell size={16} /> },
-  { id: "n-profile", label: "Profile", group: "Go to", to: "/profile", icon: <User size={16} /> },
-  { id: "n-settings", label: "Settings", group: "Go to", to: "/settings", icon: <Settings size={16} /> },
-  { id: "n-method", label: "Sources & methodology", sub: "How RoleBrief works", group: "Go to", to: "/methodology", icon: <BookOpen size={16} /> },
+  { id: "n-tracker", label: "Tracker", sub: "Your applications", group: "Go to", to: "/app/tracker", icon: <ListChecks size={16} /> },
+  { id: "n-saved", label: "Saved briefs", group: "Go to", to: "/app/saved", icon: <Bookmark size={16} /> },
+  { id: "n-alerts", label: "Smart Alerts", group: "Go to", to: "/app/alerts", icon: <Bell size={16} /> },
+  { id: "n-compare", label: "Compare briefs", sub: "Weigh 2–3 opportunities", group: "Go to", to: "/app/compare", icon: <GitCompareArrows size={16} /> },
+  { id: "n-notes", label: "Notifications", group: "Go to", to: "/app/notifications", icon: <Bell size={16} /> },
+  { id: "n-profile", label: "Profile", group: "Go to", to: "/app/profile", icon: <User size={16} /> },
+  { id: "n-settings", label: "Settings", group: "Go to", to: "/app/settings", icon: <Settings size={16} /> },
+  { id: "n-method", label: "Sources & methodology", sub: "How RoleBrief works", group: "Go to", to: "/sources-methodology", icon: <BookOpen size={16} /> },
 ];
 
 const jobItems: Item[] = jobs.map((j) => ({

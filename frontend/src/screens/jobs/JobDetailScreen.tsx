@@ -1,4 +1,4 @@
-import { useParams, Link } from "react-router";
+import { useParams, Link, useLocation } from "react-router";
 import {
   ExternalLink,
   Bookmark,
@@ -22,6 +22,8 @@ import { useAuthGate } from "../../components/auth/AuthGateDialog";
 
 export function Component() {
   const { slug } = useParams();
+  const location = useLocation();
+  const jobsPath = location.pathname.startsWith("/app") ? "/app/jobs" : "/jobs";
   const toast = useToast();
   const authGate = useAuthGate();
   const { data: job, loading, error, notFound, retry } = useJob(slug);
@@ -51,7 +53,7 @@ export function Component() {
   if (!job && notFound) {
     return (
       <PageContainer>
-        <EmptyState title="Role not found" body="This listing may have expired or moved." action={<Link to="/jobs" className="text-indigo font-medium">Back to jobs</Link>} />
+        <EmptyState title="Role not found" body="This listing may have expired or moved." action={<Link to={jobsPath} className="text-indigo font-medium">Back to jobs</Link>} />
       </PageContainer>
     );
   }
@@ -108,7 +110,7 @@ export function Component() {
       <PageContainer className="pb-28 md:pb-8">
         {/* Breadcrumb */}
         <nav className="flex items-center gap-1.5 text-[13px] text-slate mb-6" aria-label="Breadcrumb">
-          <Link to="/jobs" className="hover:text-ink">Jobs</Link>
+          <Link to={jobsPath} className="hover:text-ink">Jobs</Link>
           <ChevronRight size={13} />
           <span className="hover:text-ink">{job.companyName}</span>
           <ChevronRight size={13} />

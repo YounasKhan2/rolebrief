@@ -1,9 +1,16 @@
-import { createBrowserRouter } from "react-router";
+import { createBrowserRouter, Navigate, Outlet, useLocation } from "react-router";
 import MarketingLayout from "../components/shell/MarketingLayout";
 import AppShell from "../components/shell/AppShell";
 import { RouteFallback } from "./RouteFallback";
 import { RequireAuth } from "./RequireAuth";
 import { RequireAdmin } from "./RequireAdmin";
+import { GuestOnly } from "./GuestOnly";
+
+/** Helper component to redirect root-level aliases to canonical /app/* routes while preserving query params and hash. */
+function AliasRedirect({ to }: { to: string }) {
+  const location = useLocation();
+  return <Navigate to={`${to}${location.search}${location.hash}`} replace />;
+}
 
 // Layout wrappers stay eager; each leaf screen is lazy-loaded so the shell is
 // not one oversized bundle. Every screen module exports `Component`.
@@ -35,12 +42,34 @@ export const router = createBrowserRouter([
       { path: "privacy", lazy: () => import("../screens/marketing/PlaceholderScreen") },
       { path: "terms", lazy: () => import("../screens/marketing/PlaceholderScreen") },
 
-      // Authentication screens (public)
-      { path: "login", lazy: () => import("../screens/auth/AuthScreen") },
-      { path: "signup", lazy: () => import("../screens/auth/AuthScreen") },
+      // Guest-only authentication routes (redirect authenticated users away)
+      {
+        element: (
+          <GuestOnly>
+            <Outlet />
+          </GuestOnly>
+        ),
+        children: [
+          { path: "login", lazy: () => import("../screens/auth/AuthScreen") },
+          { path: "signup", lazy: () => import("../screens/auth/AuthScreen") },
+        ],
+      },
+
+      // Public token-action & recovery routes
       { path: "forgot-password", lazy: () => import("../screens/auth/AuthScreen") },
       { path: "reset-password", lazy: () => import("../screens/auth/AuthScreen") },
       { path: "verify-email", lazy: () => import("../screens/auth/AuthScreen") },
+
+      // Root compatibility aliases (redirect to canonical /app/* preserving query & hash)
+      { path: "radar", element: <AliasRedirect to="/app/radar" /> },
+      { path: "saved", element: <AliasRedirect to="/app/saved" /> },
+      { path: "tracker", element: <AliasRedirect to="/app/tracker" /> },
+      { path: "alerts", element: <AliasRedirect to="/app/alerts" /> },
+      { path: "compare", element: <AliasRedirect to="/app/compare" /> },
+      { path: "notifications", element: <AliasRedirect to="/app/notifications" /> },
+      { path: "profile", element: <AliasRedirect to="/app/profile" /> },
+      { path: "settings", element: <AliasRedirect to="/app/settings" /> },
+      { path: "onboarding", element: <AliasRedirect to="/app/onboarding" /> },
     ],
   },
 
@@ -56,6 +85,7 @@ export const router = createBrowserRouter([
     ),
     HydrateFallback: RouteFallback,
     children: [
+      { index: true, element: <Navigate to="/app/radar" replace /> },
       { path: "onboarding", lazy: () => import("../screens/onboarding/OnboardingScreen") },
       { path: "radar", lazy: () => import("../screens/radar/RadarScreen") },
       { path: "jobs", lazy: () => import("../screens/jobs/JobsScreen") },

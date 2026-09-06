@@ -33,7 +33,7 @@ export function Component() {
           icon={<GitCompareArrows size={40} />}
           title="Nothing to compare yet"
           body="Add two or three roles to see eligibility, match and freshness lined up against each other."
-          action={<LinkButton to="/jobs" size="sm">Browse jobs</LinkButton>}
+          action={<LinkButton to="/app/jobs" size="sm">Browse jobs</LinkButton>}
         />
       </PageContainer>
     );
@@ -92,7 +92,7 @@ export function Component() {
                 </button>
                 <CompanyLogo name={companyName(j.companySlug)} size={40} />
                 <h3 className="mt-2.5 font-semibold text-ink leading-snug pr-6">
-                  <Link to={`/jobs/${j.slug}`} className="hover:text-indigo">{j.title}</Link>
+                  <Link to={`/app/jobs/${j.slug}`} className="hover:text-indigo">{j.title}</Link>
                 </h3>
                 <p className="text-[13px] text-slate mt-0.5">{companyName(j.companySlug)}</p>
                 {company && <p className="text-[12px] text-slate mt-0.5">{company.sector}</p>}

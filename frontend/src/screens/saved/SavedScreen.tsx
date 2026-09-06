@@ -35,7 +35,7 @@ export function Component() {
           icon={<Bookmark size={40} />}
           title="No saved jobs yet"
           body="Saved-job persistence is not implemented in this phase."
-          action={<Link to="/jobs" className="text-indigo font-medium">Browse jobs</Link>}
+          action={<Link to="/app/jobs" className="text-indigo font-medium">Browse jobs</Link>}
         />
       )}
       {tab === "searches" && (

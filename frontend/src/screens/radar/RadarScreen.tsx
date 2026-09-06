@@ -189,7 +189,7 @@ export function Component() {
             <SectionLabel>Company momentum</SectionLabel>
             <p className="text-sm text-slate">Unavailable. The backend has not connected live company news or momentum signals.</p>
             <SectionRule className="my-4" />
-            <Link to="/jobs" className="text-[13px] text-indigo font-medium inline-flex items-center gap-1">
+            <Link to="/app/jobs" className="text-[13px] text-indigo font-medium inline-flex items-center gap-1">
               Browse stored jobs <ArrowRight size={14} />
             </Link>
           </div>

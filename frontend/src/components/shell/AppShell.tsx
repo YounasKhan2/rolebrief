@@ -97,6 +97,15 @@ export default function AppShell() {
             <NavLink to="/app/settings" aria-label="Settings" className="hidden sm:inline-flex items-center justify-center size-10 rounded-[var(--radius-control)] text-slate hover:bg-soft hover:text-ink">
               <Settings size={18} />
             </NavLink>
+            {isAdmin && (
+              <NavLink
+                to="/admin"
+                aria-label="Admin console"
+                className="md:hidden inline-flex items-center justify-center size-9 rounded-[var(--radius-control)] text-indigo hover:bg-indigo-tint"
+              >
+                <Shield size={18} />
+              </NavLink>
+            )}
             <NavLink to="/app/profile" aria-label="Profile" className="inline-flex items-center justify-center size-9 rounded-full bg-navy text-white text-[13px] font-semibold ml-1">
               {user?.initials ?? "RB"}
             </NavLink>

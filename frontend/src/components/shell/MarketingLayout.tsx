@@ -1,16 +1,52 @@
-import { Outlet, Link, NavLink, ScrollRestoration } from "react-router";
+import { useEffect } from "react";
+import { Outlet, Link, NavLink, ScrollRestoration, useLocation } from "react-router";
 import { Wordmark } from "../rolebrief/Wordmark";
 import { LinkButton } from "../ui/primitives";
 import { classNames } from "../../lib/format";
+import { useAuth } from "../../lib/auth";
 
 const links = [
-  { to: "/how-it-works#radar", label: "Radar" },
-  { to: "/how-it-works", label: "How it works" },
-  { to: "/coverage", label: "Coverage" },
+  { to: "/#radar", label: "Radar" },
+  { to: "/#signals", label: "Signals" },
+  { to: "/#coverage", label: "Coverage" },
   { to: "/news", label: "Market Pulse" },
 ];
 
+/** Router-aware hash scrolling honoring prefers-reduced-motion and sticky header offset. */
+export function useHashScroll() {
+  const { hash, pathname } = useLocation();
+
+  useEffect(() => {
+    if (!hash) return;
+    const targetId = hash.replace(/^#/, "");
+    if (!targetId) return;
+
+    let attempts = 0;
+    const maxAttempts = 25;
+
+    function attemptScroll() {
+      const element = document.getElementById(targetId);
+      if (element) {
+        const prefersReducedMotion = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+        element.scrollIntoView({
+          behavior: prefersReducedMotion ? "instant" : "smooth",
+          block: "start",
+        });
+      } else if (attempts < maxAttempts) {
+        attempts++;
+        requestAnimationFrame(attemptScroll);
+      }
+    }
+
+    const timer = setTimeout(attemptScroll, 60);
+    return () => clearTimeout(timer);
+  }, [hash, pathname]);
+}
+
 export default function MarketingLayout() {
+  useHashScroll();
+  const { user, isAuthenticated, isAdmin, status } = useAuth();
+
   return (
     <div className="min-h-full paper-grain text-ink flex flex-col">
       <header className="sticky top-0 z-40 bg-paper/85 backdrop-blur border-b border-line/70">
@@ -20,18 +56,55 @@ export default function MarketingLayout() {
           </Link>
           <nav className="hidden md:flex items-center gap-1 ml-4">
             {links.map((l) => (
-              <a key={l.label} href={l.to} className="px-3 h-9 inline-flex items-center text-sm text-slate hover:text-ink rounded-[var(--radius-control)] hover:bg-ink/5 transition-colors">
+              <Link
+                key={l.label}
+                to={l.to}
+                className="px-3 h-9 inline-flex items-center text-sm text-slate hover:text-ink rounded-[var(--radius-control)] hover:bg-ink/5 transition-colors"
+              >
                 {l.label}
-              </a>
+              </Link>
             ))}
           </nav>
           <div className="ml-auto flex items-center gap-2">
-            <NavLink to="/login" className="hidden sm:inline-flex items-center h-10 px-3 text-sm font-medium text-ink hover:bg-ink/5 rounded-[var(--radius-control)]">
-              Log in
-            </NavLink>
-            <LinkButton to="/signup" size="md">
-              Get started
-            </LinkButton>
+            {status === "loading" ? (
+              <div className="h-9 w-24 rounded-[var(--radius-control)] bg-ink/5 animate-pulse" />
+            ) : isAuthenticated ? (
+              <>
+                {isAdmin ? (
+                  <>
+                    <LinkButton to="/admin" size="md">
+                      Admin Console
+                    </LinkButton>
+                    <Link
+                      to="/app/radar"
+                      className="hidden sm:inline-flex items-center h-10 px-3 text-sm font-medium text-slate hover:text-ink hover:bg-ink/5 rounded-[var(--radius-control)]"
+                    >
+                      Radar
+                    </Link>
+                  </>
+                ) : (
+                  <LinkButton to="/app/radar" size="md">
+                    Open Radar
+                  </LinkButton>
+                )}
+                <Link
+                  to="/app/profile"
+                  aria-label="Profile"
+                  className="inline-flex items-center justify-center size-9 rounded-full bg-navy text-white text-[13px] font-semibold ml-1 shadow-sm"
+                >
+                  {user?.initials ?? (isAdmin ? "AD" : "RB")}
+                </Link>
+              </>
+            ) : (
+              <>
+                <NavLink to="/login" className="hidden sm:inline-flex items-center h-10 px-3 text-sm font-medium text-ink hover:bg-ink/5 rounded-[var(--radius-control)]">
+                  Log in
+                </NavLink>
+                <LinkButton to="/signup" size="md">
+                  Get started
+                </LinkButton>
+              </>
+            )}
           </div>
         </div>
       </header>
@@ -51,19 +124,19 @@ function Footer() {
     {
       title: "Product",
       items: [
-        { label: "How it works", to: "/how-it-works" },
+        { label: "Overview", to: "/#signals" },
         { label: "Jobs", to: "/jobs" },
         { label: "Market Pulse", to: "/news" },
-        { label: "Coverage", to: "/coverage" },
+        { label: "Coverage", to: "/#coverage" },
       ],
     },
     {
       title: "Signature",
       items: [
-        { label: "Eligibility Shield", to: "/how-it-works#signals" },
-        { label: "Match Brief", to: "/how-it-works#signals" },
-        { label: "Freshness Timeline", to: "/how-it-works#signals" },
-        { label: "Company Momentum", to: "/how-it-works#signals" },
+        { label: "Eligibility Shield", to: "/#signals" },
+        { label: "Match Brief", to: "/#signals" },
+        { label: "Freshness Timeline", to: "/#signals" },
+        { label: "Company Momentum", to: "/#signals" },
       ],
     },
     {

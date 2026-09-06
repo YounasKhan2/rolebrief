@@ -36,14 +36,10 @@ export function Component() {
 
   return (
     <div className="min-h-full paper-grain">
-      <header className="border-b border-line/70">
-        <div className="mx-auto max-w-[900px] px-5 sm:px-8 h-16 flex items-center justify-between">
-          <Link to="/" aria-label="RoleBrief home"><Wordmark size="sm" /></Link>
+      <div className="mx-auto max-w-[900px] px-5 sm:px-8 py-8">
+        <div className="flex items-center justify-end mb-4">
           <span className="text-[13px] text-slate font-data">Autosaved · you can leave and return</span>
         </div>
-      </header>
-
-      <div className="mx-auto max-w-[900px] px-5 sm:px-8 py-10">
         {/* Progress */}
         <ol className="flex items-center gap-2 mb-10">
           {stepNames.map((name, i) => (
@@ -197,7 +193,7 @@ export function Component() {
             {step > 0 ? (
               <Button variant="tertiary" onClick={() => setStep(step - 1)} icon={<ArrowLeft size={16} />}>Back</Button>
             ) : (
-              <Link to="/" className="text-sm text-slate hover:text-ink">Skip for now</Link>
+              <Link to="/app/radar" className="text-sm text-slate hover:text-ink">Skip for now</Link>
             )}
             <Button onClick={next} size="lg" icon={<ArrowRight size={18} />}>
               {step === 3 ? "Go to my Radar" : "Continue"}

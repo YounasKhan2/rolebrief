@@ -27,7 +27,7 @@ export function Component() {
     return (
       <PageContainer>
         <PageHeader kicker="Application tracker" title="Track every application." />
-        <EmptyState icon={<LayoutList size={40} />} title="Nothing tracked yet" body="Save or apply to a role and it will appear here with its status and next action." action={<Link to="/jobs" className="text-indigo font-medium">Find roles</Link>} />
+        <EmptyState icon={<LayoutList size={40} />} title="Nothing tracked yet" body="Save or apply to a role and it will appear here with its status and next action." action={<Link to="/app/jobs" className="text-indigo font-medium">Find roles</Link>} />
       </PageContainer>
     );
   }
@@ -60,7 +60,7 @@ export function Component() {
                 <div className="flex items-center gap-3 min-w-0">
                   <CompanyLogo name={companyName(job.companySlug)} size={36} />
                   <div className="min-w-0">
-                    <Link to={`/jobs/${job.slug}`} className="font-medium text-ink hover:text-indigo block truncate">{job.title}</Link>
+                    <Link to={`/app/jobs/${job.slug}`} className="font-medium text-ink hover:text-indigo block truncate">{job.title}</Link>
                     <p className="text-[12px] text-slate truncate">{companyName(job.companySlug)} · updated {relativeTime(t.updatedAt)}</p>
                   </div>
                 </div>
@@ -97,7 +97,7 @@ export function Component() {
                     if (!job) return null;
                     return (
                       <div key={t.id} className="rounded-[10px] border border-line bg-white p-3">
-                        <Link to={`/jobs/${job.slug}`} className="text-[13px] font-medium text-ink hover:text-indigo block leading-snug">{job.title}</Link>
+                        <Link to={`/app/jobs/${job.slug}`} className="text-[13px] font-medium text-ink hover:text-indigo block leading-snug">{job.title}</Link>
                         <p className="text-[12px] text-slate mt-0.5">{companyName(job.companySlug)}</p>
                         {t.nextAction && <p className="text-[12px] text-slate mt-2 flex items-start gap-1"><StickyNote size={11} className="mt-0.5" /> {t.nextAction}</p>}
                       </div>
