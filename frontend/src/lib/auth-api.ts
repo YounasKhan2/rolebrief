@@ -24,15 +24,46 @@ export interface AuthSession {
 const DEFAULT_TIMEOUT_MS = 8000;
 
 function csrfToken() {
+  if (typeof document === "undefined") return undefined;
   return document.cookie
     .split("; ")
     .find((part) => part.startsWith("rb_csrf="))
     ?.split("=")[1];
 }
 
-async function authRequest<T>(path: string, options: { method?: string; body?: unknown; csrf?: boolean } = {}, retried = false): Promise<T> {
+let inFlightRefreshPromise: Promise<{ user: AuthUser }> | null = null;
+
+export function getInFlightRefreshPromise(): Promise<{ user: AuthUser }> | null {
+  return inFlightRefreshPromise;
+}
+
+export function resetRefreshMutexForTesting(): void {
+  inFlightRefreshPromise = null;
+}
+
+export function refresh(): Promise<{ user: AuthUser }> {
+  if (inFlightRefreshPromise) {
+    return inFlightRefreshPromise;
+  }
+
+  inFlightRefreshPromise = authRequest<{ user: AuthUser }>(
+    "/auth/refresh",
+    { method: "POST" },
+    true
+  ).finally(() => {
+    inFlightRefreshPromise = null;
+  });
+
+  return inFlightRefreshPromise;
+}
+
+async function authRequest<T>(
+  path: string,
+  options: { method?: string; body?: unknown; csrf?: boolean } = {},
+  retried = false
+): Promise<T> {
   const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort("timeout"), DEFAULT_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort("timeout"), DEFAULT_TIMEOUT_MS);
   const headers: Record<string, string> = { Accept: "application/json" };
   if (options.body) headers["Content-Type"] = "application/json";
   if (options.csrf) {
@@ -48,10 +79,23 @@ async function authRequest<T>(path: string, options: { method?: string; body?: u
       credentials: "include",
       signal: controller.signal
     });
-    if (response.status === 401 && !retried && path !== "/auth/refresh" && path !== "/auth/login") {
-      const refreshed = await refresh().then(() => true).catch(() => false);
-      if (refreshed) return authRequest<T>(path, options, true);
+
+    // Handle 401 with unified refresh mutex: never refresh on refresh/login/logout or if already retried
+    if (
+      response.status === 401 &&
+      !retried &&
+      path !== "/auth/refresh" &&
+      path !== "/auth/login" &&
+      path !== "/auth/logout"
+    ) {
+      try {
+        await refresh();
+        return await authRequest<T>(path, options, true);
+      } catch {
+        throw new ApiError("Session expired. Please log in again.", "http", 401);
+      }
     }
+
     if (!response.ok) {
       const message = await response.json().then((body) => body.message).catch(() => undefined);
       throw new ApiError(Array.isArray(message) ? message.join(" ") : message ?? `Auth API returned ${response.status}.`, "http", response.status);
@@ -62,7 +106,7 @@ async function authRequest<T>(path: string, options: { method?: string; body?: u
     if (controller.signal.aborted) throw new ApiError("The auth request timed out.", "timeout");
     throw new ApiError("Could not reach the auth API.", "network");
   } finally {
-    window.clearTimeout(timeout);
+    clearTimeout(timeout);
   }
 }
 
@@ -72,10 +116,6 @@ export function signup(name: string, email: string, password: string) {
 
 export function login(email: string, password: string) {
   return authRequest<{ user: AuthUser }>("/auth/login", { method: "POST", body: { email, password } });
-}
-
-export function refresh() {
-  return authRequest<{ user: AuthUser }>("/auth/refresh", { method: "POST" }, true);
 }
 
 export function me() {

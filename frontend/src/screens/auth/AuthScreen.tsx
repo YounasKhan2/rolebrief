@@ -18,18 +18,13 @@ const copy: Record<Mode, { kicker: string; title: string; sub: string; cta: stri
   "verify-email": { kicker: "One more step", title: "Verify your email", sub: "We sent a link to your inbox. Open it to activate alerts.", cta: "Resend email" },
 };
 
-/** Only accept relative, same-origin return paths. */
-function safeReturnTo(raw: unknown): string | null {
-  if (typeof raw !== "string") return null;
-  if (!raw.startsWith("/") || raw.startsWith("//")) return null;
-  return raw;
-}
+import { sanitizeReturnTo } from "../../lib/routing";
 
 export function Component() {
   const { pathname, state } = useLocation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { isAuthenticated, status, login, signup } = useAuth();
+  const { user, isAuthenticated, status, login, signup } = useAuth();
   const mode = (pathname.replace("/", "") || "login") as Mode;
   const c = copy[mode];
   const [loading, setLoading] = useState(false);
@@ -37,15 +32,37 @@ export function Component() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  const returnTo = safeReturnTo(state?.returnTo);
+  const rawReturnTo = searchParams.get("returnTo") || (state as { returnTo?: string } | null)?.returnTo;
+  const returnTo = sanitizeReturnTo(rawReturnTo, user?.role);
 
   if (status === "loading") {
     return <div className="mx-auto max-w-md px-5 sm:px-8 py-16 lg:py-24 text-center text-slate">Checking your session...</div>;
   }
 
-  // Already authenticated — redirect away from auth pages
+  // Already authenticated — redirect away from auth pages to sanitized destination
   if (isAuthenticated && (mode === "login" || mode === "signup")) {
-    return <Navigate to={returnTo ?? "/app/radar"} replace />;
+    return <Navigate to={returnTo} replace />;
+  }
+
+  // Authenticated user navigating to forgot-password: offer direct navigation to settings
+  if (isAuthenticated && mode === "forgot-password") {
+    return (
+      <div className="mx-auto max-w-md px-5 sm:px-8 py-16 lg:py-24 text-center">
+        <Link to="/" aria-label="RoleBrief home" className="inline-block mb-6">
+          <Wordmark size="lg" />
+        </Link>
+        <Kicker className="mb-2">Account security</Kicker>
+        <h1 className="font-display text-2xl text-navy">Already signed in</h1>
+        <p className="mt-3 text-sm text-slate leading-relaxed">
+          You are currently signed in as <span className="font-semibold text-ink">{user?.email}</span>. You can change your password directly in your account settings.
+        </p>
+        <div className="mt-6 flex justify-center gap-3">
+          <Button onClick={() => navigate("/app/settings", { replace: true })}>
+            Go to Settings
+          </Button>
+        </div>
+      </div>
+    );
   }
 
   async function submit(e: React.FormEvent) {
@@ -92,7 +109,7 @@ export function Component() {
           (fd.get("email") as string) ?? "",
           (fd.get("password") as string) ?? "",
         );
-        navigate(returnTo ?? "/app/radar");
+        navigate(returnTo, { replace: true });
       }
     } catch (err) {
       setError(err instanceof ApiError || err instanceof Error ? err.message : "Something went wrong.");
