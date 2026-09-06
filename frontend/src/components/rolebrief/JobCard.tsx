@@ -19,15 +19,16 @@ import { FreshnessTimeline } from "./FreshnessTimeline";
 import { domainFromUrl } from "../../lib/format";
 
 export function JobMetaRow({ job }: { job: Job }) {
+  const locationLabel = job.remoteRestrictionsText || (job.locations.length > 0 ? `${job.workModel} · ${job.locations.join(", ")}` : job.workModel);
+
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[13px] text-slate">
       <span className="inline-flex items-center gap-1.5">
         <Building2 size={14} /> {job.companyName}
       </span>
-      <span className="inline-flex items-center gap-1.5">
-        <MapPin size={14} /> {job.locations.join(" · ")}
+      <span className="inline-flex items-center gap-1.5" title={locationLabel}>
+        <MapPin size={14} /> {locationLabel}
       </span>
-      <span>{job.workModel}</span>
       <span>{job.seniority}</span>
       <span>{job.employmentType}</span>
       <span className="inline-flex items-center gap-1.5">

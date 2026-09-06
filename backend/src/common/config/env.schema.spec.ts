@@ -21,10 +21,10 @@ test("parses explicit false boolean strings as false", () => {
   assert.equal(parsed.HIMALAYAS_ENABLED, false);
   assert.equal(parsed.HIMALAYAS_LIVE_SMOKE, false);
   assert.deepEqual(parsed.FRONTEND_ORIGIN.split(","), [
-    "http://127.0.0.1:5173",
-    "http://localhost:5173",
+    "http://localhost:8443",
     "http://127.0.0.1:8443",
-    "http://localhost:8443"
+    "http://127.0.0.1:5173",
+    "http://localhost:5173"
   ]);
 });
 

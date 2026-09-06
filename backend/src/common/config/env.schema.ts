@@ -22,6 +22,7 @@ export const envSchema = z.object({
   AUTH_ISSUER: z.string().url(),
   AUTH_AUDIENCE: z.string().min(1),
   SESSION_SECRET: z.string().min(32),
+  CURSOR_SIGNING_SECRET: z.string().min(32).default("replace-with-a-32-character-cursor-secret"),
   ACCESS_TOKEN_TTL: z.coerce.number().int().positive().default(900),
   REFRESH_SESSION_TTL: z.coerce.number().int().positive().default(2592000),
   COOKIE_SECURE: booleanString.default(false),

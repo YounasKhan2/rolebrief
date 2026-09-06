@@ -6,6 +6,7 @@ import {
   Flag,
   ShieldAlert,
   ChevronRight,
+  AlertTriangle,
 } from "lucide-react";
 import { PageContainer } from "../../components/shell/AppShell";
 import { Button, Kicker, Badge, CompanyLogo, SourceBadge, SectionRule, EmptyState, Skeleton } from "../../components/ui/primitives";
@@ -24,7 +25,7 @@ export function Component() {
   const toast = useToast();
   const authGate = useAuthGate();
   const { data: job, loading, error, notFound, retry } = useJob(slug);
-  const similar = useSimilarJobs(job);
+  const similar = useSimilarJobs(job, 6);
 
   if (loading) {
     return (
@@ -65,7 +66,13 @@ export function Component() {
 
   const expired = job.flags?.includes("expired");
   const suspicious = job.flags?.includes("suspicious");
-  const domain = domainFromUrl(job.applyUrl);
+  const domain = job.applyDomain || domainFromUrl(job.applyUrl);
+  const isProviderDomain = domain.toLowerCase().includes("himalayas.app");
+  const ctaLabel = expired
+    ? "Listing expired"
+    : isProviderDomain
+      ? "Apply on Himalayas"
+      : "Apply on company site";
 
   const applyBar = (
     <>
@@ -79,14 +86,20 @@ export function Component() {
       <Button variant="secondary" onClick={() => toast({ kind: "info", message: "Tracker persistence is unavailable until a later phase." })} icon={<ListChecks size={16} />}>
         Track
       </Button>
-      <a
-        href={job.applyUrl}
-        target="_blank"
-        rel="noreferrer"
-        className="grow inline-flex items-center justify-center gap-2 h-11 px-4 rounded-[var(--radius-control)] bg-indigo text-white font-medium hover:bg-indigo-strong transition-colors"
-      >
-        Apply on company site <ExternalLink size={16} />
-      </a>
+      {expired ? (
+        <span className="grow inline-flex items-center justify-center gap-2 h-11 px-4 rounded-[var(--radius-control)] bg-slate/20 text-slate font-medium cursor-not-allowed">
+          <AlertTriangle size={16} /> Listing expired
+        </span>
+      ) : (
+        <a
+          href={job.applyUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="grow inline-flex items-center justify-center gap-2 h-11 px-4 rounded-[var(--radius-control)] bg-indigo text-white font-medium hover:bg-indigo-strong transition-colors"
+        >
+          {ctaLabel} <ExternalLink size={16} />
+        </a>
+      )}
     </>
   );
 
@@ -107,7 +120,7 @@ export function Component() {
             <ShieldAlert size={18} className="text-amber mt-0.5 shrink-0" />
             <div>
               <p className="text-sm font-medium text-ink">This listing has expired.</p>
-              <p className="text-[13px] text-slate">It was removed from the source on 30 August. See similar eligible roles below.</p>
+              <p className="text-[13px] text-slate">This job has expired or reached its deadline. See similar active roles below.</p>
             </div>
           </div>
         )}
@@ -146,13 +159,16 @@ export function Component() {
 
             <Section title={job.description.html ? "Description" : "About the role"}>
               {job.description.html ? (
-                <div className="text-ink/85 reading-measure job-description" dangerouslySetInnerHTML={{ __html: job.description.html }} />
+                <div
+                  className="text-ink/85 reading-measure job-description prose max-w-none space-y-4 [&_h2]:text-xl [&_h2]:font-semibold [&_h2]:text-ink [&_h2]:mt-6 [&_h2]:mb-2 [&_h3]:text-lg [&_h3]:font-semibold [&_h3]:text-ink [&_h3]:mt-4 [&_h3]:mb-1.5 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:space-y-1.5 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:space-y-1.5 [&_p]:leading-relaxed [&_a]:text-indigo [&_a]:underline"
+                  dangerouslySetInnerHTML={{ __html: job.description.html }}
+                />
               ) : (
-                <p className="text-ink/85 reading-measure">{job.description.overview}</p>
+                <p className="text-ink/85 reading-measure leading-relaxed">{job.description.overview}</p>
               )}
             </Section>
-            <Section title="Work authorization">
-              <p className="text-ink/85 reading-measure">{job.description.workAuthorization}</p>
+            <Section title="Work authorization & location requirements">
+              <p className="text-ink/85 reading-measure">{job.remoteRestrictionsText || job.description.workAuthorization}</p>
             </Section>
 
             <SectionRule className="my-8" />
@@ -167,8 +183,7 @@ export function Component() {
               <Kicker className="mb-2">Source & disclosure</Kicker>
               <p className="text-[13px] text-slate">
                 RoleBrief indexed this role from <span className="text-ink">{job.source}</span> and links you to the
-                employer's own site (<span className="font-data text-ink">{domain}</span>) to apply. We don't post jobs
-                or charge employers for ranking.
+                destination (<span className="font-data text-ink">{domain}</span>) to apply. We do not charge employers for ranking.
               </p>
             </div>
 
@@ -238,4 +253,3 @@ function Section({ title, children }: { title: string; children: React.ReactNode
     </section>
   );
 }
-

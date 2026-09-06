@@ -1,30 +1,101 @@
-import { Injectable } from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { JobStatus, Prisma } from "@prisma/client";
+import { AppConfigService } from "../../common/config/app-config.service";
 import { PrismaService } from "../../prisma/prisma.service";
+import { JobFacetsQueryDto, JobSortOption, JobsQueryDto } from "./dto/jobs-query.dto";
+import {
+  computeQueryHash,
+  decodeCursor,
+  encodeCursor,
+  KeysetCursorPayload
+} from "./jobs-cursor.util";
+import { JobsSearchRepository } from "./jobs-search.repository";
 
 @Injectable()
 export class JobsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly searchRepo: JobsSearchRepository,
+    private readonly config: AppConfigService
+  ) {}
 
-  async list(cursor?: string, limit = 20) {
-    const take = Math.min(Math.max(limit, 1), 50);
-    const cursorValue = cursor ? await this.decodeCursor(cursor) : null;
-    const jobs = await this.prisma.job.findMany({
-      where: {
-        status: JobStatus.ACTIVE,
-        ...(cursorValue ? this.cursorWhere(cursorValue) : {})
-      },
-      orderBy: [{ publishedAt: "desc" }, { discoveredAt: "desc" }, { id: "desc" }],
-      take: take + 1,
-      include: this.include()
-    });
+  async list(query: JobsQueryDto = {}) {
+    const limit = Math.min(Math.max(query.limit ?? 20, 1), 50);
+    const sort = query.sort || (query.q ? JobSortOption.RELEVANCE : JobSortOption.NEWEST);
+    const qHash = computeQueryHash({ ...query, sort });
 
-    const page = jobs.slice(0, take);
-    const next = jobs.length > take ? this.encodeCursor(page[page.length - 1]) : null;
+    let cursorPayload: KeysetCursorPayload | null = null;
+    if (query.cursor) {
+      cursorPayload = decodeCursor(query.cursor, this.config.cursorSigningSecret, qHash);
+      if (cursorPayload.sort !== sort) {
+        throw new BadRequestException("Cursor sort mode does not match query sort parameter");
+      }
+    }
+
+    const { items, totalCount } = await this.searchRepo.searchJobIds(query, cursorPayload, limit);
+
+    const hasNextPage = items.length > limit;
+    const pageItems = items.slice(0, limit);
+
+    let nextCursor: string | null = null;
+    if (hasNextPage && pageItems.length > 0) {
+      const last = pageItems[pageItems.length - 1];
+      nextCursor = encodeCursor(
+        {
+          v: 1,
+          sort,
+          val: [
+            formatSortValue(last.sortVal1) ?? (last.rank ?? null),
+            formatSortValue(last.sortVal2) ?? null,
+            formatSortValue(last.sortVal3) ?? null
+          ],
+          id: last.id,
+          qHash
+        },
+        this.config.cursorSigningSecret
+      );
+    }
+
+    let serializedJobs: any[] = [];
+    if (pageItems.length > 0) {
+      const jobs = await this.prisma.job.findMany({
+        where: { id: { in: pageItems.map((i) => i.id) } },
+        include: this.include()
+      });
+
+      const jobMap = new Map(jobs.map((j) => [j.id, j]));
+      serializedJobs = pageItems
+        .map((item) => jobMap.get(item.id))
+        .filter((job): job is NonNullable<typeof job> => Boolean(job))
+        .map((job) => this.serialize(job, { isDetail: false }));
+    }
+
     return {
-      data: page.map((job) => this.serialize(job)),
-      pageInfo: { nextCursor: next },
-      freshness: { servedFromStoredData: true }
+      data: serializedJobs,
+      pageInfo: {
+        nextCursor,
+        hasNextPage
+      },
+      totalCount,
+      appliedFilters: {
+        q: query.q ?? null,
+        country: query.country ?? null,
+        remoteScope: query.remoteScope ?? null,
+        workMode: query.workMode ?? null,
+        timezone: query.timezone ?? null,
+        seniority: query.seniority ?? null,
+        employmentType: query.employmentType ?? null,
+        category: query.category ?? null,
+        company: query.company ?? null,
+        salaryMin: query.salaryMin ?? null,
+        salaryMax: query.salaryMax ?? null,
+        currency: query.currency ?? null,
+        publishedAfter: query.publishedAfter ?? null,
+        deadlineBefore: query.deadlineBefore ?? null,
+        provider: query.provider ?? null,
+        status: query.status ?? JobStatus.ACTIVE,
+        sort
+      }
     };
   }
 
@@ -33,7 +104,48 @@ export class JobsService {
       where: { slug },
       include: this.include()
     });
-    return job ? this.serialize(job) : null;
+    return job ? this.serialize(job, { isDetail: true }) : null;
+  }
+
+  async getRelated(slug: string, limit = 6) {
+    const job = await this.prisma.job.findUnique({
+      where: { slug },
+      select: {
+        id: true,
+        slug: true,
+        canonicalTitle: true,
+        seniority: true,
+        workMode: true,
+        remoteScope: true,
+        requiredSkills: true,
+        companyId: true,
+        status: true
+      }
+    });
+
+    if (!job) {
+      throw new NotFoundException("Job not found");
+    }
+
+    const relatedIds = await this.searchRepo.findRelatedJobs(job, limit);
+    if (relatedIds.length === 0) {
+      return [];
+    }
+
+    const relatedJobs = await this.prisma.job.findMany({
+      where: { id: { in: relatedIds } },
+      include: this.include()
+    });
+
+    const jobMap = new Map(relatedJobs.map((j) => [j.id, j]));
+    return relatedIds
+      .map((id) => jobMap.get(id))
+      .filter((j): j is NonNullable<typeof j> => Boolean(j))
+      .map((j) => this.serialize(j, { isDetail: false }));
+  }
+
+  async getFacets(query: JobFacetsQueryDto = {}) {
+    return this.searchRepo.getFacets(query);
   }
 
   private include() {
@@ -43,12 +155,27 @@ export class JobsService {
       salaries: true,
       locations: { include: { location: true } },
       providerRecords: {
-        select: { providerId: true, externalId: true, sourceUrl: true, applicationUrl: true, lastSeenAt: true }
+        select: {
+          providerId: true,
+          externalId: true,
+          sourceUrl: true,
+          applicationUrl: true,
+          lastSeenAt: true
+        }
       }
     } satisfies Prisma.JobInclude;
   }
 
-  private serialize(job: Prisma.JobGetPayload<{ include: ReturnType<JobsService["include"]> }>) {
+  private serialize(
+    job: Prisma.JobGetPayload<{ include: ReturnType<JobsService["include"]> }>,
+    options: { isDetail?: boolean } = {}
+  ) {
+    const isDetail = options.isDetail ?? false;
+    const primaryRecord = job.providerRecords[0];
+    const sourceUrl = primaryRecord?.sourceUrl || job.source?.baseUrl || null;
+    const applicationUrl = primaryRecord?.applicationUrl || sourceUrl;
+    const applyDomain = this.hostname(applicationUrl);
+
     return {
       id: job.id,
       slug: job.slug,
@@ -65,11 +192,18 @@ export class JobsService {
       workMode: job.workMode,
       remoteScope: job.remoteScope,
       remoteRestrictions: {
-        countryCodes: job.remoteCountryCodes,
-        labels: job.remoteRestrictionLabels,
-        timezones: job.remoteTimezoneRestrictions
+        countryCodes: job.remoteCountryCodes || [],
+        labels: job.remoteRestrictionLabels || [],
+        timezones: job.remoteTimezoneRestrictions || []
       },
-      remoteRestrictionsText: this.formatRemoteRestrictions(job.remoteRestrictions),
+      remoteRestrictionsText: this.formatRemoteRestrictions(
+        job.workMode,
+        job.remoteScope,
+        job.remoteRestrictions,
+        job.remoteRestrictionLabels,
+        job.remoteCountryCodes,
+        job.remoteTimezoneRestrictions
+      ),
       locations: job.locations.map(({ location }) => ({
         alpha2: location.alpha2,
         name: location.name,
@@ -83,26 +217,30 @@ export class JobsService {
             period: job.salaries[0].period
           }
         : null,
-      descriptionHtml: job.descriptionHtml,
-      excerpt: job.descriptionText,
+      descriptionHtml: isDetail ? job.descriptionHtml : null,
+      excerpt: isDetail
+        ? job.descriptionText
+        : job.descriptionText
+          ? (job.descriptionText.length > 280 ? `${job.descriptionText.slice(0, 280).trim()}…` : job.descriptionText)
+          : null,
       publishedAt: job.publishedAt,
       expiresAt: job.expiresAt,
       providerExpiresAt: job.providerExpiresAt,
       applicationDeadlineAt: job.applicationDeadlineAt,
-      deadlineMetadata: job.deadlineMetadata,
-      applicationUrl: job.providerRecords[0]?.applicationUrl ?? null,
-      applyDomain: this.hostname(job.providerRecords[0]?.applicationUrl ?? null),
+      deadlineMetadata: isDetail ? job.deadlineMetadata : null,
+      applicationUrl,
+      applyDomain,
       source: job.source
         ? {
             name: job.source.name,
-            url: job.providerRecords[0]?.sourceUrl ?? job.source.baseUrl,
-            attributionPolicy: job.source.attributionPolicy
+            url: sourceUrl,
+            attributionPolicy: isDetail ? job.source.attributionPolicy : undefined
           }
         : null
     };
   }
 
-  private hostname(value: string | null) {
+  private hostname(value: string | null): string | null {
     if (!value) return null;
     try {
       return new URL(value).hostname.replace(/^www\./, "");
@@ -111,89 +249,73 @@ export class JobsService {
     }
   }
 
-  private async decodeCursor(cursor: string) {
-    try {
-      const parsed = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")) as {
-        publishedAt?: string | null;
-        discoveredAt?: string;
-        id?: string;
-      };
-      if (!parsed.id || !parsed.discoveredAt) return null;
-      return {
-        id: parsed.id,
-        publishedAt: parsed.publishedAt ? new Date(parsed.publishedAt) : null,
-        discoveredAt: new Date(parsed.discoveredAt)
-      };
-    } catch {
-      const job = await this.prisma.job.findUnique({
-        where: { id: cursor },
-        select: { id: true, publishedAt: true, discoveredAt: true }
-      });
-      return job;
+  private formatRemoteRestrictions(
+    workMode: string,
+    remoteScope: string | null,
+    remoteRestrictionsJson: Prisma.JsonValue | null,
+    labels: string[] = [],
+    countryCodes: string[] = [],
+    timezones: string[] = []
+  ): string {
+    if (workMode === "ONSITE") {
+      return labels.length > 0 ? `On-site · ${labels.join(", ")}` : "On-site";
     }
-  }
-
-  private encodeCursor(job: { id: string; publishedAt: Date | null; discoveredAt: Date }) {
-    return Buffer.from(
-      JSON.stringify({
-        id: job.id,
-        publishedAt: job.publishedAt?.toISOString() ?? null,
-        discoveredAt: job.discoveredAt.toISOString()
-      })
-    ).toString("base64url");
-  }
-
-  private cursorWhere(cursor: { id: string; publishedAt: Date | null; discoveredAt: Date }): Prisma.JobWhereInput {
-    if (!cursor.publishedAt) {
-      return {
-        OR: [
-          { publishedAt: null, discoveredAt: { lt: cursor.discoveredAt } },
-          { publishedAt: null, discoveredAt: cursor.discoveredAt, id: { lt: cursor.id } }
-        ]
-      };
+    if (workMode === "HYBRID") {
+      return labels.length > 0 ? `Hybrid · ${labels.join(", ")}` : "Hybrid";
     }
 
-    return {
-      OR: [
-        { publishedAt: { lt: cursor.publishedAt } },
-        { publishedAt: cursor.publishedAt, discoveredAt: { lt: cursor.discoveredAt } },
-        { publishedAt: cursor.publishedAt, discoveredAt: cursor.discoveredAt, id: { lt: cursor.id } },
-        { publishedAt: null }
-      ]
-    };
-  }
+    // WorkMode is REMOTE
+    const allLabels = Array.from(new Set([...labels])).filter(Boolean);
+    const hasCountries = allLabels.length > 0 || countryCodes.length > 0;
+    const hasTimezones = timezones.length > 0;
 
-  private formatRemoteRestrictions(value: Prisma.JsonValue | null) {
-    if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-    const restrictions = value as { countries?: unknown; labels?: unknown; timezones?: unknown };
     const parts: string[] = [];
-    if (Array.isArray(restrictions.labels) && restrictions.labels.length > 0) {
-      const labels = restrictions.labels.map((label) => String(label).trim()).filter(Boolean);
-      if (labels.length > 0) parts.push(`Location restricted to ${labels.join(", ")}`);
+
+    if (remoteScope === "WORLDWIDE" && !hasCountries && !hasTimezones) {
+      return "Remote · Worldwide";
     }
-    if (Array.isArray(restrictions.countries) && restrictions.countries.length > 0) {
-      const countries = restrictions.countries
-        .map((country) => {
-          if (!country || typeof country !== "object" || Array.isArray(country)) return null;
-          const name = (country as { name?: unknown }).name;
-          return typeof name === "string" && name.trim() ? name.trim() : null;
-        })
-        .filter(Boolean);
-      if (countries.length > 0) parts.push(`Location restricted to ${countries.join(", ")}`);
+
+    if (hasCountries) {
+      if (allLabels.length === 1) {
+        parts.push(`${allLabels[0]} only`);
+      } else if (allLabels.length > 1) {
+        parts.push(allLabels.join(", "));
+      } else if (countryCodes.length > 0) {
+        parts.push(countryCodes.join(", "));
+      }
     }
-    if (Array.isArray(restrictions.timezones) && restrictions.timezones.length > 0) {
-      const timezones = restrictions.timezones.map((timezone) => formatTimezone(String(timezone))).filter(Boolean);
-      if (timezones.length > 0) parts.push(`Timezone overlap required: ${timezones.join(", ")}`);
+
+    if (hasTimezones) {
+      const formattedTimezones = timezones.map((tz) => formatTimezoneOffset(tz)).filter(Boolean);
+      if (formattedTimezones.length === 1) {
+        parts.push(`${formattedTimezones[0]} overlap`);
+      } else if (formattedTimezones.length > 1) {
+        parts.push(`${formattedTimezones[0]} to ${formattedTimezones[formattedTimezones.length - 1]} overlap`);
+      }
     }
-    return parts.length > 0 ? parts.join("; ") : "Remote - Worldwide";
+
+    if (parts.length === 0) {
+      return "Remote · Location requirements unclear";
+    }
+
+    return `Remote · ${parts.join(" · ")}`;
   }
 }
 
-function formatTimezone(value: string) {
+function formatTimezoneOffset(value: string): string {
   const trimmed = value.trim();
   if (!trimmed) return "";
-  if (/^utc/i.test(trimmed)) return trimmed.toUpperCase().replace("UTC+", "UTC+").replace("UTC-", "UTC-");
+  if (/^utc/i.test(trimmed)) {
+    return trimmed.toUpperCase().replace("UTC+", "UTC+").replace("UTC-", "UTC-");
+  }
   const numeric = Number(trimmed);
   if (!Number.isFinite(numeric)) return trimmed;
   return `UTC${numeric >= 0 ? "+" : ""}${trimmed}`;
+}
+
+function formatSortValue(value: unknown): string | number | null {
+  if (value === null || value === undefined) return null;
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value === "number" || typeof value === "string") return value;
+  return String(value);
 }

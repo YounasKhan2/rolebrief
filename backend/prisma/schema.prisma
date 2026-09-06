@@ -235,10 +235,15 @@ model Job {
   savedItems  SavedItem[]
   applications Application[]
 
-  @@index([status, publishedAt])
+  @@index([status, publishedAt, discoveredAt, id])
+  @@index([status, updatedAt, id])
+  @@index([status, applicationDeadlineAt, publishedAt, id])
+  @@index([status, workMode])
+  @@index([status, remoteScope])
+  @@index([status, seniority])
+  @@index([status, employmentType])
   @@index([companyId])
   @@index([sourceId])
-  @@index([workMode])
   @@index([canonicalFingerprint])
 }
 
@@ -343,6 +348,9 @@ model Salary {
   ambiguity String  @default("unknown")
 
   job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId])
+  @@index([currency, min, max])
 }
 
 model SavedItem {

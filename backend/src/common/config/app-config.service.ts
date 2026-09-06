@@ -34,6 +34,10 @@ export class AppConfigService {
     return this.config.get("REDIS_URL", { infer: true });
   }
 
+  get cursorSigningSecret() {
+    return this.config.get("CURSOR_SIGNING_SECRET", { infer: true }) || this.config.get("SESSION_SECRET", { infer: true });
+  }
+
   get auth() {
     return {
       accessTokenTtlSeconds: this.config.get("ACCESS_TOKEN_TTL", { infer: true }),
