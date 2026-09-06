@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { useSearchParams } from "react-router";
 import { Search, SlidersHorizontal, X, Save, ArrowUpDown, FileX, Loader2 } from "lucide-react";
 import { PageContainer } from "../../components/shell/AppShell";
@@ -90,6 +90,35 @@ export function Component() {
     loadMore,
     retry
   } = useJobs(jobsOptions);
+
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+
+  // Threshold-based infinite scrolling with accessible Load More fallback
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel || !hasNextPage || loading || loadingMore || error) return;
+    if (typeof IntersectionObserver === "undefined") return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const [entry] = entries;
+        if (entry.isIntersecting) {
+          loadMore();
+        }
+      },
+      {
+        rootMargin: "300px", // Trigger slightly before user scrolls to the absolute bottom
+        threshold: 0.1,
+      }
+    );
+
+    observer.observe(sentinel);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [hasNextPage, loading, loadingMore, error, loadMore]);
+
 
   function update(next: Record<string, string | null>) {
     const p = new URLSearchParams(params);
@@ -228,7 +257,7 @@ export function Component() {
 
           {loading ? (
             <JobListSkeleton density={density} />
-          ) : error ? (
+          ) : error && jobs.length === 0 ? (
             <EmptyState
               icon={<FileX size={40} />}
               title="Could not load jobs"
@@ -256,6 +285,11 @@ export function Component() {
                 ))}
               </div>
 
+              {/* Sentinel for threshold-based infinite scrolling */}
+              {hasNextPage && !loading && (
+                <div ref={sentinelRef} className="h-4 w-full" aria-hidden="true" />
+              )}
+
               {loadingMore && (
                 <div className="mt-4">
                   <JobListSkeleton density={density} count={2} />
@@ -263,9 +297,16 @@ export function Component() {
               )}
 
               <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 py-4 border-t border-line">
-                <span className="text-xs text-slate">
-                  Loaded {jobs.length} of {totalCount} total jobs
-                </span>
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
+                  <span className="text-xs text-slate">
+                    Loaded {jobs.length} of {totalCount} total jobs
+                  </span>
+                  {error && (
+                    <span className="text-xs text-red font-medium">
+                      Failed to load more. Click below to retry.
+                    </span>
+                  )}
+                </div>
                 {hasNextPage ? (
                   <Button
                     variant="secondary"
