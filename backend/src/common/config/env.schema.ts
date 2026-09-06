@@ -13,7 +13,7 @@ export const envSchema = z.object({
   PORT: z.coerce.number().int().positive().default(3000),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
   PUBLIC_APP_URL: z.string().url(),
-  FRONTEND_ORIGIN: z.string().min(1).default("http://127.0.0.1:5173,http://localhost:5173,http://127.0.0.1:8443,http://localhost:8443"),
+  FRONTEND_ORIGIN: z.string().min(1).default("http://localhost:8443,http://127.0.0.1:8443,http://127.0.0.1:5173,http://localhost:5173"),
   DATABASE_URL: z.string().url(),
   DATABASE_POOL_SIZE: z.coerce.number().int().positive().default(10),
   REDIS_URL: z.string().url(),

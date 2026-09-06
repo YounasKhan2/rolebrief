@@ -96,7 +96,7 @@ pnpm install
 pnpm dev
 ```
 
-Open the URL printed by Vite. The frontend normally runs at `http://127.0.0.1:5173`.
+Open the URL printed by Vite. If you run the frontend on `http://localhost:8443`, keep that origin first in `backend/.env` so verification and password-reset emails point to the reachable local app.
 
 ### Email in local development
 
@@ -134,7 +134,7 @@ Seed the database when needed:
 docker compose --profile tools run --rm seed
 ```
 
-For Docker backend services, check the compose environment configuration before relying on local `.env` values. The current compose services load `backend/.env.example`; production or Resend secrets should be supplied through an explicit deployment environment or a local compose override, never committed to the repository.
+Docker backend services load `backend/.env.example` first and untracked `backend/.env` second. That lets local Resend settings override safe defaults without committing secrets.
 
 ### Stop local services
 

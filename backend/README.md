@@ -22,7 +22,7 @@ pnpm dev:api
 ```
 
 The API uses `/api/v1` as its global prefix.
-Swagger is available at `/api/docs`.
+Swagger is available at `/api/docs` and documents the cookie-auth, CSRF, verification, reset, session, jobs, and admin endpoints.
 
 ## Authentication
 
@@ -56,6 +56,8 @@ Restart the API and worker after changing environment variables. Signup verifica
 Keep `EMAIL_PROVIDER=dev` for automated tests and local development. Development links are hidden by default; set `EMAIL_EXPOSE_DEV_LINKS=true` only in a local development environment when you explicitly need to inspect a test link.
 
 For initial Resend testing, `onboarding@resend.dev` can only deliver to the email address associated with your Resend account. Production recipients require a verified sending domain.
+
+When running with Docker Compose, backend services load `.env.example` first and the untracked `backend/.env` second. Keep safe defaults in `.env.example`; put real Resend keys, sender addresses, and local frontend origin ordering in `backend/.env`.
 
 Operational rollback note: the auth migration is forward-only. It adds durable auth tables and converts placeholder `User.role`/`User.status` strings into enums without changing jobs/provider records. Existing legacy users should be verified/reset or removed intentionally before production use.
 

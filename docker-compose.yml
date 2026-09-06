@@ -35,6 +35,7 @@ services:
     command: node dist/main.js
     env_file:
       - ./backend/.env.example
+      - ./backend/.env
     environment:
       DATABASE_URL: postgresql://rolebrief:${POSTGRES_PASSWORD:-replace-with-local-postgres-password}@postgres:5432/rolebrief?schema=public
       REDIS_URL: redis://redis:6379
@@ -66,6 +67,7 @@ services:
     command: node dist/worker.js
     env_file:
       - ./backend/.env.example
+      - ./backend/.env
     environment:
       DATABASE_URL: postgresql://rolebrief:${POSTGRES_PASSWORD:-replace-with-local-postgres-password}@postgres:5432/rolebrief?schema=public
       REDIS_URL: redis://redis:6379
@@ -83,6 +85,7 @@ services:
     command: node dist/scheduler.js
     env_file:
       - ./backend/.env.example
+      - ./backend/.env
     environment:
       DATABASE_URL: postgresql://rolebrief:${POSTGRES_PASSWORD:-replace-with-local-postgres-password}@postgres:5432/rolebrief?schema=public
       REDIS_URL: redis://redis:6379
@@ -101,6 +104,7 @@ services:
     profiles: ["tools"]
     env_file:
       - ./backend/.env.example
+      - ./backend/.env
     environment:
       DATABASE_URL: postgresql://rolebrief:${POSTGRES_PASSWORD:-replace-with-local-postgres-password}@postgres:5432/rolebrief?schema=public
       REDIS_URL: redis://redis:6379
@@ -116,6 +120,7 @@ services:
     profiles: ["tools"]
     env_file:
       - ./backend/.env.example
+      - ./backend/.env
     environment:
       DATABASE_URL: postgresql://rolebrief:${POSTGRES_PASSWORD:-replace-with-local-postgres-password}@postgres:5432/rolebrief?schema=public
       REDIS_URL: redis://redis:6379
