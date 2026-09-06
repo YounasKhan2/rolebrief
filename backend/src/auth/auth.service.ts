@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, ForbiddenException, Injectable, UnauthorizedException } from "@nestjs/common";
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, UnauthorizedException } from "@nestjs/common";
 import { Prisma, Role, User, UserStatus } from "@prisma/client";
 import { Response, Request } from "express";
 import { randomUUID } from "crypto";
@@ -16,6 +16,8 @@ const RECOVERY_RESPONSE = { message: "If the account can be recovered, instructi
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly passwords: PasswordService,
@@ -36,8 +38,8 @@ export class AuthService {
       const user = await this.prisma.user.create({
         data: { name: name.trim(), email, normalizedEmail, passwordHash, role: Role.USER, status: UserStatus.PENDING_VERIFICATION }
       });
-      const token = await this.createEmailVerificationToken(user.id);
-      await this.email.sendVerification(user.email, token);
+      const verification = await this.createEmailVerificationToken(user.id);
+      await this.enqueueSafely("verification", () => this.email.sendVerification(user.id, user.email, verification.id, verification.token));
       await this.audit("signup", true, { targetUserId: user.id, metadata: { email: redactEmail(user.email) } });
       return { message: "Check your email to verify your account." };
     } catch (error) {
@@ -159,8 +161,8 @@ export class AuthService {
     await this.rateLimit.consume("resend", this.clientKey(req), this.config.auth.rateLimits.recovery);
     const user = await this.prisma.user.findUnique({ where: { normalizedEmail: normalizeEmail(email) } });
     if (user && user.status === UserStatus.PENDING_VERIFICATION) {
-      const token = await this.createEmailVerificationToken(user.id);
-      await this.email.sendVerification(user.email, token);
+      const verification = await this.createEmailVerificationToken(user.id);
+      await this.enqueueSafely("verification", () => this.email.sendVerification(user.id, user.email, verification.id, verification.token));
     }
     return RECOVERY_RESPONSE;
   }
@@ -169,8 +171,8 @@ export class AuthService {
     await this.rateLimit.consume("forgot", this.clientKey(req), this.config.auth.rateLimits.recovery);
     const user = await this.prisma.user.findUnique({ where: { normalizedEmail: normalizeEmail(email) } });
     if (user && user.status !== UserStatus.DISABLED) {
-      const token = await this.createPasswordResetToken(user.id);
-      await this.email.sendPasswordReset(user.email, token);
+      const reset = await this.createPasswordResetToken(user.id);
+      await this.enqueueSafely("password_reset", () => this.email.sendPasswordReset(user.id, user.email, reset.id, reset.token));
     }
     return RECOVERY_RESPONSE;
   }
@@ -188,7 +190,7 @@ export class AuthService {
       }),
       this.prisma.session.updateMany({ where: { userId: record.userId, revokedAt: null }, data: { revokedAt: now, revokedReason: "password_reset" } })
     ]);
-    await this.email.sendPasswordChanged(record.user.email);
+    await this.enqueueSafely("password_changed", () => this.email.sendPasswordChanged(record.userId, record.user.email));
     return { message: "Password updated. Please log in again." };
   }
 
@@ -202,7 +204,7 @@ export class AuthService {
       this.prisma.user.update({ where: { id: user.id }, data: { passwordHash, passwordChangedAt: now } }),
       this.prisma.session.updateMany({ where: { userId: user.id, id: { not: user.sessionId }, revokedAt: null }, data: { revokedAt: now, revokedReason: "password_changed" } })
     ]);
-    await this.email.sendPasswordChanged(existing.email);
+    await this.enqueueSafely("password_changed", () => this.email.sendPasswordChanged(existing.id, existing.email));
     return { message: "Password changed." };
   }
 
@@ -282,18 +284,18 @@ export class AuthService {
 
   private async createEmailVerificationToken(userId: string) {
     const token = randomToken();
-    await this.prisma.emailVerificationToken.create({
+    const record = await this.prisma.emailVerificationToken.create({
       data: { userId, tokenHash: hashToken(token), expiresAt: addSeconds(new Date(), 86400) }
     });
-    return token;
+    return { id: record.id, token };
   }
 
   private async createPasswordResetToken(userId: string) {
     const token = randomToken();
-    await this.prisma.passwordResetToken.create({
+    const record = await this.prisma.passwordResetToken.create({
       data: { userId, tokenHash: hashToken(token), expiresAt: addSeconds(new Date(), 1800) }
     });
-    return token;
+    return { id: record.id, token };
   }
 
   private async recordFailedLogin(user: User) {
@@ -345,5 +347,13 @@ export class AuthService {
 
   private clientKey(req: Request) {
     return this.clientIp(req) ?? "unknown";
+  }
+
+  private async enqueueSafely(kind: string, work: () => Promise<unknown>) {
+    try {
+      await work();
+    } catch (error) {
+      this.logger.warn({ event: "auth.email.enqueue_failed", kind, error: error instanceof Error ? error.name : "unknown" });
+    }
   }
 }

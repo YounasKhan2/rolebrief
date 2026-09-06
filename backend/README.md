@@ -44,11 +44,16 @@ Create a Resend account, generate an API key, and verify the sending domain in R
 
 ```bash
 EMAIL_PROVIDER=resend
-EMAIL_FROM=RoleBrief <no-reply@your-verified-domain.com>
-RESEND_API_KEY=re_xxxxxxxxx
+EMAIL_DELIVERY_ENABLED=true
+RESEND_FROM_EMAIL=RoleBrief <no-reply@your-verified-domain.com>
+RESEND_REPLY_TO=support@your-verified-domain.com
+RESEND_API_KEY=<resend-api-key>
+FRONTEND_ORIGIN=https://app.your-domain.com
 ```
 
-Restart the API after changing environment variables. Signup verification, resend verification, password reset, and password-change notification emails use Resend. Keep `EMAIL_PROVIDER=dev` for local development to log verification links instead of sending mail.
+Restart the API and worker after changing environment variables. Signup verification, resend verification, password reset, and password-change notifications are queued through BullMQ and delivered by the worker. Delivery records store status and provider message IDs, but never plaintext verification/reset tokens or full email bodies.
+
+Keep `EMAIL_PROVIDER=dev` for automated tests and local development. Development links are hidden by default; set `EMAIL_EXPOSE_DEV_LINKS=true` only in a local development environment when you explicitly need to inspect a test link.
 
 For initial Resend testing, `onboarding@resend.dev` can only deliver to the email address associated with your Resend account. Production recipients require a verified sending domain.
 

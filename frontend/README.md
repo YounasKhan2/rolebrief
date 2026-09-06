@@ -104,13 +104,15 @@ To send verification emails through Resend, configure `backend/.env`:
 
 ```env
 EMAIL_PROVIDER=resend
-EMAIL_FROM=RoleBrief <onboarding@resend.dev>
-RESEND_API_KEY=re_your_key
+EMAIL_DELIVERY_ENABLED=true
+RESEND_FROM_EMAIL=RoleBrief <onboarding@resend.dev>
+RESEND_REPLY_TO=
+RESEND_API_KEY=<resend-api-key>
 ```
 
-The `onboarding@resend.dev` sender can only deliver to the email address associated with the Resend account. To send to multiple testing users, verify a real sending domain in Resend and use that domain in `EMAIL_FROM`.
+The `onboarding@resend.dev` sender can only deliver to the email address associated with the Resend account. To send to multiple testing users, verify a real sending domain in Resend and use that domain in `RESEND_FROM_EMAIL`.
 
-Restart the API after changing `.env` values. The backend must be running for signup, login, email verification, jobs, and other API-backed features.
+Restart the API and worker after changing `.env` values. The backend must be running for signup, login, email verification, jobs, and other API-backed features.
 
 ### Run the backend entirely with Docker
 

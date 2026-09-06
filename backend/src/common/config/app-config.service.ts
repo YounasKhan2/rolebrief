@@ -54,7 +54,10 @@ export class AppConfigService {
       },
       email: {
         provider: this.config.get("EMAIL_PROVIDER", { infer: true }),
-        from: this.config.get("EMAIL_FROM", { infer: true }),
+        deliveryEnabled: this.config.get("EMAIL_DELIVERY_ENABLED", { infer: true }),
+        from: this.config.get("RESEND_FROM_EMAIL", { infer: true }) || this.config.get("EMAIL_FROM", { infer: true }),
+        replyTo: this.config.get("RESEND_REPLY_TO", { infer: true }),
+        exposeDevLinks: this.config.get("EMAIL_EXPOSE_DEV_LINKS", { infer: true }),
         smtpUrl: this.config.get("SMTP_URL", { infer: true }),
         resendApiKey: this.config.get("RESEND_API_KEY", { infer: true })
       }

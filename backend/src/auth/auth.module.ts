@@ -8,16 +8,15 @@ import { RolesGuard } from "./roles.guard";
 import { CsrfGuard } from "./csrf.guard";
 import { AuthService } from "./auth.service";
 import { PasswordService } from "./password.service";
-import { EmailService } from "./email/email.service";
+import { EmailModule } from "./email/email.module";
 import { AuthRateLimitService } from "./rate-limit.service";
 
 @Module({
-  imports: [AppConfigModule, PrismaModule],
+  imports: [AppConfigModule, PrismaModule, EmailModule],
   controllers: [AuthController],
   providers: [
     AuthService,
     PasswordService,
-    EmailService,
     AuthRateLimitService,
     CsrfGuard,
     { provide: APP_GUARD, useClass: AuthGuard },

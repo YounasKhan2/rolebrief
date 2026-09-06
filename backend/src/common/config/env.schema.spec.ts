@@ -38,3 +38,25 @@ test("parses explicit true boolean strings as true", () => {
   assert.equal(parsed.HIMALAYAS_ENABLED, true);
   assert.equal(parsed.HIMALAYAS_LIVE_SMOKE, true);
 });
+
+test("requires resend credentials when Resend is selected", () => {
+  const parsed = envSchema.safeParse({
+    ...requiredEnv,
+    EMAIL_PROVIDER: "resend",
+    RESEND_FROM_EMAIL: "security@example.invalid"
+  });
+
+  assert.equal(parsed.success, false);
+  assert.match(JSON.stringify(parsed.error.format()), /RESEND_API_KEY/);
+});
+
+test("rejects development link exposure in production", () => {
+  const parsed = envSchema.safeParse({
+    ...requiredEnv,
+    NODE_ENV: "production",
+    EMAIL_EXPOSE_DEV_LINKS: "true"
+  });
+
+  assert.equal(parsed.success, false);
+  assert.match(JSON.stringify(parsed.error.format()), /EMAIL_EXPOSE_DEV_LINKS/);
+});

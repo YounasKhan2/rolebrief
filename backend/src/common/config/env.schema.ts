@@ -30,8 +30,12 @@ export const envSchema = z.object({
   AUTH_RATE_LIMIT_SIGNUP: z.coerce.number().int().positive().default(5),
   AUTH_RATE_LIMIT_RECOVERY: z.coerce.number().int().positive().default(5),
   AUTH_RATE_LIMIT_REFRESH: z.coerce.number().int().positive().default(60),
-  EMAIL_FROM: z.string().optional().default(""),
+  EMAIL_DELIVERY_ENABLED: booleanString.default(true),
   EMAIL_PROVIDER: z.enum(["dev", "resend", "smtp"]).default("dev"),
+  EMAIL_FROM: z.string().optional().default(""),
+  RESEND_FROM_EMAIL: z.string().email().optional().or(z.literal("")).default(""),
+  RESEND_REPLY_TO: z.string().email().optional().or(z.literal("")).default(""),
+  EMAIL_EXPOSE_DEV_LINKS: booleanString.default(false),
   SMTP_URL: z.string().optional().default(""),
   RESEND_API_KEY: z.string().optional().default(""),
   BOOTSTRAP_ADMIN_ENABLED: booleanString.default(false),
@@ -58,6 +62,18 @@ export const envSchema = z.object({
   APITUBE_API_KEY: z.string().optional().default(""),
   OTEL_EXPORTER_OTLP_ENDPOINT: z.string().url().optional().or(z.literal("")),
   SENTRY_DSN: z.string().url().optional().or(z.literal(""))
+}).superRefine((env, ctx) => {
+  if (env.EMAIL_PROVIDER === "resend") {
+    if (!env.RESEND_API_KEY) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["RESEND_API_KEY"], message: "RESEND_API_KEY is required when EMAIL_PROVIDER=resend." });
+    }
+    if (!env.RESEND_FROM_EMAIL && !env.EMAIL_FROM) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["RESEND_FROM_EMAIL"], message: "RESEND_FROM_EMAIL is required when EMAIL_PROVIDER=resend." });
+    }
+  }
+  if (env.NODE_ENV === "production" && env.EMAIL_EXPOSE_DEV_LINKS) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["EMAIL_EXPOSE_DEV_LINKS"], message: "EMAIL_EXPOSE_DEV_LINKS cannot be true in production." });
+  }
 });
 
 export type Env = z.infer<typeof envSchema>;
