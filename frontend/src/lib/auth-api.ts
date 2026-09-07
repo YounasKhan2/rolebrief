@@ -97,8 +97,15 @@ async function authRequest<T>(
     }
 
     if (!response.ok) {
-      const message = await response.json().then((body) => body.message).catch(() => undefined);
-      throw new ApiError(Array.isArray(message) ? message.join(" ") : message ?? `Auth API returned ${response.status}.`, "http", response.status);
+      const data = await response.json().catch(() => ({}));
+      const message = data?.message;
+      const headerRetry = response.headers.get("retry-after");
+      const parsedHeader = headerRetry ? parseInt(headerRetry, 10) : undefined;
+      const retryAfterSeconds = typeof data?.retryAfterSeconds === "number"
+        ? data.retryAfterSeconds
+        : (parsedHeader && !isNaN(parsedHeader) ? parsedHeader : undefined);
+      const formattedMessage = Array.isArray(message) ? message.join(" ") : message ?? `Auth API returned ${response.status}.`;
+      throw new ApiError(formattedMessage, "http", response.status, retryAfterSeconds);
     }
     return (await response.json()) as T;
   } catch (error) {

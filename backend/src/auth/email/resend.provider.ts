@@ -37,7 +37,9 @@ export class ResendEmailProvider implements EmailProvider {
 
     if (!response.ok) {
       const temporary = response.status === 429 || response.status >= 500 || response.status === 408;
-      throw new EmailProviderError("Resend rejected the email.", `resend_${response.status}`, temporary);
+      const errorBody = (await response.json().catch(() => ({}))) as { message?: string };
+      const safeMessage = errorBody?.message ? `Resend error: ${errorBody.message}` : "Resend rejected the email.";
+      throw new EmailProviderError(safeMessage, `resend_${response.status}`, temporary);
     }
 
     const body = await response.json().catch(() => ({})) as { id?: string };

@@ -1,4 +1,5 @@
 import { HttpException, HttpStatus, Injectable, OnModuleDestroy } from "@nestjs/common";
+import { createHash } from "node:crypto";
 import Redis from "ioredis";
 import { AppConfigService } from "../common/config/app-config.service";
 
@@ -18,14 +19,28 @@ export class AuthRateLimitService implements OnModuleDestroy {
     await this.redis.quit().catch(() => undefined);
   }
 
+  private hashKey(key: string): string {
+    return createHash("sha256").update(key.trim().toLowerCase()).digest("hex");
+  }
+
   async consume(scope: string, key: string, limit: number, windowSeconds = 900) {
-    const redisKey = `auth:rate:${scope}:${key}`;
+    const hashed = this.hashKey(key);
+    const redisKey = `auth:rate:${scope}:${hashed}`;
     const count = await this.redis.incr(redisKey);
     if (count === 1) {
       await this.redis.expire(redisKey, windowSeconds);
     }
     if (count > limit) {
-      throw new HttpException("Too many attempts. Try again later.", HttpStatus.TOO_MANY_REQUESTS);
+      const ttl = await this.redis.ttl(redisKey);
+      const retryAfterSeconds = Math.max(ttl, 1);
+      throw new HttpException(
+        {
+          statusCode: HttpStatus.TOO_MANY_REQUESTS,
+          message: "Too many attempts. Please wait before trying again.",
+          retryAfterSeconds
+        },
+        HttpStatus.TOO_MANY_REQUESTS
+      );
     }
   }
 }

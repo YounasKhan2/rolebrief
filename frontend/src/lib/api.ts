@@ -5,6 +5,7 @@ export class ApiError extends Error {
     message: string,
     readonly code: ApiErrorCode,
     readonly status?: number,
+    readonly retryAfterSeconds?: number,
   ) {
     super(message);
     this.name = "ApiError";

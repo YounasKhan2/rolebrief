@@ -59,8 +59,8 @@ export class AuthController {
   @ApiOperation({ summary: "Consume a single-use email verification token" })
   @ApiResponse({ status: 201, description: "Email verified. The user can now log in." })
   @ApiResponse({ status: 400, description: "Verification link is invalid, expired, or already used." })
-  verifyEmail(@Body() body: TokenDto) {
-    return this.auth.verifyEmail(body.token);
+  verifyEmail(@Body() body: TokenDto, @Req() req: Request) {
+    return this.auth.verifyEmail(body.token, req);
   }
 
   @Public()
@@ -84,8 +84,8 @@ export class AuthController {
   @ApiOperation({ summary: "Consume a single-use password reset token and revoke active sessions" })
   @ApiResponse({ status: 201, description: "Password changed. Existing sessions are revoked and a security notice is queued." })
   @ApiResponse({ status: 400, description: "Reset link is invalid, expired, or already used." })
-  resetPassword(@Body() body: ResetPasswordDto) {
-    return this.auth.resetPassword(body.token, body.password);
+  resetPassword(@Body() body: ResetPasswordDto, @Req() req: Request) {
+    return this.auth.resetPassword(body.token, body.password, req);
   }
 
   @Post("change-password")

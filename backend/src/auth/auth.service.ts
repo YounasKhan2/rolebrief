@@ -145,10 +145,29 @@ export class AuthService {
     return { csrf };
   }
 
-  async verifyEmail(token: string) {
+  async verifyEmail(token: string, req?: Request) {
+    if (req) {
+      await this.rateLimit.consume("verify", this.clientKey(req), this.config.auth.rateLimits.recovery);
+    }
     const now = new Date();
-    const record = await this.prisma.emailVerificationToken.findUnique({ where: { tokenHash: hashToken(token) }, include: { user: true } });
-    if (!record || record.consumedAt || record.expiresAt <= now) throw new BadRequestException("Verification link is invalid or expired.");
+    const tokenHash = hashToken(token);
+    const record = await this.prisma.emailVerificationToken.findUnique({
+      where: { tokenHash },
+      include: { user: true }
+    });
+
+    if (!record) {
+      throw new BadRequestException("Verification link is invalid or expired.");
+    }
+
+    if (record.consumedAt || record.user.status === UserStatus.ACTIVE) {
+      return { message: "Email is already verified. You can log in." };
+    }
+
+    if (record.expiresAt <= now) {
+      throw new BadRequestException("Verification link has expired. Please request a new one.");
+    }
+
     await this.prisma.$transaction([
       this.prisma.emailVerificationToken.update({ where: { id: record.id }, data: { consumedAt: now } }),
       this.prisma.user.update({ where: { id: record.userId }, data: { status: UserStatus.ACTIVE, emailVerifiedAt: now } })
@@ -177,7 +196,10 @@ export class AuthService {
     return RECOVERY_RESPONSE;
   }
 
-  async resetPassword(token: string, password: string) {
+  async resetPassword(token: string, password: string, req?: Request) {
+    if (req) {
+      await this.rateLimit.consume("reset", this.clientKey(req), this.config.auth.rateLimits.recovery);
+    }
     const now = new Date();
     const record = await this.prisma.passwordResetToken.findUnique({ where: { tokenHash: hashToken(token) }, include: { user: true } });
     if (!record || record.consumedAt || record.expiresAt <= now) throw new BadRequestException("Reset link is invalid or expired.");
@@ -283,18 +305,32 @@ export class AuthService {
   }
 
   private async createEmailVerificationToken(userId: string) {
+    const now = new Date();
     const token = randomToken();
-    const record = await this.prisma.emailVerificationToken.create({
-      data: { userId, tokenHash: hashToken(token), expiresAt: addSeconds(new Date(), 86400) }
-    });
+    const [record] = await this.prisma.$transaction([
+      this.prisma.emailVerificationToken.create({
+        data: { userId, tokenHash: hashToken(token), expiresAt: addSeconds(now, 86400) }
+      }),
+      this.prisma.emailVerificationToken.updateMany({
+        where: { userId, consumedAt: null, createdAt: { lt: now } },
+        data: { consumedAt: now }
+      })
+    ]);
     return { id: record.id, token };
   }
 
   private async createPasswordResetToken(userId: string) {
+    const now = new Date();
     const token = randomToken();
-    const record = await this.prisma.passwordResetToken.create({
-      data: { userId, tokenHash: hashToken(token), expiresAt: addSeconds(new Date(), 1800) }
-    });
+    const [record] = await this.prisma.$transaction([
+      this.prisma.passwordResetToken.create({
+        data: { userId, tokenHash: hashToken(token), expiresAt: addSeconds(now, 1800) }
+      }),
+      this.prisma.passwordResetToken.updateMany({
+        where: { userId, consumedAt: null, createdAt: { lt: now } },
+        data: { consumedAt: now }
+      })
+    ]);
     return { id: record.id, token };
   }
 
