@@ -23,12 +23,33 @@ export interface AuthSession {
 
 const DEFAULT_TIMEOUT_MS = 8000;
 
+let inMemoryCsrfToken: string | null = null;
+
+export function getCachedCsrfToken(): string | null {
+  return inMemoryCsrfToken;
+}
+
+export function setCachedCsrfToken(token: string | null): void {
+  inMemoryCsrfToken = token;
+}
+
 function csrfToken() {
-  if (typeof document === "undefined") return undefined;
-  return document.cookie
+  if (typeof document === "undefined") return inMemoryCsrfToken ?? undefined;
+  const fromCookie = document.cookie
     .split("; ")
     .find((part) => part.startsWith("rb_csrf="))
     ?.split("=")[1];
+  return fromCookie ? decodeURIComponent(fromCookie) : (inMemoryCsrfToken ?? undefined);
+}
+
+export async function fetchCsrfToken(): Promise<string> {
+  try {
+    const data = await authRequest<{ csrf: string }>("/auth/csrf");
+    inMemoryCsrfToken = data.csrf;
+    return inMemoryCsrfToken;
+  } catch {
+    return "";
+  }
 }
 
 let inFlightRefreshPromise: Promise<{ user: AuthUser }> | null = null;
@@ -46,18 +67,21 @@ export function refresh(): Promise<{ user: AuthUser }> {
     return inFlightRefreshPromise;
   }
 
-  inFlightRefreshPromise = authRequest<{ user: AuthUser }>(
+  inFlightRefreshPromise = authRequest<{ user: AuthUser; csrf?: string }>(
     "/auth/refresh",
     { method: "POST" },
     true
-  ).finally(() => {
+  ).then((res) => {
+    if (res.csrf) inMemoryCsrfToken = res.csrf;
+    return { user: res.user };
+  }).finally(() => {
     inFlightRefreshPromise = null;
   });
 
   return inFlightRefreshPromise;
 }
 
-async function authRequest<T>(
+export async function authRequest<T>(
   path: string,
   options: { method?: string; body?: unknown; csrf?: boolean } = {},
   retried = false
@@ -67,8 +91,11 @@ async function authRequest<T>(
   const headers: Record<string, string> = { Accept: "application/json" };
   if (options.body) headers["Content-Type"] = "application/json";
   if (options.csrf) {
-    const token = csrfToken();
-    if (token) headers["x-rolebrief-csrf"] = decodeURIComponent(token);
+    let token = csrfToken();
+    if (!token && path !== "/auth/csrf") {
+      token = await fetchCsrfToken();
+    }
+    if (token) headers["x-rolebrief-csrf"] = token;
   }
 
   try {
@@ -121,16 +148,22 @@ export function signup(name: string, email: string, password: string) {
   return authRequest<{ message: string }>("/auth/signup", { method: "POST", body: { name, email, password } });
 }
 
-export function login(email: string, password: string) {
-  return authRequest<{ user: AuthUser }>("/auth/login", { method: "POST", body: { email, password } });
+export async function login(email: string, password: string) {
+  const res = await authRequest<{ user: AuthUser; csrf?: string }>("/auth/login", { method: "POST", body: { email, password } });
+  if (res.csrf) inMemoryCsrfToken = res.csrf;
+  return { user: res.user };
 }
 
 export function me() {
   return authRequest<{ user: AuthUser }>("/auth/me");
 }
 
-export function logout() {
-  return authRequest<{ message: string }>("/auth/logout", { method: "POST", csrf: true });
+export async function logout() {
+  try {
+    return await authRequest<{ message: string }>("/auth/logout", { method: "POST", csrf: true });
+  } finally {
+    inMemoryCsrfToken = null;
+  }
 }
 
 export function verifyEmail(token: string) {

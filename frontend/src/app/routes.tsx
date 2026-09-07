@@ -5,6 +5,8 @@ import { RouteFallback } from "./RouteFallback";
 import { RequireAuth } from "./RequireAuth";
 import { RequireAdmin } from "./RequireAdmin";
 import { GuestOnly } from "./GuestOnly";
+import { OnboardingLayout } from "../layouts/OnboardingLayout";
+import { OnboardingGate } from "../components/auth/OnboardingGate";
 
 /** Helper component to redirect root-level aliases to canonical /app/* routes while preserving query params and hash. */
 function AliasRedirect({ to }: { to: string }) {
@@ -81,19 +83,38 @@ export const router = createBrowserRouter([
   },
 
   /* ------------------------------------------------------------------ */
-  /*  GROUP 2 — AUTHENTICATED WORKSPACE (AppShell, requires login)      */
+  /*  GROUP 2A — ONBOARDING (Dedicated minimal OnboardingLayout)         */
+  /* ------------------------------------------------------------------ */
+  {
+    path: "/app/onboarding",
+    element: (
+      <RequireAuth>
+        <OnboardingGate>
+          <OnboardingLayout />
+        </OnboardingGate>
+      </RequireAuth>
+    ),
+    HydrateFallback: RouteFallback,
+    children: [
+      { index: true, lazy: () => import("../screens/onboarding/OnboardingScreen") },
+    ],
+  },
+
+  /* ------------------------------------------------------------------ */
+  /*  GROUP 2B — AUTHENTICATED WORKSPACE (AppShell, requires login)     */
   /* ------------------------------------------------------------------ */
   {
     path: "/app",
     element: (
       <RequireAuth>
-        <AppShell />
+        <OnboardingGate>
+          <AppShell />
+        </OnboardingGate>
       </RequireAuth>
     ),
     HydrateFallback: RouteFallback,
     children: [
       { index: true, element: <Navigate to="/app/radar" replace /> },
-      { path: "onboarding", lazy: () => import("../screens/onboarding/OnboardingScreen") },
       { path: "radar", lazy: () => import("../screens/radar/RadarScreen") },
       { path: "jobs", lazy: () => import("../screens/jobs/JobsScreen") },
       { path: "jobs/:slug", lazy: () => import("../screens/jobs/JobDetailScreen") },

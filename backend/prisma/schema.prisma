@@ -68,6 +68,8 @@ model User {
   auditEvents AuthAuditEvent[] @relation("AuthAuditActor")
   targetedAuditEvents AuthAuditEvent[] @relation("AuthAuditTarget")
   emailDeliveries EmailDelivery[]
+  onboarding      OnboardingProgress?
+  profile         CandidateProfile?
 
   @@index([role, status])
   @@index([normalizedEmail])
@@ -477,4 +479,95 @@ model AuditEvent {
 
   @@index([actorType, createdAt])
   @@index([targetType, targetId])
+}
+
+enum OnboardingStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+  SKIPPED
+}
+
+enum RemotePreference {
+  REMOTE_ONLY
+  HYBRID
+  ONSITE
+  OPEN_TO_ANY
+}
+
+enum SeniorityLevel {
+  ENTRY
+  MID
+  SENIOR
+  LEAD
+  PRINCIPAL
+  DIRECTOR
+  EXECUTIVE
+}
+
+model OnboardingProgress {
+  id             String           @id @default(cuid())
+  userId         String           @unique
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status         OnboardingStatus @default(NOT_STARTED)
+  version        Int              @default(1)
+  currentStep    String           @default("role")
+  completedSteps String[]         @default([])
+  revision       Int              @default(0)
+  startedAt      DateTime?
+  completedAt    DateTime?
+  skippedAt      DateTime?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@index([status])
+}
+
+model CandidateProfile {
+  id                 String               @id @default(cuid())
+  userId             String               @unique
+  user               User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  headline           String?
+  bio                String?
+  experienceYears    Int?
+  seniorityLevel     SeniorityLevel?
+  primaryDiscipline  String?
+  currentCountry     String?              // ISO 3166-1 alpha-2 (e.g., 'US', 'PK', 'DE')
+  currentCity        String?
+  workAuthorizations String[]             @default([]) // Array of ISO-2 country codes
+  preferences        CandidatePreference?
+  skills             CandidateSkill[]
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+}
+
+model CandidatePreference {
+  id                 String           @id @default(cuid())
+  profileId          String           @unique
+  profile            CandidateProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  targetRoleTitles   String[]         @default([]) // e.g. ["Senior Full Stack Engineer", "Backend Architect"]
+  targetDisciplines  String[]         @default([]) // e.g. ["Software Engineering", "Platform Infrastructure"]
+  remotePreference   RemotePreference @default(OPEN_TO_ANY)
+  preferredCountries String[]         @default([]) // Array of ISO-2 codes
+  preferredCities    String[]         @default([])
+  minSalary          Int?
+  maxSalary          Int?
+  salaryCurrency     String?          @default("USD")
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+}
+
+model CandidateSkill {
+  id              String           @id @default(cuid())
+  profileId       String
+  profile         CandidateProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  displayName     String           // e.g. "PostgreSQL"
+  normalizedName  String           // e.g. "postgresql"
+  yearsExperience Int?
+  isTopSkill      Boolean          @default(false)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@unique([profileId, normalizedName])
+  @@index([normalizedName])
 }

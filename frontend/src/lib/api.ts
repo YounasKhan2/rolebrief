@@ -115,10 +115,26 @@ export interface ListJobsParams {
   signal?: AbortSignal;
 }
 
-const DEFAULT_API_BASE_URL = "http://127.0.0.1:3000/api/v1";
+function resolveApiBaseUrl(): string {
+  const envUrl = import.meta.env?.VITE_API_BASE_URL;
+  if (typeof window !== "undefined" && window.location.hostname) {
+    if (envUrl && (envUrl.includes("localhost") || envUrl.includes("127.0.0.1"))) {
+      try {
+        const u = new URL(envUrl);
+        u.hostname = window.location.hostname;
+        return u.toString().replace(/\/+$/, "");
+      } catch {
+        // fallback to default below
+      }
+    }
+    return `http://${window.location.hostname}:3000/api/v1`;
+  }
+  return envUrl || "http://127.0.0.1:3000/api/v1";
+}
+
 const DEFAULT_TIMEOUT_MS = 8000;
 
-export const API_BASE_URL = normalizeBaseUrl(import.meta.env?.VITE_API_BASE_URL || DEFAULT_API_BASE_URL);
+export const API_BASE_URL = normalizeBaseUrl(resolveApiBaseUrl());
 
 function normalizeBaseUrl(url: string) {
   return url.replace(/\/+$/, "");

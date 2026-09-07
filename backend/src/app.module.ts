@@ -10,6 +10,8 @@ import { MatchingModule } from "./modules/matching/matching.module";
 import { EligibilityModule } from "./modules/eligibility/eligibility.module";
 import { AlertsModule } from "./modules/alerts/alerts.module";
 import { TrackerModule } from "./modules/tracker/tracker.module";
+import { ProfileModule } from "./modules/profile/profile.module";
+import { OnboardingModule } from "./modules/onboarding/onboarding.module";
 import { AuthModule } from "./auth/auth.module";
 import { AdminModule } from "./admin/admin.module";
 
@@ -27,7 +29,9 @@ import { AdminModule } from "./admin/admin.module";
     MatchingModule,
     EligibilityModule,
     AlertsModule,
-    TrackerModule
+    TrackerModule,
+    ProfileModule,
+    OnboardingModule
   ]
 })
 export class AppModule {}

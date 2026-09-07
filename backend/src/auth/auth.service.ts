@@ -71,9 +71,9 @@ export class AuthService {
       data: { failedLoginAttempts: 0, lockedUntil: null, lastLoginAt: new Date() }
     });
     const session = await this.createSession(user.id, req);
-    this.setAuthCookies(res, session.accessToken, session.refreshToken);
+    const csrf = this.setAuthCookies(res, session.accessToken, session.refreshToken);
     await this.audit("login.success", true, { actorUserId: user.id, targetUserId: user.id });
-    return { user: this.publicUser({ ...user, sessionId: session.id }) };
+    return { user: this.publicUser({ ...user, sessionId: session.id }), csrf };
   }
 
   async refresh(req: Request, res: Response) {
@@ -119,8 +119,8 @@ export class AuthService {
       return next;
     });
 
-    this.setAuthCookies(res, accessToken, refreshToken);
-    return { user: this.publicUser({ ...existing.user, sessionId: created.id }) };
+    const csrf = this.setAuthCookies(res, accessToken, refreshToken);
+    return { user: this.publicUser({ ...existing.user, sessionId: created.id }), csrf };
   }
 
   async logout(user: AuthenticatedUser | undefined, res: Response) {
@@ -343,7 +343,7 @@ export class AuthService {
     });
   }
 
-  private setAuthCookies(res: Response, accessToken: string, refreshToken: string) {
+  private setAuthCookies(res: Response, accessToken: string, refreshToken: string): string {
     const cookieBase = {
       httpOnly: true,
       secure: this.config.auth.cookieSecure,
@@ -351,12 +351,14 @@ export class AuthService {
     };
     res.cookie(ACCESS_COOKIE, accessToken, { ...cookieBase, path: "/api/v1", maxAge: this.config.auth.accessTokenTtlSeconds * 1000 });
     res.cookie(REFRESH_COOKIE, refreshToken, { ...cookieBase, path: "/api/v1/auth", maxAge: this.config.auth.refreshSessionTtlSeconds * 1000 });
-    res.cookie(CSRF_COOKIE, randomToken(16), {
+    const csrf = randomToken(16);
+    res.cookie(CSRF_COOKIE, csrf, {
       httpOnly: false,
       secure: this.config.auth.cookieSecure,
       sameSite: this.config.auth.cookieSameSite as "lax" | "strict" | "none",
       path: "/api/v1"
     });
+    return csrf;
   }
 
   clearAuthCookies(res: Response) {
