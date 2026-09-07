@@ -1,7 +1,10 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../../prisma/prisma.service";
-import { calculateProfileCompleteness } from "./profile-completeness.util";
+import {
+  calculateOnboardingBriefCompleteness,
+  calculateProfileCompleteness
+} from "./profile-completeness.util";
 import { UpdateCandidateProfilePayloadDto } from "./dto/profile.dto";
 
 @Injectable()
@@ -28,6 +31,7 @@ export class ProfileService {
     });
 
     const completeness = calculateProfileCompleteness(profile);
+    const briefCompleteness = calculateOnboardingBriefCompleteness(profile);
 
     return {
       user,
@@ -41,7 +45,10 @@ export class ProfileService {
             primaryDiscipline: profile.primaryDiscipline,
             currentCountry: profile.currentCountry,
             currentCity: profile.currentCity,
+            timezone: profile.timezone,
             workAuthorizations: profile.workAuthorizations,
+            requiresVisaSponsorship: profile.requiresVisaSponsorship,
+            searchStatus: profile.searchStatus,
             createdAt: profile.createdAt,
             updatedAt: profile.updatedAt
           }
@@ -49,7 +56,9 @@ export class ProfileService {
       preferences: profile?.preferences ?? null,
       skills: profile?.skills ?? [],
       completeness: completeness.score,
-      breakdown: completeness
+      breakdown: completeness,
+      briefCompleteness: briefCompleteness.score,
+      briefBreakdown: briefCompleteness
     };
   }
 
@@ -74,9 +83,12 @@ export class ProfileService {
         if (p.primaryDiscipline !== undefined) profileData.primaryDiscipline = p.primaryDiscipline;
         if (p.currentCountry !== undefined) profileData.currentCountry = p.currentCountry ? p.currentCountry.toUpperCase() : null;
         if (p.currentCity !== undefined) profileData.currentCity = p.currentCity;
+        if (p.timezone !== undefined) profileData.timezone = p.timezone;
         if (p.workAuthorizations !== undefined) {
           profileData.workAuthorizations = Array.from(new Set(p.workAuthorizations.map((c) => c.toUpperCase())));
         }
+        if (p.requiresVisaSponsorship !== undefined) profileData.requiresVisaSponsorship = p.requiresVisaSponsorship;
+        if (p.searchStatus !== undefined) profileData.searchStatus = p.searchStatus;
 
         Object.assign(profileCreateData, profileData);
       }
@@ -102,9 +114,12 @@ export class ProfileService {
           prefData.preferredCountries = Array.from(new Set(pref.preferredCountries.map((c) => c.toUpperCase())));
         }
         if (pref.preferredCities !== undefined) prefData.preferredCities = pref.preferredCities;
+        if (pref.employmentTypes !== undefined) prefData.employmentTypes = pref.employmentTypes;
+        if (pref.relocationPreference !== undefined) prefData.relocationPreference = pref.relocationPreference;
         if (pref.minSalary !== undefined) prefData.minSalary = pref.minSalary;
         if (pref.maxSalary !== undefined) prefData.maxSalary = pref.maxSalary;
         if (pref.salaryCurrency !== undefined) prefData.salaryCurrency = pref.salaryCurrency;
+        if (pref.salaryPeriod !== undefined) prefData.salaryPeriod = pref.salaryPeriod;
 
         Object.assign(prefCreateData, prefData);
 
@@ -182,6 +197,7 @@ export class ProfileService {
   async updateProfile(userId: string, payload: UpdateCandidateProfilePayloadDto) {
     const updated = await this.saveCandidateData(userId, payload);
     const completeness = calculateProfileCompleteness(updated);
+    const briefCompleteness = calculateOnboardingBriefCompleteness(updated);
 
     return {
       profile: {
@@ -193,14 +209,19 @@ export class ProfileService {
         primaryDiscipline: updated.primaryDiscipline,
         currentCountry: updated.currentCountry,
         currentCity: updated.currentCity,
+        timezone: updated.timezone,
         workAuthorizations: updated.workAuthorizations,
+        requiresVisaSponsorship: updated.requiresVisaSponsorship,
+        searchStatus: updated.searchStatus,
         createdAt: updated.createdAt,
         updatedAt: updated.updatedAt
       },
       preferences: updated.preferences,
       skills: updated.skills,
       completeness: completeness.score,
-      breakdown: completeness
+      breakdown: completeness,
+      briefCompleteness: briefCompleteness.score,
+      briefBreakdown: briefCompleteness
     };
   }
 }

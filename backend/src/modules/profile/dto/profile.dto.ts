@@ -30,6 +30,32 @@ export enum SeniorityLevelEnum {
   EXECUTIVE = "EXECUTIVE"
 }
 
+export enum OnboardingStepEnum {
+  GOAL = "GOAL",
+  REACH = "REACH",
+  FIT = "FIT",
+  REVIEW = "REVIEW"
+}
+
+export enum SalaryPeriodEnum {
+  HOURLY = "HOURLY",
+  MONTHLY = "MONTHLY",
+  YEARLY = "YEARLY"
+}
+
+export enum CandidateSearchStatusEnum {
+  ACTIVELY_LOOKING = "ACTIVELY_LOOKING",
+  OPEN_TO_OFFERS = "OPEN_TO_OFFERS",
+  CASUAL = "CASUAL",
+  NOT_LOOKING = "NOT_LOOKING"
+}
+
+export enum RelocationPreferenceEnum {
+  NOT_OPEN = "NOT_OPEN",
+  WILLING_TO_RELOCATE = "WILLING_TO_RELOCATE",
+  OPEN_TO_REMOTE_ONLY = "OPEN_TO_REMOTE_ONLY"
+}
+
 export class CandidateSkillInputDto {
   @ApiPropertyOptional()
   @IsString()
@@ -98,6 +124,22 @@ export class UpdateProfileDto {
   @IsString({ each: true })
   @MaxLength(2, { each: true })
   workAuthorizations?: string[];
+
+  @ApiPropertyOptional({ description: "Candidate timezone" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  timezone?: string;
+
+  @ApiPropertyOptional({ description: "Whether candidate requires employer visa sponsorship" })
+  @IsOptional()
+  @IsBoolean()
+  requiresVisaSponsorship?: boolean;
+
+  @ApiPropertyOptional({ enum: CandidateSearchStatusEnum })
+  @IsOptional()
+  @IsEnum(CandidateSearchStatusEnum)
+  searchStatus?: CandidateSearchStatusEnum;
 }
 
 export class UpdatePreferencesDto {
@@ -134,6 +176,18 @@ export class UpdatePreferencesDto {
   @MaxLength(100, { each: true })
   preferredCities?: string[];
 
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  @MaxLength(50, { each: true })
+  employmentTypes?: string[];
+
+  @ApiPropertyOptional({ enum: RelocationPreferenceEnum })
+  @IsOptional()
+  @IsEnum(RelocationPreferenceEnum)
+  relocationPreference?: RelocationPreferenceEnum;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsInt()
@@ -149,8 +203,13 @@ export class UpdatePreferencesDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  @MaxLength(3)
+  @MaxLength(10)
   salaryCurrency?: string;
+
+  @ApiPropertyOptional({ enum: SalaryPeriodEnum })
+  @IsOptional()
+  @IsEnum(SalaryPeriodEnum)
+  salaryPeriod?: SalaryPeriodEnum;
 }
 
 export class UpdateCandidateProfilePayloadDto {

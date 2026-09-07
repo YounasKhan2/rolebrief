@@ -1,8 +1,11 @@
 import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
-import { OnboardingStatus } from "@prisma/client";
+import { OnboardingStatus, OnboardingStep, Prisma } from "@prisma/client";
 import { PrismaService } from "../../prisma/prisma.service";
 import { ProfileService } from "../profile/profile.service";
-import { calculateProfileCompleteness } from "../profile/profile-completeness.util";
+import {
+  calculateOnboardingBriefCompleteness,
+  calculateProfileCompleteness
+} from "../profile/profile-completeness.util";
 import { AutosaveOnboardingDto } from "./dto/onboarding.dto";
 
 @Injectable()
@@ -36,6 +39,7 @@ export class OnboardingService {
     });
 
     const completeness = calculateProfileCompleteness(candidate);
+    const briefCompleteness = calculateOnboardingBriefCompleteness(candidate);
 
     return {
       user,
@@ -54,7 +58,7 @@ export class OnboardingService {
         : {
             status: OnboardingStatus.NOT_STARTED,
             version: 1,
-            currentStep: "role",
+            currentStep: OnboardingStep.GOAL,
             completedSteps: [],
             revision: 0,
             startedAt: null,
@@ -72,35 +76,82 @@ export class OnboardingService {
             primaryDiscipline: candidate.primaryDiscipline,
             currentCountry: candidate.currentCountry,
             currentCity: candidate.currentCity,
-            workAuthorizations: candidate.workAuthorizations
+            timezone: candidate.timezone,
+            workAuthorizations: candidate.workAuthorizations,
+            requiresVisaSponsorship: candidate.requiresVisaSponsorship,
+            searchStatus: candidate.searchStatus,
+            createdAt: candidate.createdAt,
+            updatedAt: candidate.updatedAt
           }
         : null,
       preferences: candidate?.preferences ?? null,
       skills: candidate?.skills ?? [],
       completeness: completeness.score,
-      breakdown: completeness
+      breakdown: completeness,
+      briefCompleteness: briefCompleteness.score,
+      briefBreakdown: briefCompleteness
     };
   }
 
   async autosave(userId: string, dto: AutosaveOnboardingDto) {
     return this.prisma.$transaction(async (tx) => {
-      // 1. Check current progress for optimistic concurrency revision
-      const existing = await tx.onboardingProgress.findUnique({
-        where: { userId }
-      });
+      // 1. Atomic optimistic concurrency check / update
+      if (dto.expectedRevision === 0) {
+        try {
+          await tx.onboardingProgress.create({
+            data: {
+              userId,
+              status: OnboardingStatus.IN_PROGRESS,
+              version: 1,
+              currentStep: (dto.currentStep as unknown as OnboardingStep) ?? OnboardingStep.GOAL,
+              completedSteps: dto.completedSteps ? (Array.from(new Set(dto.completedSteps)) as unknown as OnboardingStep[]) : [],
+              revision: 1,
+              startedAt: new Date()
+            }
+          });
+        } catch (error: any) {
+          if (error?.code === "P2002" || (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002")) {
+            throw new ConflictException({
+              message: "Optimistic concurrency conflict: onboarding data was modified in another session.",
+              expectedRevision: 0
+            });
+          }
+          throw error;
+        }
+      } else {
+        const updateData: Prisma.OnboardingProgressUpdateManyMutationInput = {
+          status: OnboardingStatus.IN_PROGRESS,
+          revision: { increment: 1 }
+        };
+        if (dto.currentStep !== undefined) {
+          updateData.currentStep = dto.currentStep as unknown as OnboardingStep;
+        }
+        if (dto.completedSteps !== undefined) {
+          updateData.completedSteps = Array.from(new Set(dto.completedSteps)) as unknown as OnboardingStep[];
+        }
 
-      const currentDbRevision = existing ? existing.revision : 0;
-      if (dto.expectedRevision !== currentDbRevision) {
-        throw new ConflictException({
-          message: "Optimistic concurrency conflict: onboarding data was modified in another session.",
-          expectedRevision: dto.expectedRevision,
-          currentRevision: currentDbRevision
+        const res = await tx.onboardingProgress.updateMany({
+          where: {
+            userId,
+            revision: dto.expectedRevision
+          },
+          data: updateData
         });
+
+        if (res.count === 0) {
+          const current = await tx.onboardingProgress.findUnique({ where: { userId } });
+          throw new ConflictException({
+            message: "Optimistic concurrency conflict: onboarding data was modified in another session.",
+            expectedRevision: dto.expectedRevision,
+            currentRevision: current?.revision ?? 0
+          });
+        }
       }
 
       // 2. Save candidate profile, preferences, and skills if any provided
+      let candidate = null;
       if (dto.profile || dto.preferences || dto.skills !== undefined) {
-        await this.profileService.saveCandidateData(
+        candidate = await this.profileService.saveCandidateData(
           userId,
           {
             profile: dto.profile,
@@ -109,52 +160,24 @@ export class OnboardingService {
           },
           tx
         );
-      }
-
-      // 3. Upsert OnboardingProgress
-      const nextRevision = currentDbRevision + 1;
-      const nextCompletedSteps = dto.completedSteps !== undefined
-        ? Array.from(new Set(dto.completedSteps))
-        : (existing?.completedSteps ?? []);
-      const nextStep = dto.currentStep ?? existing?.currentStep ?? "role";
-
-      let nextStatus = existing?.status ?? OnboardingStatus.IN_PROGRESS;
-      if (nextStatus === OnboardingStatus.NOT_STARTED) {
-        nextStatus = OnboardingStatus.IN_PROGRESS;
-      }
-
-      const updatedProgress = await tx.onboardingProgress.upsert({
-        where: { userId },
-        create: {
-          userId,
-          status: OnboardingStatus.IN_PROGRESS,
-          version: 1,
-          currentStep: nextStep,
-          completedSteps: nextCompletedSteps,
-          revision: nextRevision,
-          startedAt: new Date()
-        },
-        update: {
-          status: nextStatus,
-          currentStep: nextStep,
-          completedSteps: nextCompletedSteps,
-          revision: nextRevision,
-          startedAt: existing?.startedAt ?? new Date()
-        }
-      });
-
-      // 4. Fetch full updated candidate state
-      const candidate = await tx.candidateProfile.findUnique({
-        where: { userId },
-        include: {
-          preferences: true,
-          skills: {
-            orderBy: [{ isTopSkill: "desc" }, { displayName: "asc" }]
+      } else {
+        candidate = await tx.candidateProfile.findUnique({
+          where: { userId },
+          include: {
+            preferences: true,
+            skills: {
+              orderBy: [{ isTopSkill: "desc" }, { displayName: "asc" }]
+            }
           }
-        }
+        });
+      }
+
+      const updatedProgress = await tx.onboardingProgress.findUniqueOrThrow({
+        where: { userId }
       });
 
       const completeness = calculateProfileCompleteness(candidate);
+      const briefCompleteness = calculateOnboardingBriefCompleteness(candidate);
 
       return {
         progress: {
@@ -178,35 +201,39 @@ export class OnboardingService {
               primaryDiscipline: candidate.primaryDiscipline,
               currentCountry: candidate.currentCountry,
               currentCity: candidate.currentCity,
-              workAuthorizations: candidate.workAuthorizations
+              timezone: candidate.timezone,
+              workAuthorizations: candidate.workAuthorizations,
+              requiresVisaSponsorship: candidate.requiresVisaSponsorship,
+              searchStatus: candidate.searchStatus,
+              createdAt: candidate.createdAt,
+              updatedAt: candidate.updatedAt
             }
           : null,
         preferences: candidate?.preferences ?? null,
         skills: candidate?.skills ?? [],
         completeness: completeness.score,
-        breakdown: completeness
+        breakdown: completeness,
+        briefCompleteness: briefCompleteness.score,
+        briefBreakdown: briefCompleteness
       };
     });
   }
 
   async skip(userId: string) {
-    const existing = await this.prisma.onboardingProgress.findUnique({
-      where: { userId }
-    });
-
-    const nextRevision = (existing?.revision ?? 0) + 1;
     const progress = await this.prisma.onboardingProgress.upsert({
       where: { userId },
       create: {
         userId,
         status: OnboardingStatus.SKIPPED,
         version: 1,
-        revision: nextRevision,
+        revision: 1,
+        currentStep: OnboardingStep.GOAL,
+        completedSteps: [],
         skippedAt: new Date()
       },
       update: {
         status: OnboardingStatus.SKIPPED,
-        revision: nextRevision,
+        revision: { increment: 1 },
         skippedAt: new Date()
       }
     });
@@ -219,26 +246,30 @@ export class OnboardingService {
   }
 
   async complete(userId: string) {
-    const existing = await this.prisma.onboardingProgress.findUnique({
-      where: { userId }
-    });
+    const allSteps: OnboardingStep[] = [
+      OnboardingStep.GOAL,
+      OnboardingStep.REACH,
+      OnboardingStep.FIT,
+      OnboardingStep.REVIEW
+    ];
 
-    const nextRevision = (existing?.revision ?? 0) + 1;
     const progress = await this.prisma.onboardingProgress.upsert({
       where: { userId },
       create: {
         userId,
         status: OnboardingStatus.COMPLETED,
         version: 1,
-        revision: nextRevision,
-        completedAt: new Date(),
-        completedSteps: ["role", "location", "skills", "preferences"]
+        revision: 1,
+        currentStep: OnboardingStep.REVIEW,
+        completedSteps: allSteps,
+        completedAt: new Date()
       },
       update: {
         status: OnboardingStatus.COMPLETED,
-        revision: nextRevision,
-        completedAt: new Date(),
-        completedSteps: Array.from(new Set([...(existing?.completedSteps ?? []), "role", "location", "skills", "preferences"]))
+        revision: { increment: 1 },
+        currentStep: OnboardingStep.REVIEW,
+        completedSteps: allSteps,
+        completedAt: new Date()
       }
     });
 

@@ -1,6 +1,6 @@
 import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
-import { UserStatus } from "@prisma/client";
+import { OnboardingStatus, UserStatus } from "@prisma/client";
 import { ACCESS_COOKIE, AUTH_USER_KEY } from "./auth.constants";
 import { hashToken } from "./auth.utils";
 import { PrismaService } from "../prisma/prisma.service";
@@ -22,7 +22,7 @@ export class AuthGuard implements CanActivate {
 
     const session = await this.prisma.session.findUnique({
       where: { accessTokenHash: hashToken(token) },
-      include: { user: true }
+      include: { user: { include: { onboarding: true } } }
     });
     const now = new Date();
     if (!session || session.revokedAt || session.expiresAt <= now || session.accessExpiresAt <= now) {
@@ -44,7 +44,8 @@ export class AuthGuard implements CanActivate {
       normalizedEmail: session.user.normalizedEmail,
       role: session.user.role,
       status: session.user.status,
-      sessionId: session.id
+      sessionId: session.id,
+      onboardingStatus: session.user.onboarding?.status ?? OnboardingStatus.NOT_STARTED
     };
     return true;
   }

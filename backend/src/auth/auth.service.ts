@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, UnauthorizedException } from "@nestjs/common";
-import { Prisma, Role, User, UserStatus } from "@prisma/client";
+import { OnboardingStatus, Prisma, Role, User, UserStatus } from "@prisma/client";
 import { Response, Request } from "express";
 import { randomUUID } from "crypto";
 import { AppConfigService } from "../common/config/app-config.service";
@@ -52,7 +52,10 @@ export class AuthService {
 
   async login(email: string, password: string, req: Request, res: Response) {
     await this.rateLimit.consume("login", `${this.clientKey(req)}:${normalizeEmail(email)}`, this.config.auth.rateLimits.login);
-    const user = await this.prisma.user.findUnique({ where: { normalizedEmail: normalizeEmail(email) } });
+    const user = await this.prisma.user.findUnique({ 
+      where: { normalizedEmail: normalizeEmail(email) },
+      include: { onboarding: true }
+    });
     if (!user) throw new UnauthorizedException(GENERIC_LOGIN_ERROR);
     if (user.status === UserStatus.DISABLED || user.status === UserStatus.LOCKED || (user.lockedUntil && user.lockedUntil > new Date())) {
       throw new UnauthorizedException(GENERIC_LOGIN_ERROR);
@@ -82,7 +85,10 @@ export class AuthService {
     if (!token) throw new UnauthorizedException("Authentication required.");
     const refreshTokenHash = hashToken(token);
     const now = new Date();
-    const existing = await this.prisma.session.findUnique({ where: { refreshTokenHash }, include: { user: true } });
+    const existing = await this.prisma.session.findUnique({ 
+      where: { refreshTokenHash }, 
+      include: { user: { include: { onboarding: true } } } 
+    });
     if (!existing) throw new UnauthorizedException("Authentication required.");
     if (existing.revokedAt) {
       await this.prisma.session.updateMany({
@@ -367,7 +373,14 @@ export class AuthService {
     res.clearCookie(CSRF_COOKIE, { path: "/api/v1" });
   }
 
-  private publicUser(user: Pick<User, "id" | "name" | "email" | "role" | "status"> & { sessionId?: string }) {
+  private publicUser(
+    user: Pick<User, "id" | "name" | "email" | "role" | "status"> & {
+      sessionId?: string;
+      onboarding?: { status: OnboardingStatus } | null;
+      onboardingStatus?: OnboardingStatus;
+    }
+  ) {
+    const onboardingStatus = user.onboardingStatus ?? user.onboarding?.status ?? OnboardingStatus.NOT_STARTED;
     return {
       id: user.id,
       name: user.name,
@@ -375,7 +388,8 @@ export class AuthService {
       initials: user.name.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || user.email.slice(0, 2).toUpperCase(),
       role: user.role,
       status: user.status,
-      isAdmin: user.role === Role.ADMIN
+      isAdmin: user.role === Role.ADMIN,
+      onboardingStatus
     };
   }
 

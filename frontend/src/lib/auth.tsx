@@ -17,6 +17,7 @@ export interface AuthState {
   signup: (name: string, email: string, password: string) => Promise<string>;
   logout: () => Promise<void>;
   reload: () => Promise<void>;
+  updateOnboardingStatus: (status: api.OnboardingStatus) => void;
 }
 
 const AuthContext = createContext<AuthState>({
@@ -29,6 +30,7 @@ const AuthContext = createContext<AuthState>({
   signup: async () => "",
   logout: async () => {},
   reload: async () => {},
+  updateOnboardingStatus: () => {},
 });
 
 export function useAuth() {
@@ -98,6 +100,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAuthError(null);
   }, []);
 
+  const updateOnboardingStatus = useCallback((onboardingStatus: api.OnboardingStatus) => {
+    setUser((prev) => (prev ? { ...prev, onboardingStatus } : null));
+  }, []);
+
   const value = useMemo<AuthState>(() => ({
     user,
     status,
@@ -107,8 +113,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     login,
     signup,
     logout,
-    reload
-  }), [authError, login, logout, reload, signup, status, user]);
+    reload,
+    updateOnboardingStatus
+  }), [authError, login, logout, reload, signup, status, updateOnboardingStatus, user]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

@@ -505,14 +505,40 @@ enum SeniorityLevel {
   EXECUTIVE
 }
 
+enum OnboardingStep {
+  GOAL
+  REACH
+  FIT
+  REVIEW
+}
+
+enum SalaryPeriod {
+  HOURLY
+  MONTHLY
+  YEARLY
+}
+
+enum CandidateSearchStatus {
+  ACTIVELY_LOOKING
+  OPEN_TO_OFFERS
+  CASUAL
+  NOT_LOOKING
+}
+
+enum RelocationPreference {
+  NOT_OPEN
+  WILLING_TO_RELOCATE
+  OPEN_TO_REMOTE_ONLY
+}
+
 model OnboardingProgress {
   id             String           @id @default(cuid())
   userId         String           @unique
   user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   status         OnboardingStatus @default(NOT_STARTED)
   version        Int              @default(1)
-  currentStep    String           @default("role")
-  completedSteps String[]         @default([])
+  currentStep    OnboardingStep   @default(GOAL)
+  completedSteps OnboardingStep[] @default([])
   revision       Int              @default(0)
   startedAt      DateTime?
   completedAt    DateTime?
@@ -524,37 +550,43 @@ model OnboardingProgress {
 }
 
 model CandidateProfile {
-  id                 String               @id @default(cuid())
-  userId             String               @unique
-  user               User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
-  headline           String?
-  bio                String?
-  experienceYears    Int?
-  seniorityLevel     SeniorityLevel?
-  primaryDiscipline  String?
-  currentCountry     String?              // ISO 3166-1 alpha-2 (e.g., 'US', 'PK', 'DE')
-  currentCity        String?
-  workAuthorizations String[]             @default([]) // Array of ISO-2 country codes
-  preferences        CandidatePreference?
-  skills             CandidateSkill[]
-  createdAt          DateTime             @default(now())
-  updatedAt          DateTime             @updatedAt
+  id                      String                 @id @default(cuid())
+  userId                  String                 @unique
+  user                    User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  headline                String?
+  bio                     String?
+  experienceYears         Int?
+  seniorityLevel          SeniorityLevel?
+  primaryDiscipline       String?
+  currentCountry          String?                // Base physical country (ISO 3166-1 alpha-2, e.g. 'US')
+  currentCity             String?
+  timezone                String?                // e.g. 'America/Los_Angeles', 'UTC+5'
+  workAuthorizations      String[]               @default([]) // Legal work rights without sponsorship (ISO-2 codes)
+  requiresVisaSponsorship Boolean?
+  searchStatus            CandidateSearchStatus?
+  preferences             CandidatePreference?
+  skills                  CandidateSkill[]
+  createdAt               DateTime               @default(now())
+  updatedAt               DateTime               @updatedAt
 }
 
 model CandidatePreference {
-  id                 String           @id @default(cuid())
-  profileId          String           @unique
-  profile            CandidateProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
-  targetRoleTitles   String[]         @default([]) // e.g. ["Senior Full Stack Engineer", "Backend Architect"]
-  targetDisciplines  String[]         @default([]) // e.g. ["Software Engineering", "Platform Infrastructure"]
-  remotePreference   RemotePreference @default(OPEN_TO_ANY)
-  preferredCountries String[]         @default([]) // Array of ISO-2 codes
-  preferredCities    String[]         @default([])
-  minSalary          Int?
-  maxSalary          Int?
-  salaryCurrency     String?          @default("USD")
-  createdAt          DateTime         @default(now())
-  updatedAt          DateTime         @updatedAt
+  id                   String                @id @default(cuid())
+  profileId            String                @unique
+  profile              CandidateProfile      @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  targetRoleTitles     String[]              @default([]) // e.g. ["Senior Full Stack Engineer", "Backend Architect"]
+  targetDisciplines    String[]              @default([]) // e.g. ["Software Engineering", "Platform Infrastructure"]
+  remotePreference     RemotePreference?     // Nullable: no deceptive default
+  preferredCountries   String[]              @default([]) // ISO-2 codes where candidate targets roles
+  preferredCities      String[]              @default([])
+  employmentTypes      String[]              @default([]) // e.g. ["FULL_TIME", "CONTRACT"]
+  relocationPreference RelocationPreference?
+  minSalary            Int?
+  maxSalary            Int?
+  salaryCurrency       String?               // Nullable: no deceptive USD default
+  salaryPeriod         SalaryPeriod?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
 }
 
 model CandidateSkill {

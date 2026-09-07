@@ -1,8 +1,12 @@
 import { authRequest } from "./auth-api";
 
 export type OnboardingStatus = "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED" | "SKIPPED";
+export type OnboardingStep = "GOAL" | "REACH" | "FIT" | "REVIEW";
 export type RemotePreference = "REMOTE_ONLY" | "HYBRID" | "ONSITE" | "OPEN_TO_ANY";
 export type SeniorityLevel = "ENTRY" | "MID" | "SENIOR" | "LEAD" | "PRINCIPAL" | "DIRECTOR" | "EXECUTIVE";
+export type SalaryPeriod = "HOURLY" | "MONTHLY" | "YEARLY";
+export type CandidateSearchStatus = "ACTIVELY_LOOKING" | "OPEN_TO_OFFERS" | "CASUAL" | "NOT_LOOKING";
+export type RelocationPreference = "NOT_OPEN" | "WILLING_TO_RELOCATE" | "OPEN_TO_REMOTE_ONLY";
 
 export interface CandidateSkillItem {
   id?: string;
@@ -21,7 +25,10 @@ export interface CandidateProfileData {
   primaryDiscipline: string | null;
   currentCountry: string | null;
   currentCity: string | null;
+  timezone: string | null;
   workAuthorizations: string[];
+  requiresVisaSponsorship: boolean | null;
+  searchStatus: CandidateSearchStatus | null;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -30,19 +37,22 @@ export interface CandidatePreferenceData {
   id: string;
   targetRoleTitles: string[];
   targetDisciplines: string[];
-  remotePreference: RemotePreference;
+  remotePreference: RemotePreference | null;
   preferredCountries: string[];
   preferredCities: string[];
+  employmentTypes: string[];
+  relocationPreference: RelocationPreference | null;
   minSalary: number | null;
   maxSalary: number | null;
   salaryCurrency: string | null;
+  salaryPeriod: SalaryPeriod | null;
 }
 
 export interface OnboardingProgressData {
   status: OnboardingStatus;
   version: number;
-  currentStep: string;
-  completedSteps: string[];
+  currentStep: OnboardingStep;
+  completedSteps: OnboardingStep[];
   revision: number;
   startedAt: string | null;
   completedAt: string | null;
@@ -64,6 +74,14 @@ export interface OnboardingState {
     seniorityAndExperience: number;
     headlineAndBio: number;
   };
+  briefCompleteness?: number;
+  briefBreakdown?: {
+    score: number;
+    roles: number;
+    location: number;
+    skills: number;
+    compensationAndPreferences: number;
+  };
 }
 
 export interface ProfileState {
@@ -79,12 +97,20 @@ export interface ProfileState {
     seniorityAndExperience: number;
     headlineAndBio: number;
   };
+  briefCompleteness?: number;
+  briefBreakdown?: {
+    score: number;
+    roles: number;
+    location: number;
+    skills: number;
+    compensationAndPreferences: number;
+  };
 }
 
 export interface AutosaveOnboardingDto {
   expectedRevision: number;
-  currentStep?: string;
-  completedSteps?: string[];
+  currentStep?: OnboardingStep;
+  completedSteps?: OnboardingStep[];
   profile?: Partial<{
     headline: string;
     bio: string;
@@ -93,7 +119,10 @@ export interface AutosaveOnboardingDto {
     primaryDiscipline: string;
     currentCountry: string;
     currentCity: string;
+    timezone: string;
     workAuthorizations: string[];
+    requiresVisaSponsorship: boolean;
+    searchStatus: CandidateSearchStatus;
   }>;
   preferences?: Partial<{
     targetRoleTitles: string[];
@@ -101,9 +130,12 @@ export interface AutosaveOnboardingDto {
     remotePreference: RemotePreference;
     preferredCountries: string[];
     preferredCities: string[];
+    employmentTypes: string[];
+    relocationPreference: RelocationPreference;
     minSalary: number;
     maxSalary: number;
     salaryCurrency: string;
+    salaryPeriod: SalaryPeriod;
   }>;
   skills?: CandidateSkillItem[];
 }

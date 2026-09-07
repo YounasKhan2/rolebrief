@@ -1,5 +1,5 @@
 import { createParamDecorator, ExecutionContext, SetMetadata } from "@nestjs/common";
-import { Role, UserStatus } from "@prisma/client";
+import { Role, UserStatus, OnboardingStatus } from "@prisma/client";
 import { AUTH_USER_KEY } from "./auth.constants";
 
 export const ROLES_KEY = "roles";
@@ -14,6 +14,7 @@ export interface AuthenticatedUser {
   role: Role;
   status: UserStatus;
   sessionId: string;
+  onboardingStatus: OnboardingStatus;
 }
 
 export const CurrentUser = createParamDecorator((_: unknown, ctx: ExecutionContext) => {

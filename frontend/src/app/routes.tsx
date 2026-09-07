@@ -89,9 +89,7 @@ export const router = createBrowserRouter([
     path: "/app/onboarding",
     element: (
       <RequireAuth>
-        <OnboardingGate>
-          <OnboardingLayout />
-        </OnboardingGate>
+        <OnboardingLayout />
       </RequireAuth>
     ),
     HydrateFallback: RouteFallback,

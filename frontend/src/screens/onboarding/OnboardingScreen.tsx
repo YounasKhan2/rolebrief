@@ -1,34 +1,40 @@
 import { useEffect, useRef, useState, useTransition } from "react";
-import { Link, useNavigate } from "react-router";
+import { useLocation, useNavigate } from "react-router";
 import {
   ArrowLeft,
   ArrowRight,
   Check,
   FileText,
-  Globe,
-  Info,
   Loader2,
   Lock,
   Plus,
+  RefreshCw,
   Sparkles,
   X
 } from "lucide-react";
 import { Button, FilterChip, Kicker } from "../../components/ui/primitives";
 import { Input, SegmentedControl } from "../../components/ui/form";
 import { classNames } from "../../lib/format";
-import { useOnboarding } from "../../components/auth/OnboardingGate";
+import { useAuth } from "../../lib/auth";
 import { useOnboardingLayout } from "../../layouts/OnboardingLayout";
+import { sanitizeReturnTo } from "../../lib/routing";
 import {
   autosaveOnboarding,
   completeOnboarding,
+  getOnboardingState,
   skipOnboarding,
+  CandidateSearchStatus,
   CandidateSkillItem,
+  OnboardingStep,
+  RelocationPreference,
   RemotePreference,
+  SalaryPeriod,
   SeniorityLevel
 } from "../../lib/onboarding-api";
 import { ApiError } from "../../lib/api";
 
-const stepNames = ["Goal", "Reach", "Fit", "Review"] as const;
+const STEP_ENUMS: OnboardingStep[] = ["GOAL", "REACH", "FIT", "REVIEW"];
+const stepDisplayNames = ["Goal", "Reach", "Fit", "Review"] as const;
 
 const COMMON_COUNTRIES = [
   { code: "US", name: "United States" },
@@ -72,97 +78,154 @@ const CURATED_SKILLS = [
 
 export function Component() {
   const navigate = useNavigate();
-  const { state, refresh: refreshGateState, updateStateLocally } = useOnboarding();
+  const location = useLocation();
+  const { user, isAdmin, updateOnboardingStatus } = useAuth();
   const { setSaveStatus, setStatusMessage } = useOnboardingLayout();
   const [, startTransition] = useTransition();
 
-  // Wizard state initialized from canonical database state
+  const searchParams = new URLSearchParams(location.search);
+  const returnTo = sanitizeReturnTo(searchParams.get("returnTo"));
+
+  // Initial loading & re-entry states
+  const [loading, setLoading] = useState(true);
+  const [initError, setInitError] = useState<string | null>(null);
+
+  // Wizard step (0 = GOAL, 1 = REACH, 2 = FIT, 3 = REVIEW)
   const [step, setStep] = useState(0);
-  const [revision, setRevision] = useState(state?.progress?.revision ?? 0);
+  const [revision, setRevision] = useState(0);
 
   // Step 1: Goal
-  const [targetRoleTitles, setTargetRoleTitles] = useState<string[]>(
-    state?.preferences?.targetRoleTitles?.length
-      ? state.preferences.targetRoleTitles
-      : ["Senior Software Engineer"]
-  );
+  const [targetRoleTitles, setTargetRoleTitles] = useState<string[]>([]);
   const [newRoleInput, setNewRoleInput] = useState("");
-  const [targetDisciplines, setTargetDisciplines] = useState<string[]>(
-    state?.preferences?.targetDisciplines?.length
-      ? state.preferences.targetDisciplines
-      : ["Software Engineering"]
-  );
-  const [seniority, setSeniority] = useState<SeniorityLevel>(
-    state?.profile?.seniorityLevel ?? "SENIOR"
-  );
-  const [headline, setHeadline] = useState(
-    state?.profile?.headline ?? "Software Engineer"
-  );
+  const [targetDisciplines, setTargetDisciplines] = useState<string[]>([]);
+  const [seniority, setSeniority] = useState<SeniorityLevel | null>(null);
+  const [searchStatus, setSearchStatus] = useState<CandidateSearchStatus | null>(null);
+  const [headline, setHeadline] = useState("");
 
-  // Step 2: Reach (Location, Remote, Authorizations)
-  const [currentCountry, setCurrentCountry] = useState<string>(
-    state?.profile?.currentCountry ?? "US"
-  );
-  const [currentCity, setCurrentCity] = useState<string>(
-    state?.profile?.currentCity ?? ""
-  );
-  const [remotePreference, setRemotePreference] = useState<RemotePreference>(
-    state?.preferences?.remotePreference ?? "OPEN_TO_ANY"
-  );
-  const [workAuthorizations, setWorkAuthorizations] = useState<string[]>(
-    state?.profile?.workAuthorizations?.length
-      ? state.profile.workAuthorizations
-      : ["US"]
-  );
-  const [preferredCountries, setPreferredCountries] = useState<string[]>(
-    state?.preferences?.preferredCountries?.length
-      ? state.preferences.preferredCountries
-      : ["US"]
-  );
+  // Step 2: Reach (Location, Remote, Authorizations, Relocation)
+  const [currentCountry, setCurrentCountry] = useState<string>("");
+  const [currentCity, setCurrentCity] = useState<string>("");
+  const [timezone, setTimezone] = useState<string>("");
+  const [remotePreference, setRemotePreference] = useState<RemotePreference | null>(null);
+  const [workAuthorizations, setWorkAuthorizations] = useState<string[]>([]);
+  const [requiresVisaSponsorship, setRequiresVisaSponsorship] = useState<boolean | null>(null);
+  const [preferredCountries, setPreferredCountries] = useState<string[]>([]);
+  const [employmentTypes, setEmploymentTypes] = useState<string[]>([]);
+  const [relocationPreference, setRelocationPreference] = useState<RelocationPreference | null>(null);
 
   // Step 3: Fit (Skills, Experience)
-  const [skills, setSkills] = useState<CandidateSkillItem[]>(
-    state?.skills?.length
-      ? state.skills
-      : [{ displayName: "TypeScript" }, { displayName: "React" }]
-  );
+  const [skills, setSkills] = useState<CandidateSkillItem[]>([]);
   const [newSkillInput, setNewSkillInput] = useState("");
-  const [experienceYears, setExperienceYears] = useState<number>(
-    state?.profile?.experienceYears ?? 5
-  );
+  const [experienceYears, setExperienceYears] = useState<number | null>(null);
 
-  // Step 4: Compensation & Alert Staging
-  const [minSalary, setMinSalary] = useState<number | undefined>(
-    state?.preferences?.minSalary ?? 120000
-  );
-  const [maxSalary, setMaxSalary] = useState<number | undefined>(
-    state?.preferences?.maxSalary ?? 180000
-  );
-  const [salaryCurrency, setSalaryCurrency] = useState<string>(
-    state?.preferences?.salaryCurrency ?? "USD"
-  );
+  // Step 4: Compensation & Review
+  const [minSalary, setMinSalary] = useState<number | undefined>(undefined);
+  const [maxSalary, setMaxSalary] = useState<number | undefined>(undefined);
+  const [salaryCurrency, setSalaryCurrency] = useState<string | null>(null);
+  const [salaryPeriod, setSalaryPeriod] = useState<SalaryPeriod | null>(null);
+
+  const [briefScore, setBriefScore] = useState<number>(0);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSkipping, setIsSkipping] = useState(false);
   const [conflictError, setConflictError] = useState<string | null>(null);
 
-  // Autosave debouncing ref
   const autosaveTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const isFirstMount = useRef(true);
+  const isLoadedRef = useRef(false);
+  const isTransitioningRef = useRef(false);
 
-  // Keep local revision in sync when gate state reloads
+  // Initial load & Re-entry check
   useEffect(() => {
-    if (state?.progress?.revision !== undefined) {
-      setRevision(state.progress.revision);
-    }
-  }, [state?.progress?.revision]);
+    // If currently submitting or skipping, do not run re-entry check
+    if (isTransitioningRef.current) return;
 
-  // Autosave trigger on field modifications
-  useEffect(() => {
-    if (isFirstMount.current) {
-      isFirstMount.current = false;
+    // 1. Admin bypass: Admins never do candidate onboarding
+    if (isAdmin) {
+      navigate("/admin", { replace: true });
       return;
     }
+
+    // 2. AuthUser fast re-entry check (for users navigating into /app/onboarding when already completed/skipped)
+    if (user?.onboardingStatus === "COMPLETED" || user?.onboardingStatus === "SKIPPED") {
+      navigate("/app/profile", { replace: true });
+      return;
+    }
+
+    let mounted = true;
+    async function load() {
+      try {
+        setLoading(true);
+        setInitError(null);
+        const data = await getOnboardingState();
+        if (!mounted) return;
+
+        // Check if database says completed or skipped
+        if (data.progress.status === "COMPLETED" || data.progress.status === "SKIPPED") {
+          updateOnboardingStatus(data.progress.status);
+          navigate("/app/profile", { replace: true });
+          return;
+        }
+
+        // Initialize state from DB without inserting deceptive defaults
+        setRevision(data.progress.revision);
+
+        // Map step enum to index
+        const stepIdx = STEP_ENUMS.indexOf(data.progress.currentStep);
+        if (stepIdx >= 0) {
+          setStep(stepIdx);
+        }
+
+        if (data.preferences?.targetRoleTitles) setTargetRoleTitles(data.preferences.targetRoleTitles);
+        if (data.preferences?.targetDisciplines) setTargetDisciplines(data.preferences.targetDisciplines);
+        if (data.profile?.seniorityLevel) setSeniority(data.profile.seniorityLevel);
+        if (data.profile?.searchStatus) setSearchStatus(data.profile.searchStatus);
+        if (data.profile?.headline) setHeadline(data.profile.headline);
+
+        if (data.profile?.currentCountry) setCurrentCountry(data.profile.currentCountry);
+        if (data.profile?.currentCity) setCurrentCity(data.profile.currentCity);
+        setTimezone(data.profile?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC");
+        if (data.profile?.workAuthorizations) setWorkAuthorizations(data.profile.workAuthorizations);
+        if (data.profile?.requiresVisaSponsorship !== null && data.profile?.requiresVisaSponsorship !== undefined) {
+          setRequiresVisaSponsorship(data.profile.requiresVisaSponsorship);
+        }
+        if (data.preferences?.remotePreference) setRemotePreference(data.preferences.remotePreference);
+        if (data.preferences?.preferredCountries) setPreferredCountries(data.preferences.preferredCountries);
+        if (data.preferences?.employmentTypes) setEmploymentTypes(data.preferences.employmentTypes);
+        if (data.preferences?.relocationPreference) setRelocationPreference(data.preferences.relocationPreference);
+
+        if (data.skills) setSkills(data.skills);
+        if (data.profile?.experienceYears !== null && data.profile?.experienceYears !== undefined) {
+          setExperienceYears(data.profile.experienceYears);
+        }
+
+        if (data.preferences?.minSalary) setMinSalary(data.preferences.minSalary);
+        if (data.preferences?.maxSalary) setMaxSalary(data.preferences.maxSalary);
+        if (data.preferences?.salaryCurrency) setSalaryCurrency(data.preferences.salaryCurrency);
+        if (data.preferences?.salaryPeriod) setSalaryPeriod(data.preferences.salaryPeriod);
+
+        if (data.briefCompleteness !== undefined) setBriefScore(data.briefCompleteness);
+
+        setLoading(false);
+        // Mark as loaded so autosave can run on subsequent user modifications
+        setTimeout(() => {
+          isLoadedRef.current = true;
+        }, 100);
+      } catch (err: unknown) {
+        if (!mounted) return;
+        setInitError(err instanceof Error ? err.message : "Could not load onboarding state.");
+        setLoading(false);
+      }
+    }
+
+    void load();
+    return () => {
+      mounted = false;
+    };
+  }, [isAdmin, user?.onboardingStatus, navigate, updateOnboardingStatus]);
+
+  // Debounced Autosave on user modification
+  useEffect(() => {
+    if (!isLoadedRef.current) return;
 
     if (autosaveTimerRef.current) {
       clearTimeout(autosaveTimerRef.current);
@@ -174,31 +237,40 @@ export function Component() {
       try {
         const payload = {
           expectedRevision: revision,
-          currentStep: stepNames[step].toLowerCase(),
-          completedSteps: stepNames.slice(0, step).map((s) => s.toLowerCase()),
+          currentStep: STEP_ENUMS[step],
+          completedSteps: STEP_ENUMS.slice(0, step),
           profile: {
-            headline,
-            experienceYears,
-            seniorityLevel: seniority,
-            currentCountry,
+            headline: headline || undefined,
+            experienceYears: experienceYears ?? undefined,
+            seniorityLevel: seniority || undefined,
+            currentCountry: currentCountry || undefined,
             currentCity: currentCity || undefined,
-            workAuthorizations
+            timezone: timezone || undefined,
+            workAuthorizations,
+            requiresVisaSponsorship: requiresVisaSponsorship ?? undefined,
+            searchStatus: searchStatus || undefined
           },
           preferences: {
             targetRoleTitles,
             targetDisciplines,
-            remotePreference,
+            remotePreference: remotePreference || undefined,
             preferredCountries,
+            employmentTypes,
+            relocationPreference: relocationPreference || undefined,
             minSalary: minSalary || undefined,
             maxSalary: maxSalary || undefined,
-            salaryCurrency
+            salaryCurrency: salaryCurrency || undefined,
+            salaryPeriod: salaryPeriod || undefined
           },
-          skills
+          // CRITICAL: Only send skills snapshot on FIT step (step === 2)
+          skills: step === 2 ? skills : undefined
         };
 
         const updated = await autosaveOnboarding(payload);
         setRevision(updated.progress.revision);
-        updateStateLocally(updated);
+        if (updated.briefCompleteness !== undefined) {
+          setBriefScore(updated.briefCompleteness);
+        }
         setSaveStatus("saved");
         setConflictError(null);
       } catch (err: unknown) {
@@ -223,28 +295,30 @@ export function Component() {
     targetRoleTitles,
     targetDisciplines,
     seniority,
+    searchStatus,
     headline,
     currentCountry,
     currentCity,
+    timezone,
     remotePreference,
     workAuthorizations,
+    requiresVisaSponsorship,
     preferredCountries,
+    employmentTypes,
+    relocationPreference,
     skills,
     experienceYears,
     minSalary,
     maxSalary,
     salaryCurrency,
+    salaryPeriod,
     setSaveStatus,
-    setStatusMessage,
-    updateStateLocally
+    setStatusMessage
   ]);
 
-  // Helpers to toggle items in arrays
   function toggleArrayItem(list: string[], item: string, setter: (items: string[]) => void) {
     if (list.includes(item)) {
-      if (list.length > 1) {
-        setter(list.filter((x) => x !== item));
-      }
+      setter(list.filter((x) => x !== item));
     } else {
       setter([...list, item]);
     }
@@ -259,18 +333,14 @@ export function Component() {
   }
 
   function removeTargetRole(role: string) {
-    if (targetRoleTitles.length > 1) {
-      setTargetRoleTitles(targetRoleTitles.filter((r) => r !== role));
-    }
+    setTargetRoleTitles(targetRoleTitles.filter((r) => r !== role));
   }
 
   function toggleSkill(name: string) {
     const norm = name.trim().toLowerCase();
     const exists = skills.some((s) => s.displayName.trim().toLowerCase() === norm);
     if (exists) {
-      if (skills.length > 1) {
-        setSkills(skills.filter((s) => s.displayName.trim().toLowerCase() !== norm));
-      }
+      setSkills(skills.filter((s) => s.displayName.trim().toLowerCase() !== norm));
     } else {
       setSkills([...skills, { displayName: name.trim() }]);
     }
@@ -287,33 +357,35 @@ export function Component() {
   }
 
   function removeSkill(name: string) {
-    if (skills.length > 1) {
-      setSkills(skills.filter((s) => s.displayName !== name));
-    }
+    setSkills(skills.filter((s) => s.displayName !== name));
   }
 
   async function handleSkip() {
+    isTransitioningRef.current = true;
     setIsSkipping(true);
     try {
       await skipOnboarding();
-      await refreshGateState();
+      updateOnboardingStatus("SKIPPED");
       startTransition(() => {
-        navigate("/app/radar", { replace: true });
+        navigate(returnTo, { replace: true });
       });
     } catch {
+      isTransitioningRef.current = false;
       setIsSkipping(false);
     }
   }
 
   async function handleComplete() {
+    isTransitioningRef.current = true;
     setIsSubmitting(true);
     try {
       await completeOnboarding();
-      await refreshGateState();
+      updateOnboardingStatus("COMPLETED");
       startTransition(() => {
-        navigate("/app/radar", { replace: true });
+        navigate(returnTo, { replace: true });
       });
     } catch {
+      isTransitioningRef.current = false;
       setIsSubmitting(false);
     }
   }
@@ -334,13 +406,46 @@ export function Component() {
     }
   };
 
+  if (loading) {
+    return (
+      <div className="w-full flex-1 flex flex-col items-center justify-center py-24">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 size={24} className="animate-spin text-indigo" />
+          <span className="text-xs font-mono uppercase tracking-widest text-slate">
+            Loading opportunity brief…
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  if (initError) {
+    return (
+      <div className="w-full flex-1 flex flex-col items-center justify-center p-6 text-center">
+        <div className="max-w-md w-full rounded-[var(--radius-card)] border border-line bg-white p-8 shadow-sm">
+          <h2 className="text-lg font-semibold text-ink">Could not load onboarding</h2>
+          <p className="mt-2 text-sm text-slate">{initError}</p>
+          <div className="mt-6 flex justify-center">
+            <Button
+              onClick={() => window.location.reload()}
+              variant="secondary"
+              icon={<RefreshCw size={14} />}
+            >
+              Reload Page
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="w-full flex-1 flex flex-col items-center py-8 px-4 sm:px-6">
       <div className="w-full max-w-3xl">
         {/* Step Progress Bar */}
         <div className="mb-8 flex items-center justify-between">
           <ol className="flex items-center gap-2 grow max-w-xl">
-            {stepNames.map((name, i) => (
+            {stepDisplayNames.map((name, i) => (
               <li key={name} className="flex items-center gap-2 grow last:grow-0">
                 <button
                   type="button"
@@ -393,11 +498,11 @@ export function Component() {
           <div className="mb-6 rounded-[var(--radius-card)] border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 flex items-center justify-between">
             <p>{conflictError}</p>
             <Button
-              onClick={() => void refreshGateState()}
+              onClick={() => window.location.reload()}
               variant="secondary"
               size="sm"
             >
-              Sync Latest
+              Reload Page
             </Button>
           </div>
         )}
@@ -413,25 +518,25 @@ export function Component() {
             >
               <Field label="Target Role Titles">
                 <div className="space-y-3">
-                  <div className="flex flex-wrap gap-2">
-                    {targetRoleTitles.map((role) => (
-                      <span
-                        key={role}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--radius-pill)] bg-indigo-tint/50 border border-indigo/20 text-xs font-medium text-ink"
-                      >
-                        {role}
-                        {targetRoleTitles.length > 1 && (
+                  {targetRoleTitles.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {targetRoleTitles.map((role) => (
+                        <span
+                          key={role}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--radius-pill)] bg-indigo-tint/50 border border-indigo/20 text-xs font-medium text-ink"
+                        >
+                          {role}
                           <button
                             type="button"
                             onClick={() => removeTargetRole(role)}
-                            className="text-slate hover:text-rose-600 transition-colors"
+                            className="text-slate hover:text-rose-600 transition-colors cursor-pointer"
                           >
                             <X size={12} />
                           </button>
-                        )}
-                      </span>
-                    ))}
-                  </div>
+                        </span>
+                      ))}
+                    </div>
+                  )}
 
                   <div className="flex items-center gap-2 max-w-md">
                     <Input
@@ -472,26 +577,41 @@ export function Component() {
                 </div>
               </Field>
 
-              <Field label="Target Seniority Level">
-                <SegmentedControl
-                  value={seniority}
-                  onChange={(v) => setSeniority(v as SeniorityLevel)}
-                  options={[
-                    { value: "MID", label: "Mid" },
-                    { value: "SENIOR", label: "Senior" },
-                    { value: "LEAD", label: "Lead" },
-                    { value: "PRINCIPAL", label: "Principal" },
-                    { value: "DIRECTOR", label: "Director" }
-                  ]}
-                />
-              </Field>
+              <div className="grid sm:grid-cols-2 gap-5">
+                <Field label="Target Seniority Level">
+                  <SegmentedControl
+                    value={seniority ?? ""}
+                    onChange={(v) => setSeniority(v ? (v as SeniorityLevel) : null)}
+                    options={[
+                      { value: "MID", label: "Mid" },
+                      { value: "SENIOR", label: "Senior" },
+                      { value: "LEAD", label: "Lead" },
+                      { value: "PRINCIPAL", label: "Principal" },
+                      { value: "DIRECTOR", label: "Director" }
+                    ]}
+                  />
+                </Field>
+
+                <Field label="Search Status">
+                  <SegmentedControl
+                    value={searchStatus ?? ""}
+                    onChange={(v) => setSearchStatus(v ? (v as CandidateSearchStatus) : null)}
+                    options={[
+                      { value: "ACTIVELY_LOOKING", label: "Active" },
+                      { value: "OPEN_TO_OFFERS", label: "Open" },
+                      { value: "CASUAL", label: "Casual" },
+                      { value: "NOT_LOOKING", label: "Not looking" }
+                    ]}
+                  />
+                </Field>
+              </div>
 
               <Field label="Professional Headline">
                 <Input
                   value={headline}
                   onChange={(e) => setHeadline(e.target.value)}
-                  placeholder="e.g. Senior Full Stack Engineer · Distributed Systems"
-                  maxLength={120}
+                  placeholder="e.g. Staff Infrastructure Engineer · Distributed Systems"
+                  maxLength={140}
                 />
               </Field>
             </Section>
@@ -505,12 +625,13 @@ export function Component() {
               desc="We strictly enforce ISO-standard work eligibility and remote boundaries to shield you from ineligible job listings."
             >
               <div className="grid sm:grid-cols-2 gap-5">
-                <Field label="Current Base Country">
+                <Field label="Current Base Country (ISO-2)">
                   <select
                     value={currentCountry}
                     onChange={(e) => setCurrentCountry(e.target.value)}
                     className="w-full rounded-[var(--radius-control)] border border-line bg-white px-3 py-2 text-sm text-ink focus:outline-hidden focus:ring-2 focus:ring-indigo/20 focus:border-indigo"
                   >
+                    <option value="">Select country…</option>
                     {COMMON_COUNTRIES.map((c) => (
                       <option key={c.code} value={c.code}>
                         {c.name} ({c.code})
@@ -528,21 +649,34 @@ export function Component() {
                 </Field>
               </div>
 
-              <Field label="Remote Work Mode">
-                <SegmentedControl
-                  value={remotePreference}
-                  onChange={(v) => setRemotePreference(v as RemotePreference)}
-                  options={[
-                    { value: "REMOTE_ONLY", label: "Remote Only" },
-                    { value: "HYBRID", label: "Hybrid" },
-                    { value: "ONSITE", label: "On-site" },
-                    { value: "OPEN_TO_ANY", label: "Open to Any" }
-                  ]}
-                />
-              </Field>
+              <div className="grid sm:grid-cols-2 gap-5">
+                <Field label="Remote Work Mode">
+                  <SegmentedControl
+                    value={remotePreference ?? ""}
+                    onChange={(v) => setRemotePreference(v ? (v as RemotePreference) : null)}
+                    options={[
+                      { value: "REMOTE_ONLY", label: "Remote Only" },
+                      { value: "HYBRID", label: "Hybrid" },
+                      { value: "ONSITE", label: "On-site" },
+                      { value: "OPEN_TO_ANY", label: "Open to Any" }
+                    ]}
+                  />
+                </Field>
 
-              <Field label="Work Authorization Countries (ISO-2)">
-                <p className="text-xs text-slate mb-2">Select all countries where you hold legal right to work without sponsorship.</p>
+                <Field label="Employer Visa Sponsorship">
+                  <SegmentedControl
+                    value={requiresVisaSponsorship === null ? "" : requiresVisaSponsorship ? "YES" : "NO"}
+                    onChange={(v) => setRequiresVisaSponsorship(v === "YES" ? true : v === "NO" ? false : null)}
+                    options={[
+                      { value: "NO", label: "Not needed" },
+                      { value: "YES", label: "Required" }
+                    ]}
+                  />
+                </Field>
+              </div>
+
+              <Field label="Work Authorization Countries (No Sponsorship Needed)">
+                <p className="text-xs text-slate mb-2">Select all countries where you hold legal right to work without employer sponsorship.</p>
                 <div className="flex flex-wrap gap-2">
                   {COMMON_COUNTRIES.map((c) => (
                     <FilterChip
@@ -570,6 +704,38 @@ export function Component() {
                   ))}
                 </div>
               </Field>
+
+              <div className="grid sm:grid-cols-2 gap-5">
+                <Field label="Employment Types Accepted">
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      { value: "FULL_TIME", label: "Full-time" },
+                      { value: "CONTRACT", label: "Contract" },
+                      { value: "PART_TIME", label: "Part-time" }
+                    ].map((t) => (
+                      <FilterChip
+                        key={t.value}
+                        active={employmentTypes.includes(t.value)}
+                        onClick={() => toggleArrayItem(employmentTypes, t.value, setEmploymentTypes)}
+                      >
+                        {t.label}
+                      </FilterChip>
+                    ))}
+                  </div>
+                </Field>
+
+                <Field label="Relocation Preference">
+                  <SegmentedControl
+                    value={relocationPreference ?? ""}
+                    onChange={(v) => setRelocationPreference(v ? (v as RelocationPreference) : null)}
+                    options={[
+                      { value: "NOT_OPEN", label: "No Relocation" },
+                      { value: "WILLING_TO_RELOCATE", label: "Willing" },
+                      { value: "OPEN_TO_REMOTE_ONLY", label: "Remote Only" }
+                    ]}
+                  />
+                </Field>
+              </div>
             </Section>
           )}
 
@@ -582,25 +748,25 @@ export function Component() {
             >
               <Field label="Your Core Skills">
                 <div className="space-y-3">
-                  <div className="flex flex-wrap gap-2">
-                    {skills.map((s) => (
-                      <span
-                        key={s.displayName}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--radius-pill)] bg-indigo-tint/50 border border-indigo/20 text-xs font-medium text-ink"
-                      >
-                        {s.displayName}
-                        {skills.length > 1 && (
+                  {skills.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {skills.map((s) => (
+                        <span
+                          key={s.displayName}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--radius-pill)] bg-indigo-tint/50 border border-indigo/20 text-xs font-medium text-ink"
+                        >
+                          {s.displayName}
                           <button
                             type="button"
                             onClick={() => removeSkill(s.displayName)}
-                            className="text-slate hover:text-rose-600 transition-colors"
+                            className="text-slate hover:text-rose-600 transition-colors cursor-pointer"
                           >
                             <X size={12} />
                           </button>
-                        )}
-                      </span>
-                    ))}
-                  </div>
+                        </span>
+                      ))}
+                    </div>
+                  )}
 
                   <div className="flex items-center gap-2 max-w-md">
                     <Input
@@ -647,8 +813,9 @@ export function Component() {
                     type="number"
                     min={0}
                     max={50}
-                    value={experienceYears}
-                    onChange={(e) => setExperienceYears(parseInt(e.target.value, 10) || 0)}
+                    value={experienceYears ?? ""}
+                    onChange={(e) => setExperienceYears(parseInt(e.target.value, 10) || null)}
+                    placeholder="e.g. 5"
                   />
                 </div>
               </Field>
@@ -687,24 +854,38 @@ export function Component() {
               title="Review your opportunity brief"
               desc="Confirm your foundational preferences. You can update any of these settings at any time from your profile."
             >
+              {/* Brief Completeness Progress Gauge */}
+              <div className="rounded-[var(--radius-card)] border border-line bg-paper/40 p-4 mb-2">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-xs font-mono uppercase tracking-wider text-slate">Opportunity Brief Completeness</span>
+                  <span className="text-xs font-mono font-bold text-ink">{briefScore}%</span>
+                </div>
+                <div className="h-2 rounded-full bg-line/60 overflow-hidden">
+                  <div
+                    className="h-full bg-indigo transition-all duration-500 rounded-full"
+                    style={{ width: `${briefScore}%` }}
+                  />
+                </div>
+              </div>
+
               <div className="grid sm:grid-cols-2 gap-4">
-                <ReviewRow label="Target Roles" value={targetRoleTitles.join(", ")} />
-                <ReviewRow label="Seniority & Headline" value={`${seniority} · ${headline}`} />
-                <ReviewRow label="Primary Discipline" value={targetDisciplines.join(", ")} />
-                <ReviewRow label="Base Location" value={`${currentCity ? `${currentCity}, ` : ""}${currentCountry}`} />
-                <ReviewRow label="Remote Scope" value={remotePreference.replace(/_/g, " ")} />
-                <ReviewRow label="Authorized Countries" value={workAuthorizations.join(", ")} />
-                <ReviewRow label="Skills" value={skills.map((s) => s.displayName).join(", ")} />
-                <ReviewRow label="Experience" value={`${experienceYears} years`} />
+                <ReviewRow label="Target Roles" value={targetRoleTitles.join(", ") || "None specified"} />
+                <ReviewRow label="Seniority & Headline" value={`${seniority ?? "Not specified"} · ${headline || "No headline"}`} />
+                <ReviewRow label="Primary Discipline" value={targetDisciplines.join(", ") || "None selected"} />
+                <ReviewRow label="Base Location" value={`${currentCity ? `${currentCity}, ` : ""}${currentCountry || "Not specified"}`} />
+                <ReviewRow label="Remote Scope" value={remotePreference ? remotePreference.replace(/_/g, " ") : "Not specified"} />
+                <ReviewRow label="Authorized Countries" value={workAuthorizations.join(", ") || "None specified"} />
+                <ReviewRow label="Skills" value={skills.map((s) => s.displayName).join(", ") || "None added"} />
+                <ReviewRow label="Experience" value={experienceYears !== null ? `${experienceYears} years` : "Not specified"} />
               </div>
 
               <div className="pt-2 border-t border-line space-y-4">
-                <div className="grid sm:grid-cols-3 gap-4">
+                <div className="grid sm:grid-cols-4 gap-4">
                   <Field label="Minimum Base Salary">
                     <Input
                       type="number"
                       step={5000}
-                      value={minSalary || ""}
+                      value={minSalary ?? ""}
                       onChange={(e) => setMinSalary(parseInt(e.target.value, 10) || undefined)}
                       placeholder="e.g. 120000"
                     />
@@ -713,21 +894,33 @@ export function Component() {
                     <Input
                       type="number"
                       step={5000}
-                      value={maxSalary || ""}
+                      value={maxSalary ?? ""}
                       onChange={(e) => setMaxSalary(parseInt(e.target.value, 10) || undefined)}
                       placeholder="e.g. 160000"
                     />
                   </Field>
                   <Field label="Currency">
                     <select
-                      value={salaryCurrency}
-                      onChange={(e) => setSalaryCurrency(e.target.value)}
+                      value={salaryCurrency ?? ""}
+                      onChange={(e) => setSalaryCurrency(e.target.value || null)}
                       className="w-full rounded-[var(--radius-control)] border border-line bg-white px-3 py-2 text-sm text-ink focus:outline-hidden focus:ring-2 focus:ring-indigo/20 focus:border-indigo"
                     >
+                      <option value="">Select currency…</option>
                       <option value="USD">USD ($)</option>
                       <option value="EUR">EUR (€)</option>
                       <option value="GBP">GBP (£)</option>
                       <option value="CAD">CAD ($)</option>
+                    </select>
+                  </Field>
+                  <Field label="Period">
+                    <select
+                      value={salaryPeriod ?? "YEARLY"}
+                      onChange={(e) => setSalaryPeriod((e.target.value as SalaryPeriod) || null)}
+                      className="w-full rounded-[var(--radius-control)] border border-line bg-white px-3 py-2 text-sm text-ink focus:outline-hidden focus:ring-2 focus:ring-indigo/20 focus:border-indigo"
+                    >
+                      <option value="YEARLY">Yearly</option>
+                      <option value="MONTHLY">Monthly</option>
+                      <option value="HOURLY">Hourly</option>
                     </select>
                   </Field>
                 </div>

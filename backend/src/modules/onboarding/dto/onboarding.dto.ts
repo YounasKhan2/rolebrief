@@ -2,15 +2,15 @@ import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { Type } from "class-transformer";
 import {
   IsArray,
+  IsEnum,
   IsInt,
   IsOptional,
-  IsString,
-  MaxLength,
   Min,
   ValidateNested
 } from "class-validator";
 import {
   CandidateSkillInputDto,
+  OnboardingStepEnum,
   UpdatePreferencesDto,
   UpdateProfileDto
 } from "../../profile/dto/profile.dto";
@@ -21,18 +21,16 @@ export class AutosaveOnboardingDto {
   @Min(0)
   expectedRevision!: number;
 
-  @ApiPropertyOptional({ description: "Identifier of the active wizard step" })
+  @ApiPropertyOptional({ enum: OnboardingStepEnum, description: "Identifier of the active wizard step" })
   @IsOptional()
-  @IsString()
-  @MaxLength(50)
-  currentStep?: string;
+  @IsEnum(OnboardingStepEnum)
+  currentStep?: OnboardingStepEnum;
 
-  @ApiPropertyOptional({ type: [String], description: "List of completed wizard steps" })
+  @ApiPropertyOptional({ enum: OnboardingStepEnum, isArray: true, description: "List of completed wizard steps" })
   @IsOptional()
   @IsArray()
-  @IsString({ each: true })
-  @MaxLength(50, { each: true })
-  completedSteps?: string[];
+  @IsEnum(OnboardingStepEnum, { each: true })
+  completedSteps?: OnboardingStepEnum[];
 
   @ApiPropertyOptional()
   @IsOptional()

@@ -3,6 +3,7 @@ import { Navigate, useLocation } from "react-router";
 import { Loader2, RefreshCw } from "lucide-react";
 import { useAuth } from "../../lib/auth";
 import { getOnboardingState, OnboardingState } from "../../lib/onboarding-api";
+import { buildReturnToQuery } from "../../lib/routing";
 import { Button } from "../ui/primitives";
 
 interface OnboardingContextValue {
@@ -29,11 +30,10 @@ export function OnboardingGate({ children }: { children: React.ReactNode }) {
   const { user, isAdmin, isAuthenticated, status: authStatus } = useAuth();
   const location = useLocation();
   const [state, setState] = useState<OnboardingState | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
   const fetchState = useCallback(async () => {
-    // If not authenticated or is admin, no need to fetch onboarding progress
     if (!isAuthenticated || isAdmin) {
       setLoading(false);
       return;
@@ -54,8 +54,6 @@ export function OnboardingGate({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (isAuthenticated && !isAdmin) {
       void fetchState();
-    } else {
-      setLoading(false);
     }
   }, [isAuthenticated, isAdmin, fetchState]);
 
@@ -65,14 +63,11 @@ export function OnboardingGate({ children }: { children: React.ReactNode }) {
 
   // 1. Admin bypass: Admins bypass onboarding completely
   if (isAdmin) {
-    if (location.pathname === "/app/onboarding") {
-      return <Navigate to="/admin" replace />;
-    }
     return <>{children}</>;
   }
 
-  // If still loading auth or onboarding state, show minimal editorial loader
-  if (authStatus === "loading" || loading) {
+  // If still loading auth, show minimal editorial loader
+  if (authStatus === "loading") {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-paper paper-grain text-ink">
         <div className="flex flex-col items-center gap-3">
@@ -85,8 +80,33 @@ export function OnboardingGate({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // If error occurred fetching state
-  if (error && !state) {
+  // Check onboardingStatus from user (if present) or state
+  const status = user?.onboardingStatus ?? state?.progress?.status;
+
+  // 2. Focused gate: NOT_STARTED or IN_PROGRESS must complete or skip onboarding
+  if (status === "NOT_STARTED" || status === "IN_PROGRESS") {
+    const returnParam = location.pathname !== "/app" && location.pathname !== "/app/" && location.pathname !== "/app/radar"
+      ? buildReturnToQuery(location.pathname, location.search, location.hash)
+      : "";
+    return <Navigate to={`/app/onboarding${returnParam}`} replace />;
+  }
+
+  // If status is not yet known and we are loading state
+  if (status === undefined && loading) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-paper paper-grain text-ink">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 size={24} className="animate-spin text-indigo" />
+          <span className="text-xs font-mono uppercase tracking-widest text-slate">
+            Checking workspace…
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  // If error occurred fetching state and we don't know the status
+  if (error && !state && status === undefined) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-paper paper-grain p-6 text-center">
         <div className="max-w-md w-full rounded-[var(--radius-card)] border border-line bg-white p-8 shadow-sm">
@@ -106,25 +126,6 @@ export function OnboardingGate({ children }: { children: React.ReactNode }) {
         </div>
       </div>
     );
-  }
-
-  const onboardingStatus = state?.progress?.status ?? "NOT_STARTED";
-  const isOnboardingRoute = location.pathname === "/app/onboarding";
-  const isExplicitEditRequested = new URLSearchParams(location.search).get("edit") === "true";
-
-  // 2. Focused gate: NOT_STARTED or IN_PROGRESS must complete or skip onboarding
-  if (onboardingStatus === "NOT_STARTED" || onboardingStatus === "IN_PROGRESS") {
-    if (!isOnboardingRoute) {
-      return <Navigate to="/app/onboarding" replace />;
-    }
-  }
-
-  // 3. Re-entry gate: COMPLETED or SKIPPED users visiting /app/onboarding are routed to /app/profile
-  // unless explicitly reopening via ?edit=true
-  if (onboardingStatus === "COMPLETED" || onboardingStatus === "SKIPPED") {
-    if (isOnboardingRoute && !isExplicitEditRequested) {
-      return <Navigate to="/app/profile" replace />;
-    }
   }
 
   return (

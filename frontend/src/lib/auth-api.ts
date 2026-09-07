@@ -2,6 +2,7 @@ import { API_BASE_URL, ApiError } from "./api";
 
 export type AuthRole = "USER" | "ADMIN";
 export type AuthStatus = "PENDING_VERIFICATION" | "ACTIVE" | "LOCKED" | "DISABLED";
+export type OnboardingStatus = "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED" | "SKIPPED";
 
 export interface AuthUser {
   id: string;
@@ -11,6 +12,7 @@ export interface AuthUser {
   role: AuthRole;
   status: AuthStatus;
   isAdmin: boolean;
+  onboardingStatus?: OnboardingStatus;
 }
 
 export interface AuthSession {
