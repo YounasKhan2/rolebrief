@@ -11,12 +11,15 @@ interface OnboardingLayoutContextValue {
   setSaveStatus: (status: SaveStatus) => void;
   statusMessage?: string;
   setStatusMessage: (msg?: string) => void;
+  retryAutosave?: () => void;
+  setRetryAutosave: (fn: (() => void) | undefined) => void;
 }
 
 const OnboardingLayoutContext = createContext<OnboardingLayoutContextValue>({
   saveStatus: "idle",
   setSaveStatus: () => {},
-  setStatusMessage: () => {}
+  setStatusMessage: () => {},
+  setRetryAutosave: () => {}
 });
 
 export function useOnboardingLayout() {
@@ -27,6 +30,7 @@ export function OnboardingLayout() {
   const navigate = useNavigate();
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [statusMessage, setStatusMessage] = useState<string | undefined>();
+  const [retryAutosave, setRetryAutosave] = useState<(() => void) | undefined>();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   async function handleLogout() {
@@ -39,10 +43,12 @@ export function OnboardingLayout() {
   }
 
   return (
-    <OnboardingLayoutContext.Provider value={{ saveStatus, setSaveStatus, statusMessage, setStatusMessage }}>
+    <OnboardingLayoutContext.Provider
+      value={{ saveStatus, setSaveStatus, statusMessage, setStatusMessage, retryAutosave, setRetryAutosave }}
+    >
       <div className="min-h-screen flex flex-col bg-paper paper-grain text-ink font-sans selection:bg-indigo/15">
         {/* Minimal Onboarding Top Bar */}
-        <header className="sticky top-0 z-30 border-b border-line/80 bg-paper/90 backdrop-blur-md px-6 py-4 flex items-center justify-between">
+        <header className="sticky top-0 z-30 border-b border-line/80 bg-paper/90 backdrop-blur-md px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Wordmark />
             <span className="hidden sm:inline-block h-4 w-px bg-line" />
@@ -51,35 +57,40 @@ export function OnboardingLayout() {
             </span>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3 sm:gap-4">
             {/* Live Autosave Indicator */}
             <div className="flex items-center gap-2 text-[13px]">
               {saveStatus === "saving" && (
                 <span className="inline-flex items-center gap-1.5 text-slate font-medium">
                   <Loader2 size={13} className="animate-spin text-indigo" />
-                  <span>Saving…</span>
+                  <span className="hidden xs:inline">Saving…</span>
                 </span>
               )}
               {saveStatus === "saved" && (
                 <span className="inline-flex items-center gap-1.5 text-emerald font-medium">
                   <Check size={14} className="stroke-[2.5]" />
-                  <span>Saved</span>
+                  <span className="hidden xs:inline">Saved</span>
                 </span>
               )}
               {saveStatus === "conflict" && (
                 <span className="inline-flex items-center gap-1.5 text-amber-600 font-medium">
                   <AlertTriangle size={14} />
-                  <span>{statusMessage || "Sync conflict — refresh"}</span>
+                  <span>{statusMessage || "Sync conflict"}</span>
                 </span>
               )}
               {saveStatus === "error" && (
-                <span className="inline-flex items-center gap-1.5 text-rose-600 font-medium">
+                <button
+                  type="button"
+                  onClick={() => retryAutosave?.()}
+                  className="inline-flex items-center gap-1.5 text-rose-600 hover:text-rose-700 font-medium cursor-pointer"
+                  title="Click to retry saving"
+                >
                   <AlertTriangle size={14} />
-                  <span>Save failed</span>
-                </span>
+                  <span>Save failed {retryAutosave ? "(retry)" : ""}</span>
+                </button>
               )}
               {saveStatus === "idle" && (
-                <span className="text-slate/80 text-[12px] font-data">
+                <span className="text-slate/80 text-[12px] font-data hidden xs:inline">
                   Autosaved
                 </span>
               )}

@@ -51,3 +51,18 @@ export class AutosaveOnboardingDto {
   @Type(() => CandidateSkillInputDto)
   skills?: CandidateSkillInputDto[];
 }
+
+export class SkipOnboardingDto {
+  @ApiProperty({ description: "Optimistic concurrency revision number" })
+  @IsInt()
+  @Min(0)
+  expectedRevision!: number;
+}
+
+export class CompleteOnboardingDto {
+  @ApiProperty({ description: "Optimistic concurrency revision number" })
+  @IsInt()
+  @Min(0)
+  expectedRevision!: number;
+}
+

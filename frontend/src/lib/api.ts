@@ -6,6 +6,7 @@ export class ApiError extends Error {
     readonly code: ApiErrorCode,
     readonly status?: number,
     readonly retryAfterSeconds?: number,
+    readonly payload?: any,
   ) {
     super(message);
     this.name = "ApiError";

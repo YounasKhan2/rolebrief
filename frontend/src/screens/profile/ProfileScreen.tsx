@@ -13,11 +13,15 @@ import {
 import { PageContainer, PageHeader } from "../../components/shell/AppShell";
 import { Kicker, Badge, Button, SectionRule, FilterChip } from "../../components/ui/primitives";
 import { Input, SegmentedControl } from "../../components/ui/form";
+import { useAuth } from "../../lib/auth";
 import {
   getProfile,
   updateProfile,
+  getOnboardingState,
+  completeOnboarding,
   CandidateSearchStatus,
   CandidateSkillItem,
+  EmploymentType,
   ProfileState,
   RelocationPreference,
   RemotePreference,
@@ -57,6 +61,8 @@ export function Component() {
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const { user, updateOnboardingStatus } = useAuth();
+  const [isCompleting, setIsCompleting] = useState(false);
 
   // Edit form state
   const [targetRoles, setTargetRoles] = useState<string[]>([]);
@@ -72,7 +78,7 @@ export function Component() {
   const [visaNeeded, setVisaNeeded] = useState<boolean | null>(null);
   const [remotePref, setRemotePref] = useState<RemotePreference | null>(null);
   const [preferredCountries, setPreferredCountries] = useState<string[]>([]);
-  const [employmentTypes, setEmploymentTypes] = useState<string[]>([]);
+  const [employmentTypes, setEmploymentTypes] = useState<EmploymentType[]>([]);
   const [relocationPref, setRelocationPref] = useState<RelocationPreference | null>(null);
   const [skills, setSkills] = useState<CandidateSkillItem[]>([]);
   const [newSkillInput, setNewSkillInput] = useState("");
@@ -180,11 +186,72 @@ export function Component() {
     }
   }
 
+  async function handleCompleteBrief() {
+    setIsCompleting(true);
+    setSaveError(null);
+    try {
+      // 1. Fetch current onboarding state to get current revision
+      const onboardingState = await getOnboardingState();
+      const currentRev = onboardingState.progress?.revision ?? 0;
+
+      // 2. Save profile updates first
+      const updated = await updateProfile({
+        profile: {
+          headline: headline || undefined,
+          experienceYears: expYears ?? undefined,
+          seniorityLevel: seniority || undefined,
+          currentCountry: currentCountry || undefined,
+          currentCity: currentCity || undefined,
+          timezone: timezone || undefined,
+          workAuthorizations: workAuths,
+          requiresVisaSponsorship: visaNeeded ?? undefined,
+          searchStatus: searchStatus || undefined
+        },
+        preferences: {
+          targetRoleTitles: targetRoles,
+          targetDisciplines,
+          remotePreference: remotePref || undefined,
+          preferredCountries,
+          employmentTypes,
+          relocationPreference: relocationPref || undefined,
+          minSalary: minSalary || undefined,
+          maxSalary: maxSalary || undefined,
+          salaryCurrency: salaryCurrency || undefined,
+          salaryPeriod: salaryPeriod || undefined
+        },
+        skills
+      });
+
+      // 3. Atomically transition onboarding status to COMPLETED with matching expectedRevision
+      await completeOnboarding({ expectedRevision: currentRev });
+
+      // 4. Immediately update auth context
+      updateOnboardingStatus("COMPLETED");
+
+      setProfileData((prev) => (prev ? {
+        ...prev,
+        ...updated,
+        progress: prev.progress ? { ...prev.progress, status: "COMPLETED" } : null
+      } : null));
+      populateEditForm(updated);
+      setIsCompleting(false);
+      setSaveSuccess(true);
+      setTimeout(() => {
+        setSaveSuccess(false);
+        setIsEditing(false);
+      }, 800);
+    } catch (err: unknown) {
+      setIsCompleting(false);
+      setSaveError(err instanceof Error ? err.message : "Failed to complete opportunity brief.");
+    }
+  }
+
   const profile = profileData?.profile;
   const preferences = profileData?.preferences;
   const activeSkills = profileData?.skills ?? [];
   const completeness = profileData?.completeness ?? 0;
   const briefCompleteness = profileData?.briefCompleteness ?? 0;
+  const isSkipped = user?.onboardingStatus === "SKIPPED" || profileData?.progress?.status === "SKIPPED";
 
   const fields = [
     {
@@ -292,6 +359,26 @@ export function Component() {
           </Button>
         }
       />
+
+      {/* Skipped Onboarding Banner */}
+      {isSkipped && (
+        <div className="rounded-[var(--radius-card)] border border-amber/30 bg-amber-light/30 p-4 mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <ShieldCheck size={18} className="text-amber shrink-0" />
+            <p className="text-xs text-ink leading-relaxed">
+              <span className="font-semibold">Opportunity brief is currently skipped.</span> Complete your brief anytime to unlock full Match Brief accuracy and personalized Radar ranking.
+            </p>
+          </div>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => setIsEditing(true)}
+            className="shrink-0"
+          >
+            Complete brief
+          </Button>
+        </div>
+      )}
 
       {/* Dual Completeness Dashboard */}
       <div className="grid sm:grid-cols-2 gap-4 mb-6">
@@ -575,6 +662,28 @@ export function Component() {
                 </div>
               </div>
 
+              {/* Employment Types Accepted */}
+              <div>
+                <label className="block text-xs font-semibold text-ink mb-1.5">Employment Types Accepted</label>
+                <div className="flex flex-wrap gap-1.5 mb-3">
+                  {[
+                    { value: "FULL_TIME", label: "Full-time" },
+                    { value: "CONTRACT", label: "Contract" },
+                    { value: "PART_TIME", label: "Part-time" },
+                    { value: "INTERNSHIP", label: "Internship" },
+                    { value: "TEMPORARY", label: "Temporary" }
+                  ].map((t) => (
+                    <FilterChip
+                      key={t.value}
+                      active={employmentTypes.includes(t.value as EmploymentType)}
+                      onClick={() => toggleArrayItem(employmentTypes, t.value as EmploymentType, setEmploymentTypes)}
+                    >
+                      {t.label}
+                    </FilterChip>
+                  ))}
+                </div>
+              </div>
+
               {/* Skills */}
               <div>
                 <label className="block text-xs font-semibold text-ink mb-1.5">Verified Skills</label>
@@ -663,41 +772,61 @@ export function Component() {
                 <div>
                   <label className="block text-xs font-semibold text-ink mb-1.5">Period</label>
                   <select
-                    value={salaryPeriod ?? "YEARLY"}
+                    value={salaryPeriod ?? "ANNUAL"}
                     onChange={(e) => setSalaryPeriod((e.target.value as SalaryPeriod) || null)}
                     className="w-full rounded-[var(--radius-control)] border border-line bg-white px-3 py-2 text-sm text-ink focus:outline-hidden focus:ring-2 focus:ring-indigo/20 focus:border-indigo"
                   >
-                    <option value="YEARLY">Yearly</option>
-                    <option value="MONTHLY">Monthly</option>
-                    <option value="HOURLY">Hourly</option>
+                    <option value="ANNUAL">Annual (/ yr)</option>
+                    <option value="MONTHLY">Monthly (/ mo)</option>
+                    <option value="HOURLY">Hourly (/ hr)</option>
                   </select>
                 </div>
               </div>
 
               {/* Actions */}
-              <div className="pt-4 border-t border-line flex items-center justify-end gap-3">
+              <div className="pt-4 border-t border-line flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-3">
                 <Button
                   type="button"
                   variant="tertiary"
                   onClick={() => setIsEditing(false)}
-                  disabled={isSaving}
+                  disabled={isSaving || isCompleting}
                 >
                   Cancel
                 </Button>
+
+                {isSkipped && (
+                  <Button
+                    type="button"
+                    variant="primary"
+                    onClick={handleCompleteBrief}
+                    disabled={isSaving || isCompleting}
+                    icon={
+                      isCompleting ? (
+                        <Loader2 size={15} className="animate-spin" />
+                      ) : (
+                        <Check size={15} />
+                      )
+                    }
+                  >
+                    {isCompleting ? "Completing…" : "Complete opportunity brief"}
+                  </Button>
+                )}
+
                 <Button
                   type="submit"
-                  disabled={isSaving}
+                  variant={isSkipped ? "secondary" : "primary"}
+                  disabled={isSaving || isCompleting}
                   icon={
                     isSaving ? (
                       <Loader2 size={15} className="animate-spin" />
-                    ) : saveSuccess ? (
+                    ) : saveSuccess && !isCompleting ? (
                       <Check size={15} className="text-emerald" />
                     ) : (
                       <Check size={15} />
                     )
                   }
                 >
-                  {isSaving ? "Saving…" : saveSuccess ? "Saved!" : "Save Changes"}
+                  {isSaving ? "Saving…" : saveSuccess && !isCompleting ? "Saved!" : "Save Changes"}
                 </Button>
               </div>
             </form>

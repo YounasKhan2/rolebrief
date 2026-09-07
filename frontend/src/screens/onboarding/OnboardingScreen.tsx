@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useLocation, useNavigate } from "react-router";
 import {
   ArrowLeft,
@@ -25,6 +25,8 @@ import {
   skipOnboarding,
   CandidateSearchStatus,
   CandidateSkillItem,
+  EmploymentType,
+  OnboardingState,
   OnboardingStep,
   RelocationPreference,
   RemotePreference,
@@ -80,7 +82,7 @@ export function Component() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, isAdmin, updateOnboardingStatus } = useAuth();
-  const { setSaveStatus, setStatusMessage } = useOnboardingLayout();
+  const { setSaveStatus, setStatusMessage, setRetryAutosave } = useOnboardingLayout();
   const [, startTransition] = useTransition();
 
   const searchParams = new URLSearchParams(location.search);
@@ -110,7 +112,7 @@ export function Component() {
   const [workAuthorizations, setWorkAuthorizations] = useState<string[]>([]);
   const [requiresVisaSponsorship, setRequiresVisaSponsorship] = useState<boolean | null>(null);
   const [preferredCountries, setPreferredCountries] = useState<string[]>([]);
-  const [employmentTypes, setEmploymentTypes] = useState<string[]>([]);
+  const [employmentTypes, setEmploymentTypes] = useState<EmploymentType[]>([]);
   const [relocationPreference, setRelocationPreference] = useState<RelocationPreference | null>(null);
 
   // Step 3: Fit (Skills, Experience)
@@ -129,8 +131,10 @@ export function Component() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSkipping, setIsSkipping] = useState(false);
   const [conflictError, setConflictError] = useState<string | null>(null);
+  const [conflictServerState, setConflictServerState] = useState<OnboardingState | null>(null);
 
   const autosaveTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const requestIdRef = useRef(0);
   const isLoadedRef = useRef(false);
   const isTransitioningRef = useRef(false);
 
@@ -223,6 +227,92 @@ export function Component() {
     };
   }, [isAdmin, user?.onboardingStatus, navigate, updateOnboardingStatus]);
 
+  const buildPayload = useCallback((targetStep: number, targetRev: number) => {
+    return {
+      expectedRevision: targetRev,
+      currentStep: STEP_ENUMS[targetStep],
+      completedSteps: STEP_ENUMS.slice(0, targetStep),
+      profile: {
+        headline: headline || undefined,
+        experienceYears: experienceYears ?? undefined,
+        seniorityLevel: seniority || undefined,
+        currentCountry: currentCountry || undefined,
+        currentCity: currentCity || undefined,
+        timezone: timezone || undefined,
+        workAuthorizations,
+        requiresVisaSponsorship: requiresVisaSponsorship ?? undefined,
+        searchStatus: searchStatus || undefined
+      },
+      preferences: {
+        targetRoleTitles,
+        targetDisciplines,
+        remotePreference: remotePreference || undefined,
+        preferredCountries,
+        employmentTypes,
+        relocationPreference: relocationPreference || undefined,
+        minSalary: minSalary || undefined,
+        maxSalary: maxSalary || undefined,
+        salaryCurrency: salaryCurrency || undefined,
+        salaryPeriod: salaryPeriod || undefined
+      },
+      // CRITICAL: Only send skills snapshot on FIT step (step === 2)
+      skills: targetStep === 2 ? skills : undefined
+    };
+  }, [
+    headline,
+    experienceYears,
+    seniority,
+    currentCountry,
+    currentCity,
+    timezone,
+    workAuthorizations,
+    requiresVisaSponsorship,
+    searchStatus,
+    targetRoleTitles,
+    targetDisciplines,
+    remotePreference,
+    preferredCountries,
+    employmentTypes,
+    relocationPreference,
+    minSalary,
+    maxSalary,
+    salaryCurrency,
+    salaryPeriod,
+    skills
+  ]);
+
+  const executeAutosave = useCallback(async (targetStep: number, targetRev: number) => {
+    const currentRequestId = ++requestIdRef.current;
+    setSaveStatus("saving");
+    try {
+      const payload = buildPayload(targetStep, targetRev);
+      const updated = await autosaveOnboarding(payload);
+      if (currentRequestId !== requestIdRef.current) return;
+
+      setRevision(updated.progress.revision);
+      if (updated.briefCompleteness !== undefined) {
+        setBriefScore(updated.briefCompleteness);
+      }
+      setSaveStatus("saved");
+      setConflictError(null);
+      setConflictServerState(null);
+    } catch (err: unknown) {
+      if (currentRequestId !== requestIdRef.current) return;
+      if (err instanceof ApiError && err.status === 409) {
+        setSaveStatus("conflict");
+        setStatusMessage("Sync conflict");
+        const payload = err.payload;
+        setConflictServerState(payload?.currentState ?? null);
+        setConflictError(
+          `Your opportunity brief was modified in another window (revision ${payload?.currentRevision ?? "latest"}). Click 'Update & Sync' to merge latest changes safely.`
+        );
+      } else {
+        setSaveStatus("error");
+        setStatusMessage("Save failed");
+      }
+    }
+  }, [buildPayload, setSaveStatus, setStatusMessage]);
+
   // Debounced Autosave on user modification
   useEffect(() => {
     if (!isLoadedRef.current) return;
@@ -231,57 +321,8 @@ export function Component() {
       clearTimeout(autosaveTimerRef.current);
     }
 
-    setSaveStatus("saving");
-
-    autosaveTimerRef.current = setTimeout(async () => {
-      try {
-        const payload = {
-          expectedRevision: revision,
-          currentStep: STEP_ENUMS[step],
-          completedSteps: STEP_ENUMS.slice(0, step),
-          profile: {
-            headline: headline || undefined,
-            experienceYears: experienceYears ?? undefined,
-            seniorityLevel: seniority || undefined,
-            currentCountry: currentCountry || undefined,
-            currentCity: currentCity || undefined,
-            timezone: timezone || undefined,
-            workAuthorizations,
-            requiresVisaSponsorship: requiresVisaSponsorship ?? undefined,
-            searchStatus: searchStatus || undefined
-          },
-          preferences: {
-            targetRoleTitles,
-            targetDisciplines,
-            remotePreference: remotePreference || undefined,
-            preferredCountries,
-            employmentTypes,
-            relocationPreference: relocationPreference || undefined,
-            minSalary: minSalary || undefined,
-            maxSalary: maxSalary || undefined,
-            salaryCurrency: salaryCurrency || undefined,
-            salaryPeriod: salaryPeriod || undefined
-          },
-          // CRITICAL: Only send skills snapshot on FIT step (step === 2)
-          skills: step === 2 ? skills : undefined
-        };
-
-        const updated = await autosaveOnboarding(payload);
-        setRevision(updated.progress.revision);
-        if (updated.briefCompleteness !== undefined) {
-          setBriefScore(updated.briefCompleteness);
-        }
-        setSaveStatus("saved");
-        setConflictError(null);
-      } catch (err: unknown) {
-        if (err instanceof ApiError && err.status === 409) {
-          setSaveStatus("conflict");
-          setStatusMessage("Sync conflict — reload needed");
-          setConflictError("Your profile was modified in another session. Please reload to sync the latest version.");
-        } else {
-          setSaveStatus("error");
-        }
-      }
+    autosaveTimerRef.current = setTimeout(() => {
+      void executeAutosave(step, revision);
     }, 800);
 
     return () => {
@@ -289,34 +330,61 @@ export function Component() {
         clearTimeout(autosaveTimerRef.current);
       }
     };
-  }, [
-    step,
-    revision,
-    targetRoleTitles,
-    targetDisciplines,
-    seniority,
-    searchStatus,
-    headline,
-    currentCountry,
-    currentCity,
-    timezone,
-    remotePreference,
-    workAuthorizations,
-    requiresVisaSponsorship,
-    preferredCountries,
-    employmentTypes,
-    relocationPreference,
-    skills,
-    experienceYears,
-    minSalary,
-    maxSalary,
-    salaryCurrency,
-    salaryPeriod,
-    setSaveStatus,
-    setStatusMessage
-  ]);
+  }, [executeAutosave, step, revision]);
 
-  function toggleArrayItem(list: string[], item: string, setter: (items: string[]) => void) {
+  // Register failed-save retry handler in layout
+  useEffect(() => {
+    setRetryAutosave(() => () => {
+      void executeAutosave(step, revision);
+    });
+    return () => {
+      setRetryAutosave(undefined);
+    };
+  }, [executeAutosave, setRetryAutosave, step, revision]);
+
+  function handleResolveConflict() {
+    if (!conflictServerState) {
+      window.location.reload();
+      return;
+    }
+    const data = conflictServerState;
+    setRevision(data.progress.revision);
+    if (data.preferences?.targetRoleTitles) setTargetRoleTitles(data.preferences.targetRoleTitles);
+    if (data.preferences?.targetDisciplines) setTargetDisciplines(data.preferences.targetDisciplines);
+    if (data.profile?.seniorityLevel) setSeniority(data.profile.seniorityLevel);
+    if (data.profile?.searchStatus) setSearchStatus(data.profile.searchStatus);
+    if (data.profile?.headline) setHeadline(data.profile.headline);
+
+    if (data.profile?.currentCountry) setCurrentCountry(data.profile.currentCountry);
+    if (data.profile?.currentCity) setCurrentCity(data.profile.currentCity);
+    if (data.profile?.timezone) setTimezone(data.profile.timezone);
+    if (data.profile?.workAuthorizations) setWorkAuthorizations(data.profile.workAuthorizations);
+    if (data.profile?.requiresVisaSponsorship !== null && data.profile?.requiresVisaSponsorship !== undefined) {
+      setRequiresVisaSponsorship(data.profile.requiresVisaSponsorship);
+    }
+    if (data.preferences?.remotePreference) setRemotePreference(data.preferences.remotePreference);
+    if (data.preferences?.preferredCountries) setPreferredCountries(data.preferences.preferredCountries);
+    if (data.preferences?.employmentTypes) setEmploymentTypes(data.preferences.employmentTypes);
+    if (data.preferences?.relocationPreference) setRelocationPreference(data.preferences.relocationPreference);
+
+    if (data.skills) setSkills(data.skills);
+    if (data.profile?.experienceYears !== null && data.profile?.experienceYears !== undefined) {
+      setExperienceYears(data.profile.experienceYears);
+    }
+
+    if (data.preferences?.minSalary) setMinSalary(data.preferences.minSalary);
+    if (data.preferences?.maxSalary) setMaxSalary(data.preferences.maxSalary);
+    if (data.preferences?.salaryCurrency) setSalaryCurrency(data.preferences.salaryCurrency);
+    if (data.preferences?.salaryPeriod) setSalaryPeriod(data.preferences.salaryPeriod);
+
+    if (data.briefCompleteness !== undefined) setBriefScore(data.briefCompleteness);
+
+    setConflictError(null);
+    setConflictServerState(null);
+    setSaveStatus("saved");
+  }
+
+  function toggleArrayItem<T>(list: T[], item: T, setter: (items: T[]) => void) {
     if (list.includes(item)) {
       setter(list.filter((x) => x !== item));
     } else {
@@ -364,14 +432,18 @@ export function Component() {
     isTransitioningRef.current = true;
     setIsSkipping(true);
     try {
-      await skipOnboarding();
+      await skipOnboarding({ expectedRevision: revision });
       updateOnboardingStatus("SKIPPED");
       startTransition(() => {
         navigate(returnTo, { replace: true });
       });
-    } catch {
+    } catch (err: unknown) {
       isTransitioningRef.current = false;
       setIsSkipping(false);
+      if (err instanceof ApiError && err.status === 409) {
+        setConflictServerState(err.payload?.currentState ?? null);
+        setConflictError("Your opportunity brief was modified in another session. Click 'Update & Sync' to reconcile.");
+      }
     }
   }
 
@@ -379,20 +451,29 @@ export function Component() {
     isTransitioningRef.current = true;
     setIsSubmitting(true);
     try {
-      await completeOnboarding();
+      await completeOnboarding({ expectedRevision: revision });
       updateOnboardingStatus("COMPLETED");
       startTransition(() => {
         navigate(returnTo, { replace: true });
       });
-    } catch {
+    } catch (err: unknown) {
       isTransitioningRef.current = false;
       setIsSubmitting(false);
+      if (err instanceof ApiError && err.status === 409) {
+        setConflictServerState(err.payload?.currentState ?? null);
+        setConflictError("Your opportunity brief was modified in another session. Click 'Update & Sync' to reconcile.");
+      }
     }
   }
 
   const handleNext = () => {
     if (step < 3) {
-      setStep(step + 1);
+      const nextStep = step + 1;
+      setStep(nextStep);
+      if (autosaveTimerRef.current) {
+        clearTimeout(autosaveTimerRef.current);
+      }
+      void executeAutosave(nextStep, revision);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } else {
       void handleComplete();
@@ -401,10 +482,16 @@ export function Component() {
 
   const handleBack = () => {
     if (step > 0) {
-      setStep(step - 1);
+      const prevStep = step - 1;
+      setStep(prevStep);
+      if (autosaveTimerRef.current) {
+        clearTimeout(autosaveTimerRef.current);
+      }
+      void executeAutosave(prevStep, revision);
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
   };
+
 
   if (loading) {
     return (
@@ -495,20 +582,26 @@ export function Component() {
 
         {/* Sync Conflict Warning Banner */}
         {conflictError && (
-          <div className="mb-6 rounded-[var(--radius-card)] border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 flex items-center justify-between">
-            <p>{conflictError}</p>
-            <Button
-              onClick={() => window.location.reload()}
-              variant="secondary"
-              size="sm"
-            >
-              Reload Page
-            </Button>
+          <div className="mb-6 rounded-[var(--radius-card)] border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
+            <div className="flex items-start gap-2.5">
+              <RefreshCw size={16} className="text-amber-700 shrink-0 mt-0.5" />
+              <p>{conflictError}</p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <Button
+                onClick={handleResolveConflict}
+                variant="primary"
+                size="sm"
+                icon={<RefreshCw size={13} />}
+              >
+                Update & Sync
+              </Button>
+            </div>
           </div>
         )}
 
         {/* Step Card */}
-        <div className="rounded-[var(--radius-feature)] border border-line bg-white p-7 sm:p-10 shadow-sm">
+        <div className="rounded-[var(--radius-feature)] border border-line bg-white p-5 sm:p-10 shadow-sm">
           {/* STEP 0: GOAL */}
           {step === 0 && (
             <Section
@@ -711,12 +804,14 @@ export function Component() {
                     {[
                       { value: "FULL_TIME", label: "Full-time" },
                       { value: "CONTRACT", label: "Contract" },
-                      { value: "PART_TIME", label: "Part-time" }
+                      { value: "PART_TIME", label: "Part-time" },
+                      { value: "INTERNSHIP", label: "Internship" },
+                      { value: "TEMPORARY", label: "Temporary" }
                     ].map((t) => (
                       <FilterChip
                         key={t.value}
-                        active={employmentTypes.includes(t.value)}
-                        onClick={() => toggleArrayItem(employmentTypes, t.value, setEmploymentTypes)}
+                        active={employmentTypes.includes(t.value as EmploymentType)}
+                        onClick={() => toggleArrayItem(employmentTypes, t.value as EmploymentType, setEmploymentTypes)}
                       >
                         {t.label}
                       </FilterChip>
@@ -914,13 +1009,13 @@ export function Component() {
                   </Field>
                   <Field label="Period">
                     <select
-                      value={salaryPeriod ?? "YEARLY"}
+                      value={salaryPeriod ?? "ANNUAL"}
                       onChange={(e) => setSalaryPeriod((e.target.value as SalaryPeriod) || null)}
                       className="w-full rounded-[var(--radius-control)] border border-line bg-white px-3 py-2 text-sm text-ink focus:outline-hidden focus:ring-2 focus:ring-indigo/20 focus:border-indigo"
                     >
-                      <option value="YEARLY">Yearly</option>
-                      <option value="MONTHLY">Monthly</option>
-                      <option value="HOURLY">Hourly</option>
+                      <option value="ANNUAL">Annual (/ yr)</option>
+                      <option value="MONTHLY">Monthly (/ mo)</option>
+                      <option value="HOURLY">Hourly (/ hr)</option>
                     </select>
                   </Field>
                 </div>

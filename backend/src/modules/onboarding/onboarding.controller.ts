@@ -2,7 +2,7 @@ import { Body, Controller, Get, Patch, Post, Put, UseGuards } from "@nestjs/comm
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { AuthenticatedUser, CurrentUser } from "../../auth/auth.decorators";
 import { CsrfGuard } from "../../auth/csrf.guard";
-import { AutosaveOnboardingDto } from "./dto/onboarding.dto";
+import { AutosaveOnboardingDto, CompleteOnboardingDto, SkipOnboardingDto } from "./dto/onboarding.dto";
 import { OnboardingService } from "./onboarding.service";
 
 @ApiTags("onboarding")
@@ -46,15 +46,24 @@ export class OnboardingController {
   @UseGuards(CsrfGuard)
   @ApiOperation({ summary: "Skip onboarding and immediately unlock application" })
   @ApiResponse({ status: 200, description: "Onboarding marked as SKIPPED" })
-  skip(@CurrentUser() user: AuthenticatedUser) {
-    return this.onboardingService.skip(user.id);
+  @ApiResponse({ status: 409, description: "Optimistic concurrency conflict" })
+  skip(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() body: SkipOnboardingDto
+  ) {
+    return this.onboardingService.skip(user.id, body);
   }
 
   @Post("complete")
   @UseGuards(CsrfGuard)
   @ApiOperation({ summary: "Finalize candidate onboarding" })
   @ApiResponse({ status: 200, description: "Onboarding marked as COMPLETED" })
-  complete(@CurrentUser() user: AuthenticatedUser) {
-    return this.onboardingService.complete(user.id);
+  @ApiResponse({ status: 409, description: "Optimistic concurrency conflict" })
+  complete(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() body: CompleteOnboardingDto
+  ) {
+    return this.onboardingService.complete(user.id, body);
   }
 }
+

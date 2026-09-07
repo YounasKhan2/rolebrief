@@ -515,7 +515,15 @@ enum OnboardingStep {
 enum SalaryPeriod {
   HOURLY
   MONTHLY
-  YEARLY
+  ANNUAL
+}
+
+enum EmploymentType {
+  FULL_TIME
+  PART_TIME
+  CONTRACT
+  INTERNSHIP
+  TEMPORARY
 }
 
 enum CandidateSearchStatus {
@@ -579,7 +587,8 @@ model CandidatePreference {
   remotePreference     RemotePreference?     // Nullable: no deceptive default
   preferredCountries   String[]              @default([]) // ISO-2 codes where candidate targets roles
   preferredCities      String[]              @default([])
-  employmentTypes      String[]              @default([]) // e.g. ["FULL_TIME", "CONTRACT"]
+  employmentTypes      EmploymentType[]      @default([])
+
   relocationPreference RelocationPreference?
   minSalary            Int?
   maxSalary            Int?

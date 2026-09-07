@@ -1,9 +1,10 @@
 import "reflect-metadata";
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { ConflictException } from "@nestjs/common";
+import { BadRequestException, ConflictException } from "@nestjs/common";
 import {
   CandidateSearchStatus,
+  EmploymentType,
   OnboardingStatus,
   OnboardingStep,
   Prisma,
@@ -50,12 +51,12 @@ test("calculateProfileCompleteness and calculateOnboardingBriefCompleteness calc
       remotePreference: RemotePreference.REMOTE_ONLY,
       preferredCountries: ["US"],
       preferredCities: ["San Francisco"],
-      employmentTypes: ["FULL_TIME"],
+      employmentTypes: [EmploymentType.FULL_TIME],
       relocationPreference: RelocationPreference.NOT_OPEN,
       minSalary: 180000,
       maxSalary: 240000,
       salaryCurrency: "USD",
-      salaryPeriod: SalaryPeriod.YEARLY,
+      salaryPeriod: SalaryPeriod.ANNUAL,
       createdAt: new Date(),
       updatedAt: new Date()
     },
@@ -338,36 +339,160 @@ test("ProfileService: saveCandidateData leaves CandidateSkill untouched if skill
   assert.equal(upsertSkillsCalled, false, "Must NOT modify skills when skills is undefined");
 });
 
+test("Opportunity brief completeness is 100% when salary is undisclosed", () => {
+  const undisclosedSalaryProfile = {
+    id: "prof_undisclosed",
+    userId: "usr_undisclosed",
+    headline: null,
+    bio: null,
+    experienceYears: 6,
+    seniorityLevel: SeniorityLevel.SENIOR,
+    primaryDiscipline: "Full Stack Engineering",
+    currentCountry: "GB",
+    currentCity: "London",
+    timezone: "Europe/London",
+    workAuthorizations: ["GB"],
+    requiresVisaSponsorship: false,
+    searchStatus: CandidateSearchStatus.ACTIVELY_LOOKING,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    preferences: {
+      id: "pref_undisclosed",
+      profileId: "prof_undisclosed",
+      targetRoleTitles: ["Full Stack Tech Lead"],
+      targetDisciplines: ["Engineering"],
+      remotePreference: RemotePreference.HYBRID,
+      preferredCountries: ["GB"],
+      preferredCities: ["London"],
+      employmentTypes: [EmploymentType.FULL_TIME],
+      relocationPreference: RelocationPreference.NOT_OPEN,
+      minSalary: null,
+      maxSalary: null,
+      salaryCurrency: null,
+      salaryPeriod: null,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    },
+    skills: [
+      { id: "s1", profileId: "prof_undisclosed", displayName: "TypeScript", normalizedName: "typescript", yearsExperience: 6, isTopSkill: true, createdAt: new Date(), updatedAt: new Date() },
+      { id: "s2", profileId: "prof_undisclosed", displayName: "React", normalizedName: "react", yearsExperience: 6, isTopSkill: true, createdAt: new Date(), updatedAt: new Date() },
+      { id: "s3", profileId: "prof_undisclosed", displayName: "Node.js", normalizedName: "nodejs", yearsExperience: 6, isTopSkill: false, createdAt: new Date(), updatedAt: new Date() }
+    ]
+  };
+
+  const brief = calculateOnboardingBriefCompleteness(undisclosedSalaryProfile);
+  assert.equal(brief.score, 100, "Brief must reach 100% without disclosing salary");
+  assert.equal(brief.compensationAndPreferences, 25, "Work terms & preferences must reach 25% without salary");
+});
+
 test("OnboardingService: skip and complete transition statuses and increment revision", async () => {
-  let upsertData: any = null;
   const mockPrisma = {
+    $transaction: async (fn: any) => fn(mockTx),
     onboardingProgress: {
-      upsert: async (args: any) => {
-        upsertData = args;
-        return {
-          id: "prog_1",
-          userId: "user_test_1",
-          status: args.update.status,
-          revision: 4,
-          skippedAt: args.update.skippedAt,
-          completedAt: args.update.completedAt
-        };
-      }
+      findUnique: async () => ({ status: OnboardingStatus.NOT_STARTED, revision: 3 })
+    }
+  };
+
+  const mockTx = {
+    onboardingProgress: {
+      findUnique: async () => ({ status: OnboardingStatus.NOT_STARTED, revision: 3 }),
+      updateMany: async () => ({ count: 1 })
     }
   };
 
   const profileService = new ProfileService(mockPrisma as any);
   const onboardingService = new OnboardingService(mockPrisma as any, profileService);
 
-  // Test skip
-  const skipped = await onboardingService.skip("user_test_1");
+  // Test skip (from NOT_STARTED)
+  const skipped = await onboardingService.skip("user_test_1", { expectedRevision: 3 });
   assert.equal(skipped.status, OnboardingStatus.SKIPPED);
   assert.equal(skipped.revision, 4);
   assert.ok(skipped.skippedAt);
 
-  // Test complete
-  const completed = await onboardingService.complete("user_test_1");
+  // Test complete (from IN_PROGRESS)
+  mockTx.onboardingProgress.findUnique = async () => ({ status: OnboardingStatus.IN_PROGRESS, revision: 3 });
+  const completed = await onboardingService.complete("user_test_1", { expectedRevision: 3 });
   assert.equal(completed.status, OnboardingStatus.COMPLETED);
   assert.equal(completed.revision, 4);
   assert.ok(completed.completedAt);
 });
+
+test("OnboardingService: state machine enforces transition policy", async () => {
+  // 1. SKIPPED -> COMPLETED is intentionally allowed
+  const mockTxAllowed = {
+    onboardingProgress: {
+      findUnique: async () => ({ status: OnboardingStatus.SKIPPED, revision: 1 }),
+      updateMany: async () => ({ count: 1 })
+    }
+  };
+  const mockPrismaAllowed = {
+    $transaction: async (fn: any) => fn(mockTxAllowed),
+    onboardingProgress: {
+      findUnique: async () => ({ status: OnboardingStatus.SKIPPED, revision: 1 })
+    }
+  };
+  const serviceAllowed = new OnboardingService(mockPrismaAllowed as any, {} as any);
+  const completed = await serviceAllowed.complete("user_test_1", { expectedRevision: 1 });
+  assert.equal(completed.status, OnboardingStatus.COMPLETED);
+
+  // 2. COMPLETED -> SKIPPED is strictly rejected with BadRequestException
+  const mockTxForbidden = {
+    onboardingProgress: {
+      findUnique: async () => ({ status: OnboardingStatus.COMPLETED, revision: 2 })
+    }
+  };
+  const mockPrismaForbidden = {
+    $transaction: async (fn: any) => fn(mockTxForbidden),
+    onboardingProgress: {
+      findUnique: async () => ({ status: OnboardingStatus.COMPLETED, revision: 2 })
+    }
+  };
+  const serviceForbidden = new OnboardingService(mockPrismaForbidden as any, {} as any);
+  await assert.rejects(
+    () => serviceForbidden.skip("user_test_1", { expectedRevision: 2 }),
+    (err: any) => {
+      assert.ok(err instanceof BadRequestException);
+      assert.match(err.message, /Invalid onboarding status transition/);
+      return true;
+    }
+  );
+});
+
+test("OnboardingService: stale skip/complete requests with expectedRevision mismatch return 409 with safe currentState", async () => {
+  const mockTx = {
+    onboardingProgress: {
+      findUnique: async () => ({ id: "prog_1", userId: "user_test_1", status: OnboardingStatus.IN_PROGRESS, revision: 5 }),
+      updateMany: async () => ({ count: 0 })
+    }
+  };
+  const mockPrisma = {
+    $transaction: async (fn: any) => fn(mockTx),
+    user: {
+      findUnique: async () => ({ id: "user_test_1", name: "Alice", email: "alice@example.com", role: "USER", status: "ACTIVE" })
+    },
+    onboardingProgress: {
+      findUnique: async () => ({ id: "prog_1", userId: "user_test_1", status: OnboardingStatus.IN_PROGRESS, revision: 5 })
+    },
+    candidateProfile: {
+      findUnique: async () => null
+    }
+  };
+
+  const profileService = new ProfileService(mockPrisma as any);
+  const onboardingService = new OnboardingService(mockPrisma as any, profileService);
+
+  // Stale expectedRevision: passed 3, server is at 5
+  await assert.rejects(
+    () => onboardingService.complete("user_test_1", { expectedRevision: 3 }),
+    (err: any) => {
+      assert.ok(err instanceof ConflictException);
+      const resp = err.getResponse();
+      assert.equal(resp.expectedRevision, 3);
+      assert.equal(resp.currentRevision, 5);
+      assert.ok(resp.currentState);
+      assert.equal(resp.currentState.user.id, "user_test_1");
+      return true;
+    }
+  );
+});
+

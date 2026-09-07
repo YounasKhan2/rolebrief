@@ -134,7 +134,7 @@ export async function authRequest<T>(
         ? data.retryAfterSeconds
         : (parsedHeader && !isNaN(parsedHeader) ? parsedHeader : undefined);
       const formattedMessage = Array.isArray(message) ? message.join(" ") : message ?? `Auth API returned ${response.status}.`;
-      throw new ApiError(formattedMessage, "http", response.status, retryAfterSeconds);
+      throw new ApiError(formattedMessage, "http", response.status, retryAfterSeconds, data);
     }
     return (await response.json()) as T;
   } catch (error) {

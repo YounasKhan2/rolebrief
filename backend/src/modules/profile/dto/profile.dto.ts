@@ -40,7 +40,15 @@ export enum OnboardingStepEnum {
 export enum SalaryPeriodEnum {
   HOURLY = "HOURLY",
   MONTHLY = "MONTHLY",
-  YEARLY = "YEARLY"
+  ANNUAL = "ANNUAL"
+}
+
+export enum EmploymentTypeEnum {
+  FULL_TIME = "FULL_TIME",
+  PART_TIME = "PART_TIME",
+  CONTRACT = "CONTRACT",
+  INTERNSHIP = "INTERNSHIP",
+  TEMPORARY = "TEMPORARY"
 }
 
 export enum CandidateSearchStatusEnum {
@@ -176,12 +184,11 @@ export class UpdatePreferencesDto {
   @MaxLength(100, { each: true })
   preferredCities?: string[];
 
-  @ApiPropertyOptional({ type: [String] })
+  @ApiPropertyOptional({ enum: EmploymentTypeEnum, isArray: true })
   @IsOptional()
   @IsArray()
-  @IsString({ each: true })
-  @MaxLength(50, { each: true })
-  employmentTypes?: string[];
+  @IsEnum(EmploymentTypeEnum, { each: true })
+  employmentTypes?: EmploymentTypeEnum[];
 
   @ApiPropertyOptional({ enum: RelocationPreferenceEnum })
   @IsOptional()

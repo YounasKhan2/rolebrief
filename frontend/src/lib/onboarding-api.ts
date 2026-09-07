@@ -4,7 +4,8 @@ export type OnboardingStatus = "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED" | "SK
 export type OnboardingStep = "GOAL" | "REACH" | "FIT" | "REVIEW";
 export type RemotePreference = "REMOTE_ONLY" | "HYBRID" | "ONSITE" | "OPEN_TO_ANY";
 export type SeniorityLevel = "ENTRY" | "MID" | "SENIOR" | "LEAD" | "PRINCIPAL" | "DIRECTOR" | "EXECUTIVE";
-export type SalaryPeriod = "HOURLY" | "MONTHLY" | "YEARLY";
+export type SalaryPeriod = "HOURLY" | "MONTHLY" | "ANNUAL";
+export type EmploymentType = "FULL_TIME" | "PART_TIME" | "CONTRACT" | "INTERNSHIP" | "TEMPORARY";
 export type CandidateSearchStatus = "ACTIVELY_LOOKING" | "OPEN_TO_OFFERS" | "CASUAL" | "NOT_LOOKING";
 export type RelocationPreference = "NOT_OPEN" | "WILLING_TO_RELOCATE" | "OPEN_TO_REMOTE_ONLY";
 
@@ -40,7 +41,7 @@ export interface CandidatePreferenceData {
   remotePreference: RemotePreference | null;
   preferredCountries: string[];
   preferredCities: string[];
-  employmentTypes: string[];
+  employmentTypes: EmploymentType[];
   relocationPreference: RelocationPreference | null;
   minSalary: number | null;
   maxSalary: number | null;
@@ -130,7 +131,7 @@ export interface AutosaveOnboardingDto {
     remotePreference: RemotePreference;
     preferredCountries: string[];
     preferredCities: string[];
-    employmentTypes: string[];
+    employmentTypes: EmploymentType[];
     relocationPreference: RelocationPreference;
     minSalary: number;
     maxSalary: number;
@@ -152,16 +153,18 @@ export function autosaveOnboarding(dto: AutosaveOnboardingDto): Promise<Onboardi
   });
 }
 
-export function skipOnboarding(): Promise<{ status: OnboardingStatus; revision: number }> {
+export function skipOnboarding(opts: { expectedRevision: number }): Promise<{ status: OnboardingStatus; revision: number }> {
   return authRequest<{ status: OnboardingStatus; revision: number }>("/me/onboarding/skip", {
     method: "POST",
+    body: opts,
     csrf: true
   });
 }
 
-export function completeOnboarding(): Promise<{ status: OnboardingStatus; revision: number }> {
+export function completeOnboarding(opts: { expectedRevision: number }): Promise<{ status: OnboardingStatus; revision: number }> {
   return authRequest<{ status: OnboardingStatus; revision: number }>("/me/onboarding/complete", {
     method: "POST",
+    body: opts,
     csrf: true
   });
 }

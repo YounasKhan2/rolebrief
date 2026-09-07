@@ -68,17 +68,23 @@ export function calculateOnboardingBriefCompleteness(
     skillsScore += 15;
   }
 
-  // 4. Compensation, Employment Type & Relocation (max 25%)
+  // 4. Preferences & Work Terms (max 25%)
+  // Undisclosed salary MUST NOT reduce completeness: salary is optional and sensitive.
   let compensationAndPreferences = 0;
-  if (preferences?.minSalary !== null && preferences?.minSalary !== undefined) {
-    compensationAndPreferences += 10;
-  }
   if (preferences?.employmentTypes && preferences.employmentTypes.length > 0) {
+    compensationAndPreferences += 15;
+  }
+  if (preferences?.relocationPreference || profile.searchStatus) {
     compensationAndPreferences += 10;
   }
-  if (preferences?.relocationPreference || preferences?.salaryCurrency) {
-    compensationAndPreferences += 5;
+  // Optional salary input can also contribute towards the 25% cap
+  if (
+    (preferences?.minSalary !== null && preferences?.minSalary !== undefined) ||
+    preferences?.salaryCurrency
+  ) {
+    compensationAndPreferences = Math.min(25, compensationAndPreferences + 10);
   }
+  compensationAndPreferences = Math.min(25, compensationAndPreferences);
 
   const score = Math.min(100, roles + location + skillsScore + compensationAndPreferences);
 
