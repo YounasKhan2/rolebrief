@@ -19,7 +19,7 @@ import { useAuth } from "../../lib/auth";
 const primaryNav = [
   { to: "/app/radar", label: "Radar", icon: Radar },
   { to: "/app/jobs", label: "Jobs", icon: Search },
-  { to: "/news", label: "Market Pulse", icon: Newspaper },
+  { to: "/app/news", label: "Market Pulse", icon: Newspaper },
   { to: "/app/tracker", label: "Tracker", icon: ListChecks },
   { to: "/app/saved", label: "Saved", icon: Bookmark },
 ];
@@ -27,7 +27,7 @@ const primaryNav = [
 const bottomNav = [
   { to: "/app/radar", label: "Radar", icon: Radar },
   { to: "/app/jobs", label: "Jobs", icon: Search },
-  { to: "/news", label: "Pulse", icon: Newspaper },
+  { to: "/app/news", label: "Pulse", icon: Newspaper },
   { to: "/app/tracker", label: "Tracker", icon: ListChecks },
   { to: "/app/saved", label: "Saved", icon: Bookmark },
 ];

@@ -22,7 +22,7 @@ export function Component() {
   if (!item) {
     return (
       <PageContainer>
-        <EmptyState title="Story not found" body="This item may have been removed." action={<Link to="/news" className="text-indigo font-medium">Back to Market Pulse</Link>} />
+        <EmptyState title="Story not found" body="This item may have been removed." action={<Link to="/app/news" className="text-indigo font-medium">Back to Market Pulse</Link>} />
       </PageContainer>
     );
   }
@@ -34,7 +34,7 @@ export function Component() {
   return (
     <PageContainer className="max-w-[900px]">
       <nav className="flex items-center gap-1.5 text-[13px] text-slate mb-6" aria-label="Breadcrumb">
-        <Link to="/news" className="hover:text-ink">Market Pulse</Link>
+        <Link to="/app/news" className="hover:text-ink">Market Pulse</Link>
         <ChevronRight size={13} />
         <span className="text-cyan">{item.category}</span>
       </nav>

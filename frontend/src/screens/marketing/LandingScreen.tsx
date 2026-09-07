@@ -359,9 +359,19 @@ function NewsBlock() {
         </p>
         <div className="mt-8">
           {news.length > 0 ? (
-            <div className="grid gap-5 md:grid-cols-2">
-              {news.slice(0, 2).map((item) => <NewsCard key={item.slug} item={item} variant="standard" />)}
-            </div>
+            <>
+              <div className="grid gap-5 md:grid-cols-2">
+                {news.slice(0, 2).map((item) => <NewsCard key={item.slug} item={item} variant="standard" />)}
+              </div>
+              <div className="mt-6 flex items-center justify-between flex-wrap gap-4 pt-4 border-t border-line/60">
+                <p className="text-sm text-slate">
+                  Market Pulse is an authenticated intelligence feed inside the RoleBrief workspace.
+                </p>
+                <LinkButton to="/app/news" variant="secondary" size="md">
+                  View Market Pulse <ArrowRight size={14} className="ml-1" />
+                </LinkButton>
+              </div>
+            </>
           ) : (
             <EmptyState
               title="Company momentum unavailable"

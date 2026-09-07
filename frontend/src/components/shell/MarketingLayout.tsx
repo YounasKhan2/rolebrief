@@ -9,7 +9,7 @@ const links = [
   { to: "/#radar", label: "Radar" },
   { to: "/#signals", label: "Signals" },
   { to: "/#coverage", label: "Coverage" },
-  { to: "/news", label: "Market Pulse" },
+  { to: "/jobs", label: "Jobs" },
 ];
 
 /** Router-aware hash scrolling honoring prefers-reduced-motion and sticky header offset. */
@@ -126,7 +126,7 @@ function Footer() {
       items: [
         { label: "Overview", to: "/#signals" },
         { label: "Jobs", to: "/jobs" },
-        { label: "Market Pulse", to: "/news" },
+        { label: "Market Pulse", to: "/app/news" },
         { label: "Coverage", to: "/#coverage" },
       ],
     },

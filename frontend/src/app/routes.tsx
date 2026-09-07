@@ -1,4 +1,4 @@
-import { createBrowserRouter, Navigate, Outlet, useLocation } from "react-router";
+import { createBrowserRouter, Navigate, Outlet, useLocation, useParams } from "react-router";
 import MarketingLayout from "../components/shell/MarketingLayout";
 import AppShell from "../components/shell/AppShell";
 import { RouteFallback } from "./RouteFallback";
@@ -10,6 +10,13 @@ import { GuestOnly } from "./GuestOnly";
 function AliasRedirect({ to }: { to: string }) {
   const location = useLocation();
   return <Navigate to={`${to}${location.search}${location.hash}`} replace />;
+}
+
+/** Helper component to redirect root-level news slug alias to /app/news/:slug while preserving query and hash. */
+function NewsSlugAliasRedirect() {
+  const { slug } = useParams();
+  const location = useLocation();
+  return <Navigate to={`/app/news/${slug ?? ""}${location.search}${location.hash}`} replace />;
 }
 
 // Layout wrappers stay eager; each leaf screen is lazy-loaded so the shell is
@@ -30,8 +37,6 @@ export const router = createBrowserRouter([
       // Public content — viewable by everyone
       { path: "jobs", lazy: () => import("../screens/jobs/JobsScreen") },
       { path: "jobs/:slug", lazy: () => import("../screens/jobs/JobDetailScreen") },
-      { path: "news", lazy: () => import("../screens/news/MarketPulseScreen") },
-      { path: "news/:slug", lazy: () => import("../screens/news/NewsDetailScreen") },
       { path: "companies/:slug", lazy: () => import("../screens/companies/CompanyScreen") },
 
       // Info pages
@@ -62,6 +67,8 @@ export const router = createBrowserRouter([
 
       // Root compatibility aliases (redirect to canonical /app/* preserving query & hash)
       { path: "radar", element: <AliasRedirect to="/app/radar" /> },
+      { path: "news", element: <AliasRedirect to="/app/news" /> },
+      { path: "news/:slug", element: <NewsSlugAliasRedirect /> },
       { path: "saved", element: <AliasRedirect to="/app/saved" /> },
       { path: "tracker", element: <AliasRedirect to="/app/tracker" /> },
       { path: "alerts", element: <AliasRedirect to="/app/alerts" /> },
@@ -90,6 +97,8 @@ export const router = createBrowserRouter([
       { path: "radar", lazy: () => import("../screens/radar/RadarScreen") },
       { path: "jobs", lazy: () => import("../screens/jobs/JobsScreen") },
       { path: "jobs/:slug", lazy: () => import("../screens/jobs/JobDetailScreen") },
+      { path: "news", lazy: () => import("../screens/news/MarketPulseScreen") },
+      { path: "news/:slug", lazy: () => import("../screens/news/NewsDetailScreen") },
       { path: "saved", lazy: () => import("../screens/saved/SavedScreen") },
       { path: "compare", lazy: () => import("../screens/compare/CompareScreen") },
       { path: "alerts", lazy: () => import("../screens/alerts/AlertsScreen") },

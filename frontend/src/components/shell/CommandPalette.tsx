@@ -33,7 +33,7 @@ type Item = {
 const navItems: Item[] = [
   { id: "n-radar", label: "Radar", sub: "Your ranked briefing", group: "Go to", to: "/app/radar", icon: <Radar size={16} /> },
   { id: "n-jobs", label: "Jobs", sub: "Search and filter roles", group: "Go to", to: "/app/jobs", icon: <Search size={16} /> },
-  { id: "n-news", label: "Market Pulse", sub: "Career news", group: "Go to", to: "/news", icon: <Newspaper size={16} /> },
+  { id: "n-news", label: "Market Pulse", sub: "Career news", group: "Go to", to: "/app/news", icon: <Newspaper size={16} /> },
   { id: "n-tracker", label: "Tracker", sub: "Your applications", group: "Go to", to: "/app/tracker", icon: <ListChecks size={16} /> },
   { id: "n-saved", label: "Saved briefs", group: "Go to", to: "/app/saved", icon: <Bookmark size={16} /> },
   { id: "n-alerts", label: "Smart Alerts", group: "Go to", to: "/app/alerts", icon: <Bell size={16} /> },
@@ -69,7 +69,7 @@ const newsItems: Item[] = news.map((n) => ({
   label: n.headline,
   sub: `${n.publisher} · ${n.category}`,
   group: "News",
-  to: `/news/${n.slug}`,
+  to: `/app/news/${n.slug}`,
   icon: <Newspaper size={16} />,
 }));
 

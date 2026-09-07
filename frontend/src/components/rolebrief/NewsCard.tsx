@@ -27,7 +27,7 @@ export function NewsCard({ item, variant = "standard" }: { item: NewsItem; varia
           <span className="font-data text-[11px] text-slate">{relativeTime(item.publishedAt)}</span>
         </div>
         <h3 className="font-medium text-ink leading-snug">
-          <Link to={`/news/${item.slug}`} className="hover:text-cyan before:absolute before:inset-0">
+          <Link to={`/app/news/${item.slug}`} className="hover:text-cyan before:absolute before:inset-0">
             {item.headline}
           </Link>
         </h3>
@@ -62,7 +62,7 @@ export function NewsCard({ item, variant = "standard" }: { item: NewsItem; varia
           <span className="font-data text-[11px] text-slate">· {item.publisher} · {relativeTime(item.publishedAt)}</span>
         </div>
         <h3 className={classNames("font-display text-ink leading-tight", feature ? "text-2xl" : "text-lg")}>
-          <Link to={`/news/${item.slug}`} className="hover:text-cyan transition-colors before:absolute before:inset-0">
+          <Link to={`/app/news/${item.slug}`} className="hover:text-cyan transition-colors before:absolute before:inset-0">
             {item.headline}
           </Link>
         </h3>

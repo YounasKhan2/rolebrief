@@ -4,6 +4,8 @@ import { sanitizeReturnTo, buildReturnToQuery } from "./routing";
 
 test("sanitizeReturnTo: accepts valid relative paths with query and hash", () => {
   assert.equal(sanitizeReturnTo("/app/radar"), "/app/radar");
+  assert.equal(sanitizeReturnTo("/app/news"), "/app/news");
+  assert.equal(sanitizeReturnTo("/app/news/ai-chip-expansion-q3?tab=hiring#reactions"), "/app/news/ai-chip-expansion-q3?tab=hiring#reactions");
   assert.equal(sanitizeReturnTo("/app/saved?sort=newest#top"), "/app/saved?sort=newest#top");
   assert.equal(sanitizeReturnTo("/jobs/acme-senior-engineer"), "/jobs/acme-senior-engineer");
   assert.equal(sanitizeReturnTo("/news/tech-hiring-trends?filter=remote"), "/news/tech-hiring-trends?filter=remote");
