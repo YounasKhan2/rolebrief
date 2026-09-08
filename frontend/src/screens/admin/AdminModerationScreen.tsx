@@ -18,6 +18,7 @@ type QueueItem = {
   detail: string;
   reportedAt: string;
   severity: "high" | "medium";
+  jobSlug?: string;
 };
 
 const reports: QueueItem[] = [];
@@ -130,7 +131,20 @@ function ModerationCard({ item, icon, onResolve }: { item: QueueItem; icon: Reac
         <Button variant="destructive" size="sm" icon={<X size={14} />} onClick={() => onResolve(item.id, "Listing removed")}>Remove listing</Button>
         <Button variant="secondary" size="sm" icon={<ShieldAlert size={14} />} onClick={() => onResolve(item.id, "Poster flagged for review")}>Flag poster</Button>
         <Button variant="tertiary" size="sm" icon={<Check size={14} />} onClick={() => onResolve(item.id, "Dismissed — listing is legitimate")}>Dismiss</Button>
-        <a href="#" className="ml-auto text-[13px] text-slate hover:text-ink inline-flex items-center gap-1">View listing <ExternalLink size={13} /></a>
+        {item.jobSlug ? (
+          <Link
+            to={`/app/jobs/${item.jobSlug}`}
+            target="_blank"
+            rel="noreferrer"
+            className="ml-auto text-[13px] text-indigo hover:text-indigo-strong inline-flex items-center gap-1 font-medium"
+          >
+            View listing <ExternalLink size={13} />
+          </Link>
+        ) : (
+          <span className="ml-auto text-[13px] text-slate inline-flex items-center gap-1 cursor-not-allowed">
+            Listing unavailable
+          </span>
+        )}
       </div>
     </div>
   );

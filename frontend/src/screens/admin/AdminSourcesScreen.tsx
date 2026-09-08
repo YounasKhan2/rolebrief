@@ -45,7 +45,7 @@ export function Component() {
         kicker="Operations · sources"
         title="Ingestion sources."
         description="Enable, disable and monitor every data source feeding the index."
-        actions={<Button icon={<Plus size={16} />} onClick={() => toast({ kind: "success", message: "Source form — coming next." })}>Add source</Button>}
+        actions={<Button icon={<Plus size={16} />} disabled title="Available after provider controls are connected.">Add source</Button>}
       />
 
       <div className="space-y-3">
@@ -67,8 +67,8 @@ export function Component() {
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <Button variant="tertiary" size="sm" icon={<RefreshCw size={14} />} onClick={() => toast({ kind: "info", message: `Re-syncing ${s.name}…` })}>Sync</Button>
-                <Button variant="tertiary" size="sm" icon={<Settings2 size={14} />}>Configure</Button>
+                <Button variant="tertiary" size="sm" icon={<RefreshCw size={14} />} disabled title="Available after provider controls are connected.">Sync</Button>
+                <Button variant="tertiary" size="sm" icon={<Settings2 size={14} />} disabled title="Available after provider controls are connected.">Configure</Button>
                 <div className="pl-2 border-l border-line">
                   <Switch label="" checked={s.enabled} onChange={() => toggle(s.id)} />
                 </div>

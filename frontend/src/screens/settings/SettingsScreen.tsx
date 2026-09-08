@@ -4,7 +4,6 @@ import { Download, Trash2, Bell, Mail, Shield, Accessibility, Ban } from "lucide
 import { PageContainer, PageHeader } from "../../components/shell/AppShell";
 import { Button, SectionRule } from "../../components/ui/primitives";
 import { Switch, SegmentedControl, Select } from "../../components/ui/form";
-import { Dialog } from "../../components/ui/overlay";
 import { useToast } from "../../components/ui/toast";
 import { useAuth } from "../../lib/auth";
 import * as authApi from "../../lib/auth-api";
@@ -49,7 +48,6 @@ export function Component() {
   const [reducedMotion, setReducedMotion] = useState(false);
   const [highContrast, setHighContrast] = useState(false);
   const [privateProfile, setPrivateProfile] = useState(true);
-  const [confirmDelete, setConfirmDelete] = useState(false);
 
   async function handleLogout() {
     setIsLoggingOut(true);
@@ -150,31 +148,31 @@ export function Component() {
         </SettingsCard>
 
         <SettingsCard icon={<Ban size={18} />} title="Muted & blocked">
-          <Row title="Hidden companies" description="No hidden companies are stored yet." control={<Button variant="tertiary" size="sm">Manage</Button>} />
-          <Row title="Blocked sources" description="No blocked sources are stored yet." control={<Button variant="tertiary" size="sm">Manage</Button>} />
+          <Row title="Hidden companies" description="Available after company filtering is connected." control={<Button variant="tertiary" size="sm" disabled title="Available after company filtering is connected.">Manage</Button>} />
+          <Row title="Blocked sources" description="Available after source filtering is connected." control={<Button variant="tertiary" size="sm" disabled title="Available after source filtering is connected.">Manage</Button>} />
         </SettingsCard>
 
         <SectionRule className="my-2" />
 
         <SettingsCard icon={<Download size={18} />} title="Your data">
-          <Row title="Export your data" description="Download a copy of your profile, saved items and activity (JSON)." control={<Button variant="secondary" size="sm" icon={<Download size={14} />} onClick={() => toast({ kind: "info", message: "Preparing your export — we'll email a link." })}>Export</Button>} />
-          <Row title="Delete account" description="Permanently remove your account, résumé and all data." control={<Button variant="destructive" size="sm" icon={<Trash2 size={14} />} onClick={() => setConfirmDelete(true)}>Delete</Button>} />
+          <Row title="Export your data" description="Download a copy of your profile, saved items and activity (JSON)." control={<Button variant="secondary" size="sm" icon={<Download size={14} />} disabled title="Data export will be available in an upcoming release.">Export</Button>} />
+          <Row
+            title="Delete account"
+            description="Self-service account deletion with retention handling and session revocation will be available in an upcoming release. Contact privacy@rolebrief.com for manual account removal."
+            control={
+              <Button
+                variant="destructive"
+                size="sm"
+                icon={<Trash2 size={14} />}
+                disabled
+                title="Available in an upcoming security and privacy release."
+              >
+                Delete
+              </Button>
+            }
+          />
         </SettingsCard>
       </div>
-
-      <Dialog
-        open={confirmDelete}
-        onClose={() => setConfirmDelete(false)}
-        title="Delete your account?"
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => setConfirmDelete(false)}>Keep account</Button>
-            <Button variant="destructive" onClick={() => { setConfirmDelete(false); toast({ kind: "warning", message: "Account scheduled for deletion." }); }}>Delete everything</Button>
-          </>
-        }
-      >
-        <p className="text-slate">This removes your profile, résumé, saved briefs, alerts and tracker. It can't be undone. Any active alerts stop immediately.</p>
-      </Dialog>
     </PageContainer>
   );
 }

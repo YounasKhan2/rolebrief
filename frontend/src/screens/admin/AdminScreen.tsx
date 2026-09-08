@@ -5,6 +5,7 @@ import { PageContainer, PageHeader } from "../../components/shell/AppShell";
 import { Kicker, Badge, Button, SectionRule } from "../../components/ui/primitives";
 import { companies } from "../../lib/fixtures";
 import { relativeTime } from "../../lib/format";
+import { useToast } from "../../components/ui/toast";
 import { useAuth } from "../../lib/auth";
 import * as authApi from "../../lib/auth-api";
 import type { AdminUser, AuthRole, AuthStatus } from "../../lib/auth-api";
@@ -31,18 +32,26 @@ function Stat({ label, value, hint, tone }: { label: string; value: string; hint
 
 export function Component() {
   const { user } = useAuth();
+  const toast = useToast();
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
   const [userError, setUserError] = useState("");
 
-  async function loadUsers() {
+  async function loadUsers(showSuccessToast = false) {
     setLoadingUsers(true);
     setUserError("");
     try {
       const result = await authApi.listAdminUsers();
       setUsers(result.users);
+      if (showSuccessToast) {
+        toast({ kind: "info", message: "Admin data refreshed." });
+      }
     } catch (error) {
-      setUserError(error instanceof Error ? error.message : "Could not load users.");
+      const msg = error instanceof Error ? error.message : "Could not load users.";
+      setUserError(msg);
+      if (showSuccessToast) {
+        toast({ kind: "error", message: msg });
+      }
     } finally {
       setLoadingUsers(false);
     }
@@ -70,7 +79,16 @@ export function Component() {
         kicker="Operations · internal"
         title="System health & ingestion."
         description={`Signed in as ${user?.email ?? "administrator"}. Provider status, ingestion volume and data quality across the pipeline.`}
-        actions={<Button variant="secondary" icon={<RefreshCw size={16} />}>Refresh now</Button>}
+        actions={
+          <Button
+            variant="secondary"
+            disabled={loadingUsers}
+            onClick={() => void loadUsers(true)}
+            icon={<RefreshCw size={16} className={loadingUsers ? "animate-spin" : ""} />}
+          >
+            {loadingUsers ? "Refreshing..." : "Refresh now"}
+          </Button>
+        }
       />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
@@ -142,7 +160,8 @@ export function Component() {
             <ul className="mt-2 space-y-2 text-[13px] text-ink/90">
               <li>No live admin incident feed is connected yet.</li>
             </ul>
-            <Button variant="secondary" size="sm" className="mt-3">View incident log</Button>
+            <Button variant="secondary" size="sm" className="mt-3" disabled>View incident log</Button>
+            <p className="text-[12px] text-slate mt-1.5">Available after the incident logging service is connected.</p>
           </div>
 
           <div className="rounded-[var(--radius-card)] border border-line p-4">

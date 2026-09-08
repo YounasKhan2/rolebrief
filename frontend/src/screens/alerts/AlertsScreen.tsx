@@ -49,7 +49,7 @@ export function Component() {
                   <Button variant="tertiary" size="sm" icon={a.status === "Active" ? <Pause size={14} /> : <Play size={14} />} onClick={() => update(a.id, { status: a.status === "Active" ? "Paused" : "Active" })}>
                     {a.status === "Active" ? "Pause" : "Resume"}
                   </Button>
-                  <Button variant="tertiary" size="sm" icon={<Pencil size={14} />}>Edit</Button>
+                  <Button variant="tertiary" size="sm" icon={<Pencil size={14} />} disabled title="Available after alert persistence is connected.">Edit</Button>
                   <Button variant="tertiary" size="sm" icon={<Copy size={14} />} onClick={() => toast({ kind: "success", message: "Alert duplicated." })}>Duplicate</Button>
                   <Button variant="tertiary" size="sm" icon={<Trash2 size={14} />} onClick={() => { setAlerts((p) => p.filter((x) => x.id !== a.id)); toast({ kind: "info", message: "Alert deleted." }); }}>Delete</Button>
                 </div>

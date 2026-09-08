@@ -267,9 +267,8 @@ export default function AppShell() {
             >
               <Search size={18} />
             </button>
-            <NavLink to="/app/notifications" aria-label="Notifications" className="inline-flex items-center justify-center size-10 rounded-[var(--radius-control)] text-slate hover:bg-soft hover:text-ink relative">
+            <NavLink to="/app/notifications" aria-label="Notifications" className="inline-flex items-center justify-center size-10 rounded-[var(--radius-control)] text-slate hover:bg-soft hover:text-ink">
               <Bell size={18} />
-              <span className="absolute top-2 right-2 size-1.5 bg-indigo rounded-full" />
             </NavLink>
             <NavLink to="/app/settings" aria-label="Settings" className="hidden sm:inline-flex items-center justify-center size-10 rounded-[var(--radius-control)] text-slate hover:bg-soft hover:text-ink">
               <Settings size={18} />

@@ -16,6 +16,7 @@ import {
   CornerDownLeft,
   ArrowRight,
   LogOut,
+  Shield,
 } from "lucide-react";
 import { jobs, companies, news, companyName } from "../../lib/fixtures";
 import { classNames } from "../../lib/format";
@@ -77,12 +78,16 @@ const newsItems: Item[] = news.map((n) => ({
   icon: <Newspaper size={16} />,
 }));
 
-const all = [...navItems, ...jobItems, ...companyItems, ...newsItems];
+const adminItems: Item[] = [
+  { id: "n-admin", label: "Admin console", sub: "System health & user operations", group: "Admin", to: "/admin", icon: <Shield size={16} />, keywords: "admin console users operations health" },
+  { id: "n-admin-sources", label: "Ingestion sources", sub: "Provider configuration & health", group: "Admin", to: "/admin/sources", icon: <Shield size={16} />, keywords: "admin sources providers himalayas sync" },
+  { id: "n-admin-moderation", label: "Moderation queue", sub: "Reports, suspicious roles & deduplication", group: "Admin", to: "/admin/moderation", icon: <Shield size={16} />, keywords: "admin moderation reports fraud duplicate" },
+];
 
 export function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void }) {
   const navigate = useNavigate();
   const toast = useToast();
-  const { logout, isAuthenticated } = useAuth();
+  const { logout, isAuthenticated, isAdmin } = useAuth();
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -117,14 +122,18 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
     ];
   }, [isAuthenticated, logout]);
 
+  const activeNavItems = useMemo<Item[]>(() => {
+    return isAdmin ? [...navItems, ...adminItems] : navItems;
+  }, [isAdmin]);
+
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const items = [...all, ...accountItems];
-    if (!q) return [...navItems, ...accountItems];
+    const items = [...activeNavItems, ...jobItems, ...companyItems, ...newsItems, ...accountItems];
+    if (!q) return [...activeNavItems, ...accountItems];
     return items
       .filter((i) => `${i.label} ${i.sub ?? ""} ${i.keywords ?? ""} ${i.group}`.toLowerCase().includes(q))
       .slice(0, 12);
-  }, [query, accountItems]);
+  }, [query, activeNavItems, accountItems]);
 
   useEffect(() => {
     setActive(0);
@@ -244,9 +253,18 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
             <span>↑↓ navigate</span>
             <span className="inline-flex items-center gap-1"><CornerDownLeft size={12} /> open</span>
           </span>
-          <span className="inline-flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => {
+              onClose();
+              const q = query.trim();
+              const jobsBase = isAuthenticated ? "/app/jobs" : "/jobs";
+              navigate(q ? `${jobsBase}?q=${encodeURIComponent(q)}` : jobsBase);
+            }}
+            className="inline-flex items-center gap-1 text-[12px] text-indigo hover:text-indigo-strong font-medium transition-colors focus-visible:outline-none focus-visible:underline"
+          >
             Full search in Jobs <ArrowRight size={12} />
-          </span>
+          </button>
         </div>
       </div>
     </div>
