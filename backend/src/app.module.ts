@@ -12,6 +12,7 @@ import { AlertsModule } from "./modules/alerts/alerts.module";
 import { TrackerModule } from "./modules/tracker/tracker.module";
 import { ProfileModule } from "./modules/profile/profile.module";
 import { OnboardingModule } from "./modules/onboarding/onboarding.module";
+import { SavedModule } from "./modules/saved/saved.module";
 import { AuthModule } from "./auth/auth.module";
 import { AdminModule } from "./admin/admin.module";
 
@@ -31,7 +32,8 @@ import { AdminModule } from "./admin/admin.module";
     AlertsModule,
     TrackerModule,
     ProfileModule,
-    OnboardingModule
+    OnboardingModule,
+    SavedModule
   ]
 })
 export class AppModule {}

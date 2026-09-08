@@ -33,7 +33,6 @@ export function Component() {
   const toast = useToast();
   const authGate = useAuthGate();
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [saved, setSaved] = useState<Set<string>>(new Set());
 
   const urlQ = params.get("q") ?? "";
   const [searchInput, setSearchInput] = useState(urlQ);
@@ -143,16 +142,6 @@ export function Component() {
   function clearAll() {
     setSearchInput("");
     update({ q: null, disc: null, remote: null, senior: null, elig: null, salary: null });
-  }
-
-  function toggleSave(slug: string) {
-    authGate.gate({
-      action: "save this role",
-      onAuthenticated: () => {
-        setSaved((prev) => new Set(prev));
-        toast({ kind: "info", message: `Saving jobs is unavailable until the next phase. ${slug} was not stored.` });
-      }
-    });
   }
 
   const filterRail = (
@@ -279,8 +268,6 @@ export function Component() {
                     key={j.slug}
                     job={j}
                     variant={density === "compact" ? "compact" : "comfortable"}
-                    saved={saved.has(j.slug)}
-                    onSave={() => toggleSave(j.slug)}
                   />
                 ))}
               </div>

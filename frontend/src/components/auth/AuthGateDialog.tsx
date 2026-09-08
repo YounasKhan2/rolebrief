@@ -5,7 +5,6 @@ import { Dialog } from "../ui/overlay";
 import { Button, Kicker } from "../ui/primitives";
 import { Input } from "../ui/form";
 import { Mail, Lock, ArrowRight } from "lucide-react";
-import { Link } from "react-router";
 
 interface GateOptions {
   /** Human-readable verb, e.g. "save this role" */
@@ -119,9 +118,9 @@ export function AuthGateProvider({ children }: { children: ReactNode }) {
 
         <p className="text-center text-[13px] text-slate mt-5">
           New to RoleBrief?{" "}
-          <Link to="/signup" onClick={close} className="text-indigo font-medium">
+          <a href="/signup" onClick={close} className="text-indigo font-medium">
             Create an account
-          </Link>
+          </a>
         </p>
       </Dialog>
     </AuthGateContext.Provider>

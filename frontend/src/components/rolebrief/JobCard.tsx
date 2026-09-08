@@ -17,6 +17,8 @@ import { EligibilityShield } from "./EligibilityShield";
 import { MatchBrief } from "./MatchBrief";
 import { FreshnessTimeline } from "./FreshnessTimeline";
 import { domainFromUrl } from "../../lib/format";
+import { useSaved } from "../../lib/saved-context";
+import { useAuthGate } from "../auth/AuthGateDialog";
 
 export function JobMetaRow({ job }: { job: Job }) {
   const locationLabel = job.remoteRestrictionsText || (job.locations.length > 0 ? `${job.workModel} · ${job.locations.join(", ")}` : job.workModel);
@@ -69,6 +71,7 @@ export function JobCard({
   variant = "comfortable",
   saved,
   onSave,
+  showSave = true,
   onDismiss,
   onHideCompany,
   onReport,
@@ -78,6 +81,7 @@ export function JobCard({
   variant?: Variant;
   saved?: boolean;
   onSave?: () => void;
+  showSave?: boolean;
   onDismiss?: () => void;
   onHideCompany?: () => void;
   onReport?: () => void;
@@ -87,6 +91,19 @@ export function JobCard({
   const compact = variant === "compact";
   const location = useLocation();
   const detailPath = location.pathname.startsWith("/app") ? `/app/jobs/${job.slug}` : `/jobs/${job.slug}`;
+
+  const savedContext = useSaved();
+  const authGate = useAuthGate();
+
+  const isJobSaved = saved !== undefined ? saved : savedContext.isSaved(job.slug);
+  const handleSave = onSave ?? (() => {
+    authGate.gate({
+      action: "save this role",
+      onAuthenticated: () => {
+        void savedContext.toggleSave(job.slug);
+      }
+    });
+  });
 
   return (
     <article
@@ -115,13 +132,13 @@ export function JobCard({
                 <span>{job.title}</span>
               )}
             </h3>
-            {onSave && (
+            {showSave && (
               <IconButton
-                label={saved ? "Saved" : "Save job"}
-                onClick={onSave}
+                label={isJobSaved ? "Saved" : "Save job"}
+                onClick={handleSave}
                 className="relative z-10 size-9 shrink-0"
               >
-                {saved ? <BookmarkCheck size={18} className="text-indigo" /> : <Bookmark size={18} />}
+                {isJobSaved ? <BookmarkCheck size={18} className="text-indigo" /> : <Bookmark size={18} />}
               </IconButton>
             )}
           </div>

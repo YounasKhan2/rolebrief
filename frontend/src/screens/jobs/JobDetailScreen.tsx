@@ -2,6 +2,7 @@ import { useParams, Link, useLocation } from "react-router";
 import {
   ExternalLink,
   Bookmark,
+  BookmarkCheck,
   ListChecks,
   Flag,
   ShieldAlert,
@@ -19,6 +20,7 @@ import { useJob, useSimilarJobs } from "../../lib/jobs";
 import { domainFromUrl } from "../../lib/format";
 import { useToast } from "../../components/ui/toast";
 import { useAuthGate } from "../../components/auth/AuthGateDialog";
+import { useSaved } from "../../lib/saved-context";
 
 export function Component() {
   const { slug } = useParams();
@@ -26,8 +28,20 @@ export function Component() {
   const jobsPath = location.pathname.startsWith("/app") ? "/app/jobs" : "/jobs";
   const toast = useToast();
   const authGate = useAuthGate();
+  const savedContext = useSaved();
   const { data: job, loading, error, notFound, retry } = useJob(slug);
   const similar = useSimilarJobs(job, 6);
+
+  const isSaved = job ? savedContext.isSaved(job.slug) : false;
+  const handleToggleSave = () => {
+    if (!job) return;
+    authGate.gate({
+      action: "save this role",
+      onAuthenticated: () => {
+        void savedContext.toggleSave(job.slug);
+      }
+    });
+  };
 
   if (loading) {
     return (
@@ -80,10 +94,10 @@ export function Component() {
     <>
       <Button
         variant="secondary"
-        onClick={() => authGate.gate({ action: "save this role", onAuthenticated: () => toast({ kind: "info", message: "Saving jobs is unavailable until the next phase." }) })}
-        icon={<Bookmark size={16} />}
+        onClick={handleToggleSave}
+        icon={isSaved ? <BookmarkCheck size={16} className="text-indigo" /> : <Bookmark size={16} />}
       >
-        Save
+        {isSaved ? "Saved" : "Save"}
       </Button>
       <Button variant="secondary" onClick={() => toast({ kind: "info", message: "Tracker persistence is unavailable until a later phase." })} icon={<ListChecks size={16} />}>
         Track

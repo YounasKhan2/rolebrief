@@ -148,7 +148,7 @@ export class JobsService {
     return this.searchRepo.getFacets(query);
   }
 
-  private include() {
+  public include() {
     return {
       company: true,
       source: true,
@@ -166,7 +166,7 @@ export class JobsService {
     } satisfies Prisma.JobInclude;
   }
 
-  private serialize(
+  public serialize(
     job: Prisma.JobGetPayload<{ include: ReturnType<JobsService["include"]> }>,
     options: { isDetail?: boolean } = {}
   ) {

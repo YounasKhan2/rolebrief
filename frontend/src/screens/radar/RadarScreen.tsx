@@ -1,24 +1,22 @@
 import { useState } from "react";
 import { Link } from "react-router";
-import { RefreshCw, AlertTriangle, CheckCircle2, Sliders, ArrowRight, CalendarClock, Building2 } from "lucide-react";
+import { RefreshCw, AlertTriangle, CheckCircle2, Sliders, ArrowRight, CalendarClock } from "lucide-react";
 import { PageContainer } from "../../components/shell/AppShell";
 import { Kicker, Button, SectionRule, EmptyState, Skeleton, CompanyLogo } from "../../components/ui/primitives";
 import { SegmentedControl } from "../../components/ui/form";
 import { JobCard } from "../../components/rolebrief/JobCard";
 import { useJobs } from "../../lib/jobs";
 import { useToast } from "../../components/ui/toast";
-import { relativeTime } from "../../lib/format";
-import { useAuthGate } from "../../components/auth/AuthGateDialog";
+import { useSaved } from "../../lib/saved-context";
 
 type Lens = "Best match" | "Freshest" | "Eligible only";
 
 export function Component() {
   const toast = useToast();
-  const authGate = useAuthGate();
+  const { savedCount } = useSaved();
   const [lens, setLens] = useState<Lens>("Best match");
   const [refreshing, setRefreshing] = useState(false);
   const { data: jobs, loading, error, retry } = useJobs({ limit: 20 });
-  const [saved, setSaved] = useState<Set<string>>(new Set());
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
 
   const activeJobs = jobs.filter((j) => !dismissed.has(j.slug));
@@ -31,18 +29,19 @@ export function Component() {
     retry();
     setTimeout(() => setRefreshing(false), 700);
   }
-  function toggleSave(slug: string) {
-    authGate.gate({
-      action: "save this role",
-      onAuthenticated: () => {
-        setSaved((prev) => new Set(prev));
-        toast({ kind: "info", message: `Saving jobs is unavailable until the next phase. ${slug} was not stored.` });
-      }
-    });
-  }
+
   function dismiss(slug: string) {
     setDismissed((prev) => new Set(prev).add(slug));
-    toast({ kind: "info", message: "Dismissed. We'll show fewer like this.", undo: () => setDismissed((p) => { const n = new Set(p); n.delete(slug); return n; }) });
+    toast({
+      kind: "info",
+      message: "Dismissed. We'll show fewer like this.",
+      undo: () =>
+        setDismissed((p) => {
+          const n = new Set(p);
+          n.delete(slug);
+          return n;
+        }),
+    });
   }
 
   return (
@@ -124,8 +123,6 @@ export function Component() {
                     <JobCard
                       key={j.slug}
                       job={j}
-                      saved={saved.has(j.slug)}
-                      onSave={() => toggleSave(j.slug)}
                       onDismiss={() => dismiss(j.slug)}
                       onHideCompany={() => toast({ kind: "info", message: `Hidden ${j.companyName} from Radar.` })}
                       onReport={() => toast({ kind: "warning", message: "Thanks — we'll review this listing." })}
@@ -146,8 +143,6 @@ export function Component() {
                     <JobCard
                       key={j.slug}
                       job={j}
-                      saved={saved.has(j.slug)}
-                      onSave={() => toggleSave(j.slug)}
                       onDismiss={() => dismiss(j.slug)}
                       onHideCompany={() => toast({ kind: "info", message: `Hidden ${j.companyName} from Radar.` })}
                     />
@@ -158,7 +153,7 @@ export function Component() {
               <div>
                 <SectionLabel>Worth exploring · a small stretch</SectionLabel>
                 {lensJobs[0] ? (
-                  <JobCard job={lensJobs[0]} variant="compact" saved={saved.has(lensJobs[0].slug)} onSave={() => toggleSave(lensJobs[0].slug)} />
+                  <JobCard job={lensJobs[0]} variant="compact" />
                 ) : (
                   <EmptyState title="Nothing to explore yet" body="No stored provider job is available for this section." />
                 )}
@@ -196,7 +191,17 @@ export function Component() {
 
           <div className="rounded-[var(--radius-card)] border border-line p-5">
             <SectionLabel>Saved with deadlines</SectionLabel>
-            <p className="text-[13px] text-slate">No real saved-job records are connected yet.</p>
+            {savedCount === 0 ? (
+              <p className="text-[13px] text-slate">No saved jobs yet. Save jobs to monitor their deadlines and application dates.</p>
+            ) : (
+              <div>
+                <p className="text-[13px] text-ink font-medium">{savedCount} saved {savedCount === 1 ? "brief" : "briefs"}</p>
+                <p className="text-[12px] text-slate mt-1">Deadlines and reminders will populate as providers supply them.</p>
+                <Link to="/app/saved" className="text-[13px] text-indigo font-medium inline-flex items-center gap-1 mt-2">
+                  View saved briefs <ArrowRight size={14} />
+                </Link>
+              </div>
+            )}
           </div>
         </aside>
       </div>
