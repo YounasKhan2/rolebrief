@@ -117,32 +117,63 @@ export function Checkbox({ label, checked, onChange, id }: { label: ReactNode; c
   );
 }
 
-export function Switch({ label, checked, onChange, description }: { label: string; checked: boolean; onChange: (v: boolean) => void; description?: string }) {
+export function Switch({
+  label,
+  checked,
+  onChange,
+  description,
+  disabled,
+  "aria-label": ariaLabel,
+  "aria-busy": ariaBusy,
+}: {
+  label?: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  description?: string;
+  disabled?: boolean;
+  "aria-label"?: string;
+  "aria-busy"?: boolean | string;
+}) {
+  const effectiveLabel = ariaLabel || label;
+  const switchButton = (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={effectiveLabel}
+      aria-busy={ariaBusy ? "true" : (disabled ? "true" : undefined)}
+      aria-disabled={disabled ? "true" : undefined}
+      disabled={disabled}
+      onClick={() => {
+        if (!disabled) onChange(!checked);
+      }}
+      className={classNames(
+        "relative h-6 w-11 shrink-0 rounded-full transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-indigo",
+        checked ? "bg-indigo" : "bg-line",
+        disabled ? "opacity-60 cursor-not-allowed" : "cursor-pointer"
+      )}
+    >
+      <span
+        className={classNames(
+          "absolute top-0.5 left-0.5 size-5 rounded-full bg-white shadow transition-transform duration-150",
+          checked ? "translate-x-5" : "translate-x-0",
+        )}
+      />
+    </button>
+  );
+
+  if (!label && !description) {
+    return switchButton;
+  }
+
   return (
-    <label className="flex items-start justify-between gap-4 cursor-pointer py-2">
+    <div className={classNames("flex items-start justify-between gap-4 py-2", disabled ? "opacity-70" : "")}>
       <span>
-        <span className="block text-sm font-medium text-ink">{label}</span>
+        {label && <span className="block text-sm font-medium text-ink">{label}</span>}
         {description && <span className="block text-[13px] text-slate mt-0.5">{description}</span>}
       </span>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={checked}
-        aria-label={label}
-        onClick={() => onChange(!checked)}
-        className={classNames(
-          "relative h-6 w-11 shrink-0 rounded-full transition-colors duration-150",
-          checked ? "bg-indigo" : "bg-line",
-        )}
-      >
-        <span
-          className={classNames(
-            "absolute top-0.5 left-0.5 size-5 rounded-full bg-white shadow transition-transform duration-150",
-            checked ? "translate-x-5" : "translate-x-0",
-          )}
-        />
-      </button>
-    </label>
+      {switchButton}
+    </div>
   );
 }
 
@@ -152,14 +183,17 @@ export function SegmentedControl<T extends string>({
   onChange,
   size = "md",
 }: {
-  options: { value: T; label: string }[];
+  options: (T | { value: T; label: string })[];
   value: T;
   onChange: (v: T) => void;
   size?: "sm" | "md";
 }) {
+  const normalized = options.map((o) =>
+    typeof o === "string" ? { value: o, label: o } : o
+  );
   return (
     <div className={classNames("inline-flex items-center gap-1 rounded-[var(--radius-control)] bg-soft p-1", size === "sm" ? "text-[13px]" : "text-sm")}>
-      {options.map((o) => (
+      {normalized.map((o) => (
         <button
           key={o.value}
           type="button"

@@ -40,6 +40,7 @@ export class AppConfigService {
 
   get auth() {
     return {
+      sessionSecret: this.config.get("SESSION_SECRET", { infer: true }),
       accessTokenTtlSeconds: this.config.get("ACCESS_TOKEN_TTL", { infer: true }),
       refreshSessionTtlSeconds: this.config.get("REFRESH_SESSION_TTL", { infer: true }),
       cookieSecure: this.config.get("COOKIE_SECURE", { infer: true }),

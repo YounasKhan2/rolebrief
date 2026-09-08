@@ -13,6 +13,7 @@ import { TrackerModule } from "./modules/tracker/tracker.module";
 import { ProfileModule } from "./modules/profile/profile.module";
 import { OnboardingModule } from "./modules/onboarding/onboarding.module";
 import { SavedModule } from "./modules/saved/saved.module";
+import { PreferencesModule } from "./modules/preferences/preferences.module";
 import { AuthModule } from "./auth/auth.module";
 import { AdminModule } from "./admin/admin.module";
 
@@ -33,7 +34,9 @@ import { AdminModule } from "./admin/admin.module";
     TrackerModule,
     ProfileModule,
     OnboardingModule,
-    SavedModule
+    SavedModule,
+    PreferencesModule
   ]
 })
 export class AppModule {}
+

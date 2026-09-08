@@ -84,6 +84,7 @@ model User {
   emailDeliveries EmailDelivery[]
   onboarding      OnboardingProgress?
   profile         CandidateProfile?
+  preference      UserPreference?
 
   @@index([role, status])
   @@index([normalizedEmail])
@@ -660,3 +661,37 @@ model CandidateSkill {
   @@unique([profileId, normalizedName])
   @@index([normalizedName])
 }
+
+enum MotionPreference {
+  SYSTEM
+  REDUCE
+  NO_PREFERENCE
+}
+
+enum ContrastPreference {
+  SYSTEM
+  HIGH
+  NORMAL
+}
+
+model UserPreference {
+  id                             String             @id @default(cuid())
+  userId                         String             @unique
+  user                           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  productUpdates                 Boolean            @default(false)
+  productUpdatesConsentUpdatedAt DateTime?
+  marketingEmails                Boolean            @default(false)
+  marketingConsentUpdatedAt      DateTime?
+
+  motionPreference               MotionPreference   @default(SYSTEM)
+  contrastPreference             ContrastPreference @default(SYSTEM)
+
+  revision                       Int                @default(0)
+
+  createdAt                      DateTime           @default(now())
+  updatedAt                      DateTime           @updatedAt
+
+  @@index([userId])
+}
+

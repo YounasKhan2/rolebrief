@@ -254,3 +254,27 @@
     scroll-behavior: auto !important;
   }
 }
+
+html.reduce-motion *,
+html.reduce-motion *::before,
+html.reduce-motion *::after,
+html[data-reduced-motion="true"] *,
+html[data-reduced-motion="true"] *::before,
+html[data-reduced-motion="true"] *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  scroll-behavior: auto !important;
+}
+
+html.high-contrast,
+html[data-high-contrast="true"] {
+  --color-line: #94a3b8;
+  --color-slate: #334155;
+}
+
+html.high-contrast .border-line,
+html[data-high-contrast="true"] .border-line {
+  border-color: #64748b !important;
+}
+
