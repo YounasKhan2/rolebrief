@@ -4,6 +4,7 @@ import {
   Bookmark,
   BookmarkCheck,
   ListChecks,
+  Check,
   Flag,
   ShieldAlert,
   ChevronRight,
@@ -21,6 +22,7 @@ import { domainFromUrl } from "../../lib/format";
 import { useToast } from "../../components/ui/toast";
 import { useAuthGate } from "../../components/auth/AuthGateDialog";
 import { useSaved } from "../../lib/saved-context";
+import { useTracker } from "../../lib/tracker-context";
 
 export function Component() {
   const { slug } = useParams();
@@ -97,6 +99,20 @@ export function Component() {
       ? "Apply on Himalayas"
       : "Apply on company site";
 
+  const trackerContext = useTracker();
+  const isJobTracked = job ? trackerContext.isTracked(job.slug) : false;
+  const isTrackerPending = job ? trackerContext.isPending(job.slug) : false;
+
+  const handleTrack = () => {
+    if (!job) return;
+    authGate.gate({
+      action: "track this role",
+      onAuthenticated: () => {
+        void trackerContext.trackJob(job.slug);
+      }
+    });
+  };
+
   const applyBar = (
     <>
       <Button
@@ -108,9 +124,23 @@ export function Component() {
       >
         {isSaved ? "Saved" : "Save"}
       </Button>
-      <Button variant="secondary" onClick={() => toast({ kind: "info", message: "Tracker persistence is unavailable until a later phase." })} icon={<ListChecks size={16} />}>
-        Track
-      </Button>
+      {isJobTracked ? (
+        <Link to="/app/tracker">
+          <Button variant="secondary" icon={<Check size={16} className="text-emerald" />}>
+            Tracked
+          </Button>
+        </Link>
+      ) : (
+        <Button
+          variant="secondary"
+          onClick={handleTrack}
+          disabled={isTrackerPending}
+          aria-busy={isTrackerPending ? "true" : "false"}
+          icon={<ListChecks size={16} />}
+        >
+          Track
+        </Button>
+      )}
       {expired ? (
         <span className="grow inline-flex items-center justify-center gap-2 h-11 px-4 rounded-[var(--radius-control)] bg-slate/20 text-slate font-medium cursor-not-allowed">
           <AlertTriangle size={16} /> Listing expired

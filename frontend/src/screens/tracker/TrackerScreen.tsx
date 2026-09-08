@@ -1,135 +1,443 @@
-import { useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Link } from "react-router";
-import { Plus, Bell, ExternalLink, LayoutList, Columns3, CalendarClock, StickyNote } from "lucide-react";
+import {
+  Plus,
+  ExternalLink,
+  LayoutList,
+  Columns3,
+  CalendarClock,
+  Clock,
+  Sparkles,
+  MoreHorizontal,
+  ChevronRight,
+  Building2
+} from "lucide-react";
 import { PageContainer, PageHeader } from "../../components/shell/AppShell";
-import { Kicker, Badge, Button, CompanyLogo, EmptyState } from "../../components/ui/primitives";
+import { Badge, Button, EmptyState } from "../../components/ui/primitives";
 import { SegmentedControl } from "../../components/ui/form";
-import { trackerItems, getJob, companyName } from "../../lib/fixtures";
-import type { TrackerStatus } from "../../lib/fixtures";
-import { formatDate, relativeTime } from "../../lib/format";
-import { useToast } from "../../components/ui/toast";
+import { relativeTime } from "../../lib/format";
+import { useTracker } from "../../lib/tracker-context";
+import {
+  ApplicationStage,
+  TrackedApplication,
+  fetchApplications
+} from "../../lib/tracker-api";
+import { AddApplicationDialog } from "../../components/tracker/AddApplicationDialog";
+import {
+  ApplicationDetailDialog,
+  ALLOWED_TRANSITIONS,
+  STAGE_LABELS,
+  STAGE_TONES
+} from "../../components/tracker/ApplicationDetailDialog";
 
-const statuses: TrackerStatus[] = ["Saved", "Applied", "Interview", "Offer", "Rejected", "Withdrawn"];
-const statusTone: Record<TrackerStatus, "slate" | "indigo" | "cyan" | "emerald" | "red"> = {
-  Saved: "slate",
-  Applied: "indigo",
-  Interview: "cyan",
-  Offer: "emerald",
-  Rejected: "red",
-  Withdrawn: "slate",
-};
+const STAGES: ApplicationStage[] = [
+  "SAVED",
+  "APPLIED",
+  "INTERVIEWING",
+  "OFFER",
+  "REJECTED",
+  "WITHDRAWN"
+];
 
 export function Component() {
-  const toast = useToast();
-  const [view, setView] = useState<"list" | "board">("list");
+  const { stageCounts, updateStage, isPending, refreshTracker } = useTracker();
 
-  if (trackerItems.length === 0) {
-    return (
-      <PageContainer>
-        <PageHeader kicker="Application tracker" title="Track every application." />
-        <EmptyState icon={<LayoutList size={40} />} title="Nothing tracked yet" body="Save or apply to a role and it will appear here with its status and next action." action={<Link to="/app/jobs" className="text-indigo font-medium">Find roles</Link>} />
-      </PageContainer>
-    );
-  }
+  const [view, setView] = useState<"list" | "board">("board");
+  const [stageFilter, setStageFilter] = useState<ApplicationStage | "ALL">("ALL");
+  const [applications, setApplications] = useState<TrackedApplication[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const [isAddOpen, setIsAddOpen] = useState(false);
+  const [selectedApplication, setSelectedApplication] = useState<TrackedApplication | null>(null);
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
+
+  const loadData = useCallback(async () => {
+    try {
+      setLoading(true);
+      const res = await fetchApplications({
+        stage: stageFilter === "ALL" ? undefined : stageFilter,
+        limit: 50
+      });
+      if (res) {
+        setApplications(res.data);
+      }
+    } catch {
+      // background error handling
+    } finally {
+      setLoading(false);
+    }
+  }, [stageFilter]);
+
+  useEffect(() => {
+    void loadData();
+  }, [loadData]);
+
+  const handleStageSelect = async (
+    app: TrackedApplication,
+    newStage: ApplicationStage
+  ) => {
+    if (newStage === app.stage) return;
+    const updated = await updateStage(app.id, newStage, app.revision);
+    if (updated) {
+      setApplications((prev) =>
+        prev.map((item) => (item.id === updated.id ? updated : item))
+      );
+      if (selectedApplication?.id === updated.id) {
+        setSelectedApplication(updated);
+      }
+    }
+  };
+
+  const handleDrop = async (e: React.DragEvent, targetStage: ApplicationStage) => {
+    e.preventDefault();
+    const id = e.dataTransfer.getData("text/plain");
+    if (!id) return;
+    const app = applications.find((a) => a.id === id);
+    if (!app || app.stage === targetStage) return;
+
+    const allowed = ALLOWED_TRANSITIONS[app.stage];
+    if (!allowed?.includes(targetStage)) {
+      return;
+    }
+
+    await handleStageSelect(app, targetStage);
+  };
+
+  const totalTracked = Object.values(stageCounts).reduce((a, b) => a + b, 0);
 
   return (
     <PageContainer>
       <PageHeader
         kicker="Application tracker"
         title="Every application, one clear view."
-        description="Status, next action and history — not a busy Kanban unless you want one."
+        description="Status, next action and history with accessible keyboard navigation and drag-and-drop."
         actions={
           <div className="flex items-center gap-2">
-            <SegmentedControl value={view} onChange={setView} size="sm" options={[{ value: "list", label: "List" }, { value: "board", label: "Board" }]} />
-            <Button icon={<Plus size={16} />} onClick={() => toast({ kind: "success", message: "Add a role manually — coming from the form." })}>Add</Button>
+            <SegmentedControl
+              value={view}
+              onChange={setView}
+              size="sm"
+              options={[
+                { value: "board", label: "Board" },
+                { value: "list", label: "List" }
+              ]}
+            />
+            <Button
+              icon={<Plus size={16} />}
+              onClick={() => setIsAddOpen(true)}
+            >
+              Add Role
+            </Button>
           </div>
         }
       />
 
-      {view === "list" ? (
-        <div className="rounded-[var(--radius-card)] border border-line overflow-hidden">
-          {/* Desktop table header */}
-          <div className="hidden md:grid grid-cols-[1.6fr_0.8fr_1fr_1.2fr_auto] gap-4 px-5 py-3 bg-soft text-[12px] font-semibold text-slate uppercase tracking-wide">
-            <span>Role</span><span>Status</span><span>Source</span><span>Next action</span><span></span>
-          </div>
-          {trackerItems.map((t) => {
-            const job = getJob(t.jobSlug);
-            if (!job) return null;
-            return (
-              <div key={t.id} className="grid md:grid-cols-[1.6fr_0.8fr_1fr_1.2fr_auto] gap-2 md:gap-4 px-5 py-4 border-t border-line items-center hover:bg-soft/50">
-                <div className="flex items-center gap-3 min-w-0">
-                  <CompanyLogo name={companyName(job.companySlug)} size={36} />
-                  <div className="min-w-0">
-                    <Link to={`/app/jobs/${job.slug}`} className="font-medium text-ink hover:text-indigo block truncate">{job.title}</Link>
-                    <p className="text-[12px] text-slate truncate">{companyName(job.companySlug)} · updated {relativeTime(t.updatedAt)}</p>
-                  </div>
-                </div>
-                <div><Badge tone={statusTone[t.status]}>{t.status}</Badge></div>
-                <div className="text-[13px] text-slate font-data truncate">{t.source}{t.resumeVersion && <span className="block text-[11px]">{t.resumeVersion}</span>}</div>
-                <div className="text-[13px] text-ink">
-                  {t.nextAction ?? "—"}
-                  {t.reminderAt && (
-                    <span className="mt-1 flex items-center gap-1 text-[12px] text-amber"><CalendarClock size={12} /> {formatDate(t.reminderAt)}</span>
-                  )}
-                </div>
-                <div className="flex items-center gap-1 justify-end">
-                  <Button variant="tertiary" size="sm" icon={<Bell size={14} />} onClick={() => toast({ kind: "success", message: "Reminder scheduled." })}>Remind</Button>
-                  <a href={job.applyUrl} target="_blank" rel="noreferrer" className="inline-flex items-center justify-center size-9 rounded-[var(--radius-control)] text-slate hover:bg-soft hover:text-ink"><ExternalLink size={15} /></a>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+      {totalTracked === 0 && !loading ? (
+        <EmptyState
+          icon={<LayoutList size={40} />}
+          title="No applications tracked yet"
+          body="Track discovered jobs directly or add off-platform applications to keep tabs on every process."
+          action={
+            <div className="flex gap-3">
+              <Link to="/app/jobs">
+                <Button variant="primary">Find Roles</Button>
+              </Link>
+              <Button variant="secondary" onClick={() => setIsAddOpen(true)}>
+                Add Manually
+              </Button>
+            </div>
+          }
+        />
       ) : (
-        // Board view
-        <div className="grid grid-flow-col auto-cols-[minmax(240px,1fr)] gap-4 overflow-x-auto scrollbar-thin pb-2">
-          {statuses.map((s) => {
-            const items = trackerItems.filter((t) => t.status === s);
-            return (
-              <div key={s} className="rounded-[var(--radius-card)] bg-soft/70 p-3">
-                <div className="flex items-center justify-between px-1 mb-3">
-                  <span className="inline-flex items-center gap-2 text-[13px] font-semibold text-ink"><Badge tone={statusTone[s]}>{s}</Badge></span>
-                  <span className="font-data text-[12px] text-slate">{items.length}</span>
-                </div>
-                <div className="space-y-2.5">
-                  {items.map((t) => {
-                    const job = getJob(t.jobSlug);
-                    if (!job) return null;
-                    return (
-                      <div key={t.id} className="rounded-[10px] border border-line bg-white p-3">
-                        <Link to={`/app/jobs/${job.slug}`} className="text-[13px] font-medium text-ink hover:text-indigo block leading-snug">{job.title}</Link>
-                        <p className="text-[12px] text-slate mt-0.5">{companyName(job.companySlug)}</p>
-                        {t.nextAction && <p className="text-[12px] text-slate mt-2 flex items-start gap-1"><StickyNote size={11} className="mt-0.5" /> {t.nextAction}</p>}
-                      </div>
-                    );
-                  })}
-                  {items.length === 0 && <p className="text-[12px] text-slate px-1 py-2">Empty</p>}
-                </div>
+        <div className="space-y-4">
+          {/* Stage Filter Pills (List View Only) */}
+          {view === "list" && (
+            <div className="flex flex-wrap items-center gap-1.5 pb-1">
+              <button
+                onClick={() => setStageFilter("ALL")}
+                className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
+                  stageFilter === "ALL"
+                    ? "bg-ink text-white"
+                    : "bg-soft text-slate hover:text-ink"
+                }`}
+              >
+                All ({totalTracked})
+              </button>
+              {STAGES.map((s) => (
+                <button
+                  key={s}
+                  onClick={() => setStageFilter(s)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-colors flex items-center gap-1.5 ${
+                    stageFilter === s
+                      ? "bg-ink text-white"
+                      : "bg-soft text-slate hover:text-ink"
+                  }`}
+                >
+                  <span>{STAGE_LABELS[s]}</span>
+                  <span className="opacity-70 text-[11px]">({stageCounts[s] || 0})</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Views */}
+          {view === "list" ? (
+            <div className="rounded-[var(--radius-card)] border border-line overflow-hidden bg-white">
+              {/* Desktop table header */}
+              <div className="hidden md:grid grid-cols-[1.8fr_1fr_1fr_1.2fr_auto] gap-4 px-5 py-3 bg-soft text-[12px] font-semibold text-slate uppercase tracking-wide">
+                <span>Role & Company</span>
+                <span>Stage</span>
+                <span>Source</span>
+                <span>Next Action</span>
+                <span className="text-right">Action</span>
               </div>
-            );
-          })}
+
+              {applications.length === 0 ? (
+                <div className="py-12 text-center text-sm text-slate">
+                  No applications in this stage.
+                </div>
+              ) : (
+                applications.map((app) => (
+                  <div
+                    key={app.id}
+                    className="grid md:grid-cols-[1.8fr_1fr_1fr_1.2fr_auto] gap-2 md:gap-4 px-5 py-3.5 border-t border-line items-center hover:bg-soft/40 transition-colors"
+                  >
+                    {/* Role & Company */}
+                    <div className="min-w-0">
+                      <button
+                        onClick={() => {
+                          setSelectedApplication(app);
+                          setIsDetailOpen(true);
+                        }}
+                        className="font-semibold text-ink hover:text-indigo text-left block truncate text-sm"
+                      >
+                        {app.roleTitle}
+                      </button>
+                      <div className="flex items-center gap-1.5 text-xs text-slate truncate mt-0.5">
+                        <Building2 size={13} />
+                        <span>{app.companyName || "Direct / Unspecified"}</span>
+                        <span>·</span>
+                        <span>updated {relativeTime(app.updatedAt)}</span>
+                      </div>
+                    </div>
+
+                    {/* Stage & Expired Badge */}
+                    <div className="flex items-center gap-1.5">
+                      <Badge tone={STAGE_TONES[app.stage]}>
+                        {STAGE_LABELS[app.stage]}
+                      </Badge>
+                      {app.isJobExpired && (
+                        <Badge tone="red">
+                          Expired listing
+                        </Badge>
+                      )}
+                    </div>
+
+                    {/* Source */}
+                    <div className="text-xs text-slate truncate">
+                      {app.sourceLabel || app.providerName || (app.jobSlug ? "RoleBrief" : "Manual")}
+                    </div>
+
+                    {/* Next Action */}
+                    <div className="text-xs text-ink min-w-0">
+                      {app.nextAction ? (
+                        <div className="truncate font-medium">{app.nextAction}</div>
+                      ) : (
+                        <span className="text-slate/60">—</span>
+                      )}
+                      {app.nextActionAt && (
+                        <span className="mt-0.5 flex items-center gap-1 text-[11px] text-amber">
+                          <Clock size={11} />
+                          {new Date(app.nextActionAt).toLocaleDateString(undefined, {
+                            month: "short",
+                            day: "numeric"
+                          })}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Action */}
+                    <div className="flex items-center gap-2 justify-end">
+                      <Button
+                        variant="tertiary"
+                        size="sm"
+                        onClick={() => {
+                          setSelectedApplication(app);
+                          setIsDetailOpen(true);
+                        }}
+                      >
+                        Details
+                      </Button>
+                      {app.applicationUrl && (
+                        <a
+                          href={app.applicationUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center justify-center size-8 rounded-[var(--radius-control)] text-slate hover:bg-soft hover:text-ink transition-colors"
+                          title="Open original listing link"
+                        >
+                          <ExternalLink size={14} />
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          ) : (
+            // Board View (Kanban with Drag-and-Drop AND Accessible Select Dropdown on Every Card)
+            <div className="grid grid-flow-col auto-cols-[minmax(270px,1fr)] gap-4 overflow-x-auto scrollbar-thin pb-4 pt-1">
+              {STAGES.map((st) => {
+                const columnItems = applications.filter((a) => a.stage === st);
+                return (
+                  <div
+                    key={st}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => handleDrop(e, st)}
+                    className="rounded-[var(--radius-card)] bg-soft/80 border border-line/70 p-3 min-h-[500px] flex flex-col"
+                  >
+                    {/* Stage Header */}
+                    <div className="flex items-center justify-between px-1 mb-3">
+                      <span className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-ink">
+                        <Badge tone={STAGE_TONES[st]}>{STAGE_LABELS[st]}</Badge>
+                      </span>
+                      <span className="font-semibold text-xs text-slate bg-white px-2 py-0.5 rounded-full border border-line">
+                        {stageCounts[st] || 0}
+                      </span>
+                    </div>
+
+                    {/* Cards Container */}
+                    <div className="space-y-2.5 flex-1">
+                      {columnItems.length === 0 ? (
+                        <div className="h-28 border-2 border-dashed border-line/80 rounded-xl flex items-center justify-center text-xs text-slate/60 text-center px-4">
+                          Drop here or use card stage selector
+                        </div>
+                      ) : (
+                        columnItems.map((app) => {
+                          const validNext = ALLOWED_TRANSITIONS[app.stage] || [];
+                          return (
+                            <div
+                              key={app.id}
+                              draggable={true}
+                              onDragStart={(e) => e.dataTransfer.setData("text/plain", app.id)}
+                              className="rounded-xl border border-line bg-white p-3.5 shadow-sm hover:shadow transition-all cursor-grab active:cursor-grabbing space-y-2.5"
+                            >
+                              {/* Title & Company */}
+                              <div>
+                                <button
+                                  onClick={() => {
+                                    setSelectedApplication(app);
+                                    setIsDetailOpen(true);
+                                  }}
+                                  className="text-sm font-semibold text-ink hover:text-indigo text-left block leading-snug"
+                                >
+                                  {app.roleTitle}
+                                </button>
+                                <div className="text-xs text-slate truncate mt-0.5">
+                                  {app.companyName || "Direct / Unspecified"}
+                                </div>
+                              </div>
+
+                              {/* Badges / Expired Warning */}
+                              {app.isJobExpired && (
+                                <div>
+                                  <Badge tone="red">
+                                    Expired listing
+                                  </Badge>
+                                </div>
+                              )}
+
+                              {/* Next action chip */}
+                              {app.nextAction && (
+                                <div className="text-[11px] bg-soft rounded-lg p-1.5 text-ink leading-tight">
+                                  <span className="font-semibold text-slate">Next: </span>
+                                  {app.nextAction}
+                                  {app.nextActionAt && (
+                                    <span className="block text-amber font-medium mt-0.5">
+                                      Due: {new Date(app.nextActionAt).toLocaleDateString(undefined, {
+                                        month: "short",
+                                        day: "numeric"
+                                      })}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+
+                              {/* Card Footer: Accessible Stage Selector & Detail Button */}
+                              <div className="pt-2 border-t border-line/60 flex items-center justify-between gap-1.5">
+                                {/* Accessible Stage Selector: Allows keyboard / screen-reader users to move stages */}
+                                <select
+                                  aria-label={`Move ${app.roleTitle} to stage`}
+                                  value={app.stage}
+                                  onChange={(e) =>
+                                    handleStageSelect(app, e.target.value as ApplicationStage)
+                                  }
+                                  disabled={isPending(app.id)}
+                                  className="text-[11px] font-medium rounded-md border border-line bg-white px-2 py-1 text-slate hover:text-ink focus:outline-none focus:ring-1 focus:ring-indigo transition-colors max-w-[130px]"
+                                >
+                                  <option value={app.stage}>
+                                    Stage: {STAGE_LABELS[app.stage]}
+                                  </option>
+                                  {validNext.map((nextSt) => (
+                                    <option key={nextSt} value={nextSt}>
+                                      → {STAGE_LABELS[nextSt]}
+                                    </option>
+                                  ))}
+                                </select>
+
+                                <button
+                                  onClick={() => {
+                                    setSelectedApplication(app);
+                                    setIsDetailOpen(true);
+                                  }}
+                                  className="text-[11px] font-semibold text-indigo hover:underline px-1 py-0.5"
+                                >
+                                  Details
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
-      {/* Status history for the active application */}
-      <div className="mt-8 rounded-[var(--radius-card)] border border-line p-5">
-        <Kicker className="mb-4">Status history · {getJob(trackerItems[0].jobSlug)?.title}</Kicker>
-        <ol className="relative pl-5">
-          <span className="absolute left-[7px] top-1 bottom-1 w-px bg-line" aria-hidden />
-          {trackerItems[0].history.map((h, i) => (
-            <li key={i} className="relative pb-3 last:pb-0">
-              <span className="absolute -left-5 top-0.5 size-3 rounded-full bg-white border-2 border-indigo" />
-              <div className="flex items-baseline justify-between gap-3">
-                <Badge tone={statusTone[h.status]}>{h.status}</Badge>
-                <span className="font-data text-[12px] text-slate">{formatDate(h.at)}</span>
-              </div>
-            </li>
-          ))}
-        </ol>
-        {trackerItems[0].notes && (
-          <p className="mt-3 text-[13px] text-slate flex items-start gap-1.5"><StickyNote size={13} className="mt-0.5" /> {trackerItems[0].notes}</p>
-        )}
-      </div>
+      {/* Manual Application Dialog */}
+      <AddApplicationDialog
+        open={isAddOpen}
+        onClose={() => setIsAddOpen(false)}
+        onCreated={() => {
+          void loadData();
+          void refreshTracker();
+        }}
+      />
+
+      {/* Application Detail Dialog */}
+      <ApplicationDetailDialog
+        application={selectedApplication}
+        open={isDetailOpen}
+        onClose={() => {
+          setIsDetailOpen(false);
+          setSelectedApplication(null);
+        }}
+        onUpdated={(updated) => {
+          setSelectedApplication(updated);
+          setApplications((prev) =>
+            prev.map((item) => (item.id === updated.id ? updated : item))
+          );
+          void refreshTracker();
+        }}
+        onDeleted={(deletedId) => {
+          setApplications((prev) => prev.filter((item) => item.id !== deletedId));
+          void refreshTracker();
+        }}
+      />
     </PageContainer>
   );
 }

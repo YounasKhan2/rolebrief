@@ -445,7 +445,7 @@ export class JobsSearchRepository {
       case JobSortOption.RELEVANCE: {
         const rankExpression = this.getRankExpression(ftsQuery);
         return {
-          selectScoreSql: `${rankExpression} AS sort_val_1, j."publishedAt" AS sort_val_2, j."discoveredAt" AS sort_val_3, ${rankExpression} AS rank`,
+          selectScoreSql: `round((${rankExpression})::numeric, 4) AS sort_val_1, j."publishedAt" AS sort_val_2, j."discoveredAt" AS sort_val_3, ${rankExpression} AS rank`,
           orderBySql: `sort_val_1 DESC, j."publishedAt" DESC NULLS LAST, j."discoveredAt" DESC, j.id DESC`
         };
       }
@@ -578,7 +578,7 @@ export class JobsSearchRepository {
         const rank = cursor.val[0] !== null && cursor.val[0] !== undefined ? Number(cursor.val[0]) : 0;
         const pubAt = cursor.val[1] ? new Date(String(cursor.val[1])) : null;
         const discAt = cursor.val[2] ? new Date(String(cursor.val[2])) : new Date(0);
-        const rankExpr = this.getRankExpression(ftsQuery);
+        const rankExpr = `round((${this.getRankExpression(ftsQuery)})::numeric, 4)`;
         params.push(rank);
         const rankIdx = params.length;
         const secCondition = this.buildSecondaryTimestampCursor(pubAt, discAt, params, idIdx);

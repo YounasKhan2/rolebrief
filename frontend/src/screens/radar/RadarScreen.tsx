@@ -8,12 +8,15 @@ import { JobCard } from "../../components/rolebrief/JobCard";
 import { useJobs } from "../../lib/jobs";
 import { useToast } from "../../components/ui/toast";
 import { useSaved } from "../../lib/saved-context";
+import { useTracker } from "../../lib/tracker-context";
 
 type Lens = "Best match" | "Freshest" | "Eligible only";
 
 export function Component() {
   const toast = useToast();
   const { savedCount } = useSaved();
+  const { stageCounts } = useTracker();
+  const totalTracked = Object.values(stageCounts).reduce((a, b) => a + b, 0);
   const [lens, setLens] = useState<Lens>("Best match");
   const [refreshing, setRefreshing] = useState(false);
   const { data: jobs, loading, error, retry } = useJobs({ limit: 20 });
@@ -64,13 +67,18 @@ export function Component() {
       <div className="mt-6 grid gap-3 sm:grid-cols-3">
         <SummaryTile tone="indigo" title={`${activeJobs.length} stored roles`} body="Read from the backend Jobs API" />
         <SummaryTile tone="cyan" title="Company moves unavailable" body="No live news provider connected" />
-        <SummaryTile tone="amber" title="Deadlines unavailable" body="Tracker data remains demo-only" icon={<CalendarClock size={18} />} />
+        <SummaryTile
+          tone="emerald"
+          title={`${totalTracked} active role${totalTracked === 1 ? "" : "s"} tracked`}
+          body="Live status in Application Tracker"
+          icon={<CalendarClock size={18} />}
+        />
       </div>
 
       {/* Provider outage notice (partial state) */}
-      <div className="mt-4 flex items-center gap-3 rounded-[var(--radius-card)] border border-amber/30 bg-amber-tint px-4 py-3 text-[13px] text-ink">
+      <div className="mt-4 flex items-center gap-3 rounded-[var(--radius-card)] border border-line bg-soft/60 px-4 py-3 text-[13px] text-ink">
         <AlertTriangle size={16} className="text-amber shrink-0" />
-        Company momentum, saved-job deadlines and personalized match scores are not fabricated. They appear only when backend support exists.
+        Company momentum and news alerts remain unavailable until their ingestion feeds are connected. Application Tracker and Saved Briefs are live.
       </div>
 
       <div className="mt-8 grid lg:grid-cols-[1fr_320px] gap-8 items-start">
