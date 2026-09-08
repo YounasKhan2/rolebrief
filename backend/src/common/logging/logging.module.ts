@@ -27,6 +27,12 @@ import { AppConfigService } from "../config/app-config.service";
               "contactEmail",
               "sourceUrl",
               "applicationUrl",
+              "bio",
+              "headline",
+              "minSalary",
+              "maxSalary",
+              "workAuthorizations",
+              "requiresVisaSponsorship",
               "*.password",
               "*.token",
               "*.secret",
@@ -35,7 +41,13 @@ import { AppConfigService } from "../config/app-config.service";
               "*.contactName",
               "*.contactEmail",
               "*.sourceUrl",
-              "*.applicationUrl"
+              "*.applicationUrl",
+              "*.bio",
+              "*.headline",
+              "*.minSalary",
+              "*.maxSalary",
+              "*.workAuthorizations",
+              "*.requiresVisaSponsorship"
             ],
             censor: "[REDACTED]"
           },

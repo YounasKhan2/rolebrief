@@ -34,49 +34,16 @@ import {
   SeniorityLevel
 } from "../../lib/onboarding-api";
 import { ApiError } from "../../lib/api";
+import {
+  COMMON_COUNTRIES,
+  CURATED_DISCIPLINES,
+  CURATED_SKILLS,
+  SENIORITY_OPTIONS,
+  SPONSORSHIP_OPTIONS
+} from "../../lib/taxonomies";
 
 const STEP_ENUMS: OnboardingStep[] = ["GOAL", "REACH", "FIT", "REVIEW"];
 const stepDisplayNames = ["Goal", "Reach", "Fit", "Review"] as const;
-
-const COMMON_COUNTRIES = [
-  { code: "US", name: "United States" },
-  { code: "GB", name: "United Kingdom" },
-  { code: "CA", name: "Canada" },
-  { code: "DE", name: "Germany" },
-  { code: "PK", name: "Pakistan" },
-  { code: "AE", name: "United Arab Emirates" },
-  { code: "NL", name: "Netherlands" },
-  { code: "FR", name: "France" },
-  { code: "SG", name: "Singapore" },
-  { code: "AU", name: "Australia" },
-  { code: "IE", name: "Ireland" },
-  { code: "IN", name: "India" }
-];
-
-const CURATED_DISCIPLINES = [
-  "Software Engineering",
-  "Frontend Engineering",
-  "Backend Engineering",
-  "Platform & DevOps",
-  "Data & AI",
-  "Product Design",
-  "Engineering Management"
-];
-
-const CURATED_SKILLS = [
-  "TypeScript",
-  "React",
-  "Node.js",
-  "Python",
-  "PostgreSQL",
-  "Go",
-  "Rust",
-  "AWS",
-  "Kubernetes",
-  "GraphQL",
-  "Docker",
-  "Redis"
-];
 
 export function Component() {
   const navigate = useNavigate();
@@ -95,6 +62,7 @@ export function Component() {
   // Wizard step (0 = GOAL, 1 = REACH, 2 = FIT, 3 = REVIEW)
   const [step, setStep] = useState(0);
   const [revision, setRevision] = useState(0);
+  const [candidateRevision, setCandidateRevision] = useState(0);
 
   // Step 1: Goal
   const [targetRoleTitles, setTargetRoleTitles] = useState<string[]>([]);
@@ -172,6 +140,7 @@ export function Component() {
 
         // Initialize state from DB without inserting deceptive defaults
         setRevision(data.progress.revision);
+        setCandidateRevision(data.profileRevision ?? data.profile?.revision ?? 0);
 
         // Map step enum to index
         const stepIdx = STEP_ENUMS.indexOf(data.progress.currentStep);
@@ -230,6 +199,7 @@ export function Component() {
   const buildPayload = useCallback((targetStep: number, targetRev: number) => {
     return {
       expectedRevision: targetRev,
+      expectedCandidateRevision: candidateRevision,
       currentStep: STEP_ENUMS[targetStep],
       completedSteps: STEP_ENUMS.slice(0, targetStep),
       profile: {
@@ -278,7 +248,8 @@ export function Component() {
     maxSalary,
     salaryCurrency,
     salaryPeriod,
-    skills
+    skills,
+    candidateRevision
   ]);
 
   const executeAutosave = useCallback(async (targetStep: number, targetRev: number) => {
@@ -290,6 +261,9 @@ export function Component() {
       if (currentRequestId !== requestIdRef.current) return;
 
       setRevision(updated.progress.revision);
+      if (updated.profileRevision !== undefined) {
+        setCandidateRevision(updated.profileRevision);
+      }
       if (updated.briefCompleteness !== undefined) {
         setBriefScore(updated.briefCompleteness);
       }
@@ -349,6 +323,9 @@ export function Component() {
     }
     const data = conflictServerState;
     setRevision(data.progress.revision);
+    if (data.profileRevision !== undefined) {
+      setCandidateRevision(data.profileRevision);
+    }
     if (data.preferences?.targetRoleTitles) setTargetRoleTitles(data.preferences.targetRoleTitles);
     if (data.preferences?.targetDisciplines) setTargetDisciplines(data.preferences.targetDisciplines);
     if (data.profile?.seniorityLevel) setSeniority(data.profile.seniorityLevel);
@@ -415,7 +392,7 @@ export function Component() {
   }
 
   function addCustomSkill() {
-    const trimmed = newSkillInput.trim();
+    const trimmed = newSkillInput.normalize("NFKC").trim();
     if (!trimmed) return;
     const norm = trimmed.toLowerCase();
     if (!skills.some((s) => s.displayName.trim().toLowerCase() === norm)) {
@@ -672,17 +649,18 @@ export function Component() {
 
               <div className="grid sm:grid-cols-2 gap-5">
                 <Field label="Target Seniority Level">
-                  <SegmentedControl
+                  <select
                     value={seniority ?? ""}
-                    onChange={(v) => setSeniority(v ? (v as SeniorityLevel) : null)}
-                    options={[
-                      { value: "MID", label: "Mid" },
-                      { value: "SENIOR", label: "Senior" },
-                      { value: "LEAD", label: "Lead" },
-                      { value: "PRINCIPAL", label: "Principal" },
-                      { value: "DIRECTOR", label: "Director" }
-                    ]}
-                  />
+                    onChange={(e) => setSeniority(e.target.value ? (e.target.value as SeniorityLevel) : null)}
+                    className="w-full rounded-[var(--radius-control)] border border-line bg-white px-3 py-2 text-sm text-ink focus:outline-hidden focus:ring-2 focus:ring-indigo/20 focus:border-indigo"
+                  >
+                    <option value="">Select seniority…</option>
+                    {SENIORITY_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
                 </Field>
 
                 <Field label="Search Status">
@@ -757,14 +735,18 @@ export function Component() {
                 </Field>
 
                 <Field label="Employer Visa Sponsorship">
-                  <SegmentedControl
+                  <select
                     value={requiresVisaSponsorship === null ? "" : requiresVisaSponsorship ? "YES" : "NO"}
-                    onChange={(v) => setRequiresVisaSponsorship(v === "YES" ? true : v === "NO" ? false : null)}
-                    options={[
-                      { value: "NO", label: "Not needed" },
-                      { value: "YES", label: "Required" }
-                    ]}
-                  />
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setRequiresVisaSponsorship(v === "YES" ? true : v === "NO" ? false : null);
+                    }}
+                    className="w-full rounded-[var(--radius-control)] border border-line bg-white px-3 py-2 text-sm text-ink focus:outline-hidden focus:ring-2 focus:ring-indigo/20 focus:border-indigo"
+                  >
+                    <option value="">Not declared</option>
+                    <option value="NO">No sponsorship needed</option>
+                    <option value="YES">Requires sponsorship</option>
+                  </select>
                 </Field>
               </div>
 

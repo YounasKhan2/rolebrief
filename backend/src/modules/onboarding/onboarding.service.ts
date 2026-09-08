@@ -34,7 +34,7 @@ export class OnboardingService {
   async getOnboardingState(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, name: true, email: true, role: true, status: true }
+      select: { id: true, name: true, email: true, role: true, status: true, timezone: true }
     });
     if (!user) {
       throw new NotFoundException("User not found.");
@@ -58,7 +58,14 @@ export class OnboardingService {
     const briefCompleteness = calculateOnboardingBriefCompleteness(candidate);
 
     return {
-      user,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        status: user.status,
+        timezone: user.timezone
+      },
       progress: progress
         ? {
             status: progress.status,
@@ -89,19 +96,20 @@ export class OnboardingService {
             bio: candidate.bio,
             experienceYears: candidate.experienceYears,
             seniorityLevel: candidate.seniorityLevel,
-            primaryDiscipline: candidate.primaryDiscipline,
             currentCountry: candidate.currentCountry,
             currentCity: candidate.currentCity,
-            timezone: candidate.timezone,
+            timezone: user.timezone,
             workAuthorizations: candidate.workAuthorizations,
             requiresVisaSponsorship: candidate.requiresVisaSponsorship,
             searchStatus: candidate.searchStatus,
+            revision: candidate.revision,
             createdAt: candidate.createdAt,
             updatedAt: candidate.updatedAt
           }
         : null,
       preferences: candidate?.preferences ?? null,
       skills: candidate?.skills ?? [],
+      profileRevision: candidate?.revision ?? 0,
       completeness: completeness.score,
       breakdown: completeness,
       briefCompleteness: briefCompleteness.score,
@@ -178,9 +186,15 @@ export class OnboardingService {
         // 2. Save candidate profile, preferences, and skills if any provided
         let candidate = null;
         if (dto.profile || dto.preferences || dto.skills !== undefined) {
+          const existingCandidate = await tx.candidateProfile.findUnique({ where: { userId } });
+          const candExpectedRev = dto.expectedCandidateRevision !== undefined
+            ? dto.expectedCandidateRevision
+            : (existingCandidate?.revision ?? 0);
+
           candidate = await this.profileService.saveCandidateData(
             userId,
             {
+              expectedRevision: candExpectedRev,
               profile: dto.profile,
               preferences: dto.preferences,
               skills: dto.skills
@@ -202,6 +216,13 @@ export class OnboardingService {
         const updatedProgress = await tx.onboardingProgress.findUniqueOrThrow({
           where: { userId }
         });
+
+        const userRecord = tx.user
+          ? await tx.user.findUnique({
+              where: { id: userId },
+              select: { timezone: true }
+            })
+          : null;
 
         const completeness = calculateProfileCompleteness(candidate);
         const briefCompleteness = calculateOnboardingBriefCompleteness(candidate);
@@ -225,19 +246,20 @@ export class OnboardingService {
                 bio: candidate.bio,
                 experienceYears: candidate.experienceYears,
                 seniorityLevel: candidate.seniorityLevel,
-                primaryDiscipline: candidate.primaryDiscipline,
                 currentCountry: candidate.currentCountry,
                 currentCity: candidate.currentCity,
-                timezone: candidate.timezone,
+                timezone: userRecord?.timezone ?? "UTC",
                 workAuthorizations: candidate.workAuthorizations,
                 requiresVisaSponsorship: candidate.requiresVisaSponsorship,
                 searchStatus: candidate.searchStatus,
+                revision: candidate.revision,
                 createdAt: candidate.createdAt,
                 updatedAt: candidate.updatedAt
               }
             : null,
           preferences: candidate?.preferences ?? null,
           skills: candidate?.skills ?? [],
+          profileRevision: candidate?.revision ?? 0,
           completeness: completeness.score,
           breakdown: completeness,
           briefCompleteness: briefCompleteness.score,

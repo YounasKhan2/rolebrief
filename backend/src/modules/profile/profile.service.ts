@@ -1,5 +1,5 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
-import { Prisma } from "@prisma/client";
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import { Prisma, SkillSource } from "@prisma/client";
 import { PrismaService } from "../../prisma/prisma.service";
 import {
   calculateOnboardingBriefCompleteness,
@@ -14,7 +14,7 @@ export class ProfileService {
   async getProfile(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, name: true, email: true, role: true, status: true }
+      select: { id: true, name: true, email: true, role: true, status: true, timezone: true }
     });
     if (!user) {
       throw new NotFoundException("User not found.");
@@ -34,7 +34,14 @@ export class ProfileService {
     const briefCompleteness = calculateOnboardingBriefCompleteness(profile);
 
     return {
-      user,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        status: user.status,
+        timezone: user.timezone
+      },
       profile: profile
         ? {
             id: profile.id,
@@ -42,19 +49,21 @@ export class ProfileService {
             bio: profile.bio,
             experienceYears: profile.experienceYears,
             seniorityLevel: profile.seniorityLevel,
-            primaryDiscipline: profile.primaryDiscipline,
             currentCountry: profile.currentCountry,
             currentCity: profile.currentCity,
-            timezone: profile.timezone,
+            timezone: user.timezone,
             workAuthorizations: profile.workAuthorizations,
             requiresVisaSponsorship: profile.requiresVisaSponsorship,
             searchStatus: profile.searchStatus,
+            revision: profile.revision,
             createdAt: profile.createdAt,
             updatedAt: profile.updatedAt
           }
         : null,
       preferences: profile?.preferences ?? null,
       skills: profile?.skills ?? [],
+      profileRevision: profile?.revision ?? 0,
+      revision: profile?.revision ?? 0,
       completeness: completeness.score,
       breakdown: completeness,
       briefCompleteness: briefCompleteness.score,
@@ -67,11 +76,52 @@ export class ProfileService {
     payload: UpdateCandidateProfilePayloadDto,
     externalTx?: Prisma.TransactionClient
   ) {
+    if (payload.expectedRevision === undefined || payload.expectedRevision === null) {
+      throw new BadRequestException("expectedRevision is required for candidate profile mutations.");
+    }
+
     const execute = async (tx: Prisma.TransactionClient) => {
-      // 1. Upsert CandidateProfile
-      const profileData: Prisma.CandidateProfileUpdateInput = {};
+      // 1. Optimistic concurrency check on CandidateProfile
+      const existing = await tx.candidateProfile.findUnique({
+        where: { userId }
+      });
+
+      if (!existing && payload.expectedRevision !== 0) {
+        const currentState = await this.getProfile(userId).catch(() => null);
+        throw new ConflictException({
+          message: "Optimistic concurrency conflict: candidate profile does not exist for the expected revision.",
+          expectedRevision: payload.expectedRevision,
+          currentRevision: 0,
+          currentState
+        });
+      }
+
+      if (existing && existing.revision !== payload.expectedRevision) {
+        const currentState = await this.getProfile(userId).catch(() => null);
+        throw new ConflictException({
+          message: "Optimistic concurrency conflict: candidate profile was modified in another session.",
+          expectedRevision: payload.expectedRevision,
+          currentRevision: existing.revision,
+          currentState
+        });
+      }
+
+      // 2. Canonical Timezone Sync: update User.timezone if specified
+      if (payload.profile?.timezone && payload.profile.timezone.trim()) {
+        await tx.user.update({
+          where: { id: userId },
+          data: { timezone: payload.profile.timezone.trim() }
+        });
+      }
+
+      // 3. Upsert CandidateProfile with atomic revision bump
+      const nextRevision = (existing?.revision ?? 0) + 1;
+      const profileData: Prisma.CandidateProfileUpdateInput = {
+        revision: nextRevision
+      };
       const profileCreateData: Prisma.CandidateProfileCreateInput = {
-        user: { connect: { id: userId } }
+        user: { connect: { id: userId } },
+        revision: nextRevision
       };
 
       if (payload.profile) {
@@ -80,10 +130,8 @@ export class ProfileService {
         if (p.bio !== undefined) profileData.bio = p.bio;
         if (p.experienceYears !== undefined) profileData.experienceYears = p.experienceYears;
         if (p.seniorityLevel !== undefined) profileData.seniorityLevel = p.seniorityLevel;
-        if (p.primaryDiscipline !== undefined) profileData.primaryDiscipline = p.primaryDiscipline;
         if (p.currentCountry !== undefined) profileData.currentCountry = p.currentCountry ? p.currentCountry.toUpperCase() : null;
         if (p.currentCity !== undefined) profileData.currentCity = p.currentCity;
-        if (p.timezone !== undefined) profileData.timezone = p.timezone;
         if (p.workAuthorizations !== undefined) {
           profileData.workAuthorizations = Array.from(new Set(p.workAuthorizations.map((c) => c.toUpperCase())));
         }
@@ -99,7 +147,7 @@ export class ProfileService {
         update: profileData
       });
 
-      // 2. Upsert CandidatePreference
+      // 4. Upsert CandidatePreference
       if (payload.preferences) {
         const pref = payload.preferences;
         const prefData: Prisma.CandidatePreferenceUpdateInput = {};
@@ -130,45 +178,54 @@ export class ProfileService {
         });
       }
 
-      // 3. Sync CandidateSkills if provided
+      // 5. Source-Isolated Skill Sync
       if (payload.skills !== undefined) {
-        // Normalize skill names
         const seen = new Set<string>();
-        const uniqueSkills = payload.skills.filter((s) => {
-          const norm = s.displayName.trim().toLowerCase();
-          if (!norm || seen.has(norm)) return false;
-          seen.add(norm);
-          return true;
-        });
+        const uniqueSkills: { displayName: string; normalizedName: string; yearsExperience?: number; isTopSkill?: boolean }[] = [];
 
-        // Delete existing skills not in the new list
-        const activeNormalizedNames = uniqueSkills.map((s) => s.displayName.trim().toLowerCase());
+        for (const s of payload.skills) {
+          const cleanedDisplay = s.displayName.trim().replace(/\s+/g, " ").normalize("NFKC");
+          const norm = cleanedDisplay.toLowerCase();
+          if (!norm || seen.has(norm)) continue;
+          seen.add(norm);
+          uniqueSkills.push({
+            displayName: cleanedDisplay,
+            normalizedName: norm,
+            yearsExperience: s.yearsExperience,
+            isTopSkill: s.isTopSkill ?? false
+          });
+        }
+
+        const activeNormalizedNames = uniqueSkills.map((s) => s.normalizedName);
+
+        // Delete only USER_DECLARED skills not in active list (preserving parser/inferred skills)
         await tx.candidateSkill.deleteMany({
           where: {
             profileId: candidateProfile.id,
+            source: SkillSource.USER_DECLARED,
             normalizedName: { notIn: activeNormalizedNames }
           }
         });
 
-        // Upsert each skill
+        // Upsert each skill preserving provenance
         for (const s of uniqueSkills) {
-          const norm = s.displayName.trim().toLowerCase();
           await tx.candidateSkill.upsert({
             where: {
               profileId_normalizedName: {
                 profileId: candidateProfile.id,
-                normalizedName: norm
+                normalizedName: s.normalizedName
               }
             },
             create: {
               profile: { connect: { id: candidateProfile.id } },
-              displayName: s.displayName.trim(),
-              normalizedName: norm,
+              displayName: s.displayName,
+              normalizedName: s.normalizedName,
               yearsExperience: s.yearsExperience,
-              isTopSkill: s.isTopSkill ?? false
+              isTopSkill: s.isTopSkill ?? false,
+              source: SkillSource.USER_DECLARED
             },
             update: {
-              displayName: s.displayName.trim(),
+              displayName: s.displayName,
               yearsExperience: s.yearsExperience,
               isTopSkill: s.isTopSkill ?? false
             }
@@ -180,6 +237,7 @@ export class ProfileService {
       return tx.candidateProfile.findUniqueOrThrow({
         where: { id: candidateProfile.id },
         include: {
+          user: { select: { id: true, name: true, email: true, role: true, status: true, timezone: true } },
           preferences: true,
           skills: {
             orderBy: [{ isTopSkill: "desc" }, { displayName: "asc" }]
@@ -200,24 +258,34 @@ export class ProfileService {
     const briefCompleteness = calculateOnboardingBriefCompleteness(updated);
 
     return {
+      user: {
+        id: updated.user.id,
+        name: updated.user.name,
+        email: updated.user.email,
+        role: updated.user.role,
+        status: updated.user.status,
+        timezone: updated.user.timezone
+      },
       profile: {
         id: updated.id,
         headline: updated.headline,
         bio: updated.bio,
         experienceYears: updated.experienceYears,
         seniorityLevel: updated.seniorityLevel,
-        primaryDiscipline: updated.primaryDiscipline,
         currentCountry: updated.currentCountry,
         currentCity: updated.currentCity,
-        timezone: updated.timezone,
+        timezone: updated.user.timezone,
         workAuthorizations: updated.workAuthorizations,
         requiresVisaSponsorship: updated.requiresVisaSponsorship,
         searchStatus: updated.searchStatus,
+        revision: updated.revision,
         createdAt: updated.createdAt,
         updatedAt: updated.updatedAt
       },
       preferences: updated.preferences,
       skills: updated.skills,
+      profileRevision: updated.revision,
+      revision: updated.revision,
       completeness: completeness.score,
       breakdown: completeness,
       briefCompleteness: briefCompleteness.score,

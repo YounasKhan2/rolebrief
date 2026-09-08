@@ -301,10 +301,13 @@ test("ProfileService: saveCandidateData leaves CandidateSkill untouched if skill
 
   const mockTx = {
     candidateProfile: {
-      upsert: async () => ({ id: "prof_1", userId: "usr_1" }),
+      findUnique: async () => null,
+      upsert: async () => ({ id: "prof_1", userId: "usr_1", revision: 1 }),
       findUniqueOrThrow: async () => ({
         id: "prof_1",
         userId: "usr_1",
+        revision: 1,
+        user: { id: "usr_1", name: "Test", email: "test@example.com", role: "USER", status: "ACTIVE", timezone: "UTC" },
         preferences: null,
         skills: [{ id: "sk_1", displayName: "TypeScript", normalizedName: "typescript" }]
       })
@@ -328,6 +331,7 @@ test("ProfileService: saveCandidateData leaves CandidateSkill untouched if skill
   await profileService.saveCandidateData(
     "usr_1",
     {
+      expectedRevision: 0,
       preferences: {
         targetRoleTitles: ["Full Stack Engineer"]
       }

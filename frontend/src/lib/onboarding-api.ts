@@ -8,6 +8,7 @@ export type SalaryPeriod = "HOURLY" | "MONTHLY" | "ANNUAL";
 export type EmploymentType = "FULL_TIME" | "PART_TIME" | "CONTRACT" | "INTERNSHIP" | "TEMPORARY";
 export type CandidateSearchStatus = "ACTIVELY_LOOKING" | "OPEN_TO_OFFERS" | "CASUAL" | "NOT_LOOKING";
 export type RelocationPreference = "NOT_OPEN" | "WILLING_TO_RELOCATE" | "OPEN_TO_REMOTE_ONLY";
+export type SkillSource = "USER_DECLARED" | "RESUME_PARSED" | "INFERRED";
 
 export interface CandidateSkillItem {
   id?: string;
@@ -15,6 +16,7 @@ export interface CandidateSkillItem {
   normalizedName?: string;
   yearsExperience?: number | null;
   isTopSkill?: boolean;
+  source?: SkillSource;
 }
 
 export interface CandidateProfileData {
@@ -23,13 +25,13 @@ export interface CandidateProfileData {
   bio: string | null;
   experienceYears: number | null;
   seniorityLevel: SeniorityLevel | null;
-  primaryDiscipline: string | null;
   currentCountry: string | null;
   currentCity: string | null;
   timezone: string | null;
   workAuthorizations: string[];
   requiresVisaSponsorship: boolean | null;
   searchStatus: CandidateSearchStatus | null;
+  revision: number;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -66,6 +68,7 @@ export interface OnboardingState {
   profile: CandidateProfileData | null;
   preferences: CandidatePreferenceData | null;
   skills: CandidateSkillItem[];
+  profileRevision?: number;
   completeness: number;
   breakdown?: {
     score: number;
@@ -86,9 +89,18 @@ export interface OnboardingState {
 }
 
 export interface ProfileState {
+  user?: {
+    id: string;
+    name: string;
+    email: string;
+    role: string;
+    status: string;
+    timezone: string;
+  };
   profile: CandidateProfileData | null;
   preferences: CandidatePreferenceData | null;
   skills: CandidateSkillItem[];
+  profileRevision?: number;
   completeness: number;
   breakdown?: {
     score: number;
@@ -110,6 +122,7 @@ export interface ProfileState {
 
 export interface AutosaveOnboardingDto {
   expectedRevision: number;
+  expectedCandidateRevision?: number;
   currentStep?: OnboardingStep;
   completedSteps?: OnboardingStep[];
   profile?: Partial<{
@@ -117,7 +130,6 @@ export interface AutosaveOnboardingDto {
     bio: string;
     experienceYears: number;
     seniorityLevel: SeniorityLevel;
-    primaryDiscipline: string;
     currentCountry: string;
     currentCity: string;
     timezone: string;
@@ -138,6 +150,13 @@ export interface AutosaveOnboardingDto {
     salaryCurrency: string;
     salaryPeriod: SalaryPeriod;
   }>;
+  skills?: CandidateSkillItem[];
+}
+
+export interface UpdateCandidateProfilePayloadDto {
+  expectedRevision: number;
+  profile?: AutosaveOnboardingDto["profile"];
+  preferences?: AutosaveOnboardingDto["preferences"];
   skills?: CandidateSkillItem[];
 }
 
@@ -173,11 +192,7 @@ export function getProfile(): Promise<ProfileState> {
   return authRequest<ProfileState>("/me/profile");
 }
 
-export function updateProfile(payload: {
-  profile?: AutosaveOnboardingDto["profile"];
-  preferences?: AutosaveOnboardingDto["preferences"];
-  skills?: CandidateSkillItem[];
-}): Promise<ProfileState> {
+export function updateProfile(payload: UpdateCandidateProfilePayloadDto): Promise<ProfileState> {
   return authRequest<ProfileState>("/me/profile", {
     method: "PATCH",
     body: payload,

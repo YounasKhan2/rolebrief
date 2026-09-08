@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
+import { useNavigate } from "react-router";
 import {
   FileText,
   Pencil,
@@ -8,12 +9,24 @@ import {
   Loader2,
   X,
   Plus,
-  Check
+  Check,
+  AlertTriangle
 } from "lucide-react";
 import { PageContainer, PageHeader } from "../../components/shell/AppShell";
 import { Kicker, Badge, Button, SectionRule, FilterChip } from "../../components/ui/primitives";
-import { Input, SegmentedControl } from "../../components/ui/form";
+import { Input } from "../../components/ui/form";
 import { useAuth } from "../../lib/auth";
+import { ApiError } from "../../lib/api";
+import {
+  COMMON_COUNTRIES,
+  CURATED_DISCIPLINES,
+  EMPLOYMENT_TYPE_OPTIONS,
+  RELOCATION_OPTIONS,
+  REMOTE_OPTIONS,
+  SEARCH_STATUS_OPTIONS,
+  SENIORITY_OPTIONS,
+  SPONSORSHIP_OPTIONS
+} from "../../lib/taxonomies";
 import {
   getProfile,
   updateProfile,
@@ -29,40 +42,29 @@ import {
   SeniorityLevel
 } from "../../lib/onboarding-api";
 
-const COMMON_COUNTRIES = [
-  { code: "US", name: "United States" },
-  { code: "GB", name: "United Kingdom" },
-  { code: "CA", name: "Canada" },
-  { code: "DE", name: "Germany" },
-  { code: "PK", name: "Pakistan" },
-  { code: "AE", name: "United Arab Emirates" },
-  { code: "NL", name: "Netherlands" },
-  { code: "FR", name: "France" },
-  { code: "SG", name: "Singapore" },
-  { code: "AU", name: "Australia" },
-  { code: "IE", name: "Ireland" },
-  { code: "IN", name: "India" }
-];
-
-const CURATED_DISCIPLINES = [
-  "Software Engineering",
-  "Frontend Engineering",
-  "Backend Engineering",
-  "Platform & DevOps",
-  "Data & AI",
-  "Product Design",
-  "Engineering Management"
-];
-
 export function Component() {
+  const navigate = useNavigate();
+  const { user, isAdmin, updateOnboardingStatus } = useAuth();
+
+  // Admin redirect
+  useEffect(() => {
+    if (isAdmin) {
+      navigate("/admin", { replace: true });
+    }
+  }, [isAdmin, navigate]);
+
   const [profileData, setProfileData] = useState<ProfileState | null>(null);
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const { user, updateOnboardingStatus } = useAuth();
   const [isCompleting, setIsCompleting] = useState(false);
+
+  // Concurrency tracking
+  const [profileRevision, setProfileRevision] = useState(0);
+  const [conflictError, setConflictError] = useState<string | null>(null);
+  const [conflictServerState, setConflictServerState] = useState<ProfileState | null>(null);
 
   // Edit form state
   const [targetRoles, setTargetRoles] = useState<string[]>([]);
@@ -71,24 +73,55 @@ export function Component() {
   const [seniority, setSeniority] = useState<SeniorityLevel | null>(null);
   const [searchStatus, setSearchStatus] = useState<CandidateSearchStatus | null>(null);
   const [headline, setHeadline] = useState("");
+  const [bio, setBio] = useState("");
+  const [expYears, setExpYears] = useState<number | null>(null);
   const [currentCountry, setCurrentCountry] = useState("");
   const [currentCity, setCurrentCity] = useState("");
   const [timezone, setTimezone] = useState("");
-  const [workAuths, setWorkAuths] = useState<string[]>([]);
-  const [visaNeeded, setVisaNeeded] = useState<boolean | null>(null);
   const [remotePref, setRemotePref] = useState<RemotePreference | null>(null);
+  const [visaNeeded, setVisaNeeded] = useState<boolean | null>(null);
+  const [workAuths, setWorkAuths] = useState<string[]>([]);
   const [preferredCountries, setPreferredCountries] = useState<string[]>([]);
   const [employmentTypes, setEmploymentTypes] = useState<EmploymentType[]>([]);
   const [relocationPref, setRelocationPref] = useState<RelocationPreference | null>(null);
   const [skills, setSkills] = useState<CandidateSkillItem[]>([]);
   const [newSkillInput, setNewSkillInput] = useState("");
-  const [expYears, setExpYears] = useState<number | null>(null);
   const [minSalary, setMinSalary] = useState<number | undefined>(undefined);
   const [maxSalary, setMaxSalary] = useState<number | undefined>(undefined);
   const [salaryCurrency, setSalaryCurrency] = useState<string | null>(null);
   const [salaryPeriod, setSalaryPeriod] = useState<SalaryPeriod | null>(null);
 
-  async function load() {
+  const modalRef = useRef<HTMLDivElement>(null);
+  const initialFocusRef = useRef<HTMLInputElement>(null);
+
+  const populateEditForm = useCallback((data: ProfileState) => {
+    setProfileRevision(data.profileRevision ?? data.profile?.revision ?? 0);
+    if (data.preferences?.targetRoleTitles) setTargetRoles(data.preferences.targetRoleTitles);
+    else setTargetRoles([]);
+    if (data.preferences?.targetDisciplines) setTargetDisciplines(data.preferences.targetDisciplines);
+    else setTargetDisciplines([]);
+    setSeniority(data.profile?.seniorityLevel ?? null);
+    setSearchStatus(data.profile?.searchStatus ?? null);
+    setHeadline(data.profile?.headline ?? "");
+    setBio(data.profile?.bio ?? "");
+    setExpYears(data.profile?.experienceYears ?? null);
+    setCurrentCountry(data.profile?.currentCountry ?? "");
+    setCurrentCity(data.profile?.currentCity ?? "");
+    setTimezone(data.profile?.timezone ?? data.user?.timezone ?? "");
+    setRemotePref(data.preferences?.remotePreference ?? null);
+    setVisaNeeded(data.profile?.requiresVisaSponsorship ?? null);
+    setWorkAuths(data.profile?.workAuthorizations ?? []);
+    setPreferredCountries(data.preferences?.preferredCountries ?? []);
+    setEmploymentTypes(data.preferences?.employmentTypes ?? []);
+    setRelocationPref(data.preferences?.relocationPreference ?? null);
+    setSkills(data.skills ?? []);
+    setMinSalary(data.preferences?.minSalary ?? undefined);
+    setMaxSalary(data.preferences?.maxSalary ?? undefined);
+    setSalaryCurrency(data.preferences?.salaryCurrency ?? null);
+    setSalaryPeriod(data.preferences?.salaryPeriod ?? null);
+  }, []);
+
+  const load = useCallback(async () => {
     try {
       setLoading(true);
       const res = await getProfile();
@@ -99,38 +132,38 @@ export function Component() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [populateEditForm]);
 
   useEffect(() => {
-    void load();
-  }, []);
+    if (!isAdmin) {
+      void load();
+    }
+  }, [isAdmin, load]);
 
-  function populateEditForm(data: ProfileState) {
-    if (data.preferences?.targetRoleTitles) setTargetRoles(data.preferences.targetRoleTitles);
-    if (data.preferences?.targetDisciplines) setTargetDisciplines(data.preferences.targetDisciplines);
-    if (data.profile?.seniorityLevel) setSeniority(data.profile.seniorityLevel);
-    if (data.profile?.searchStatus) setSearchStatus(data.profile.searchStatus);
-    if (data.profile?.headline) setHeadline(data.profile.headline);
-    if (data.profile?.currentCountry) setCurrentCountry(data.profile.currentCountry);
-    if (data.profile?.currentCity) setCurrentCity(data.profile.currentCity);
-    setTimezone(data.profile?.timezone || "");
-    if (data.profile?.workAuthorizations) setWorkAuths(data.profile.workAuthorizations);
-    if (data.profile?.requiresVisaSponsorship !== null && data.profile?.requiresVisaSponsorship !== undefined) {
-      setVisaNeeded(data.profile.requiresVisaSponsorship);
-    }
-    if (data.preferences?.remotePreference) setRemotePref(data.preferences.remotePreference);
-    if (data.preferences?.preferredCountries) setPreferredCountries(data.preferences.preferredCountries);
-    if (data.preferences?.employmentTypes) setEmploymentTypes(data.preferences.employmentTypes);
-    if (data.preferences?.relocationPreference) setRelocationPref(data.preferences.relocationPreference);
-    if (data.skills) setSkills(data.skills);
-    if (data.profile?.experienceYears !== null && data.profile?.experienceYears !== undefined) {
-      setExpYears(data.profile.experienceYears);
-    }
-    if (data.preferences?.minSalary) setMinSalary(data.preferences.minSalary);
-    if (data.preferences?.maxSalary) setMaxSalary(data.preferences.maxSalary);
-    if (data.preferences?.salaryCurrency) setSalaryCurrency(data.preferences.salaryCurrency);
-    if (data.preferences?.salaryPeriod) setSalaryPeriod(data.preferences.salaryPeriod);
-  }
+  // Accessible Escape key and focus management for the modal
+  useEffect(() => {
+    if (!isEditing) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setIsEditing(false);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    const scrollPrev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    // Set initial focus
+    setTimeout(() => {
+      initialFocusRef.current?.focus();
+    }, 50);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = scrollPrev;
+    };
+  }, [isEditing]);
 
   function toggleArrayItem(list: string[], item: string, setter: (items: string[]) => void) {
     if (list.includes(item)) {
@@ -140,19 +173,49 @@ export function Component() {
     }
   }
 
+  function handleAddSkill() {
+    const cleaned = newSkillInput.trim().replace(/\s+/g, " ").normalize("NFKC");
+    if (!cleaned) return;
+    const exists = skills.some(
+      (s) => s.displayName.toLowerCase() === cleaned.toLowerCase()
+    );
+    if (!exists && skills.length < 50) {
+      setSkills([...skills, { displayName: cleaned, source: "USER_DECLARED" }]);
+      setNewSkillInput("");
+    }
+  }
+
+  function handleResolveConflict() {
+    if (conflictServerState) {
+      setProfileData(conflictServerState);
+      populateEditForm(conflictServerState);
+      setConflictError(null);
+      setConflictServerState(null);
+    } else {
+      void load().then(() => {
+        setConflictError(null);
+        setConflictServerState(null);
+      });
+    }
+  }
+
   async function handleSaveBrief(e: React.FormEvent) {
     e.preventDefault();
     setIsSaving(true);
     setSaveError(null);
+    setConflictError(null);
+
     try {
       const updated = await updateProfile({
+        expectedRevision: profileRevision,
         profile: {
-          headline: headline || undefined,
+          headline: headline.trim() || undefined,
+          bio: bio.trim() || undefined,
           experienceYears: expYears ?? undefined,
           seniorityLevel: seniority || undefined,
           currentCountry: currentCountry || undefined,
-          currentCity: currentCity || undefined,
-          timezone: timezone || undefined,
+          currentCity: currentCity.trim() || undefined,
+          timezone: timezone.trim() || undefined,
           workAuthorizations: workAuths,
           requiresVisaSponsorship: visaNeeded ?? undefined,
           searchStatus: searchStatus || undefined
@@ -179,10 +242,15 @@ export function Component() {
       setTimeout(() => {
         setSaveSuccess(false);
         setIsEditing(false);
-      }, 800);
+      }, 700);
     } catch (err: unknown) {
       setIsSaving(false);
-      setSaveError(err instanceof Error ? err.message : "Failed to update profile brief.");
+      if (err instanceof ApiError && err.status === 409) {
+        setConflictServerState(err.payload?.currentState ?? null);
+        setConflictError("Profile was updated in another session. Reconcile with latest changes before saving.");
+      } else {
+        setSaveError(err instanceof Error ? err.message : "Failed to update profile brief.");
+      }
     }
   }
 
@@ -190,19 +258,19 @@ export function Component() {
     setIsCompleting(true);
     setSaveError(null);
     try {
-      // 1. Fetch current onboarding state to get current revision
       const onboardingState = await getOnboardingState();
       const currentRev = onboardingState.progress?.revision ?? 0;
 
-      // 2. Save profile updates first
       const updated = await updateProfile({
+        expectedRevision: profileRevision,
         profile: {
-          headline: headline || undefined,
+          headline: headline.trim() || undefined,
+          bio: bio.trim() || undefined,
           experienceYears: expYears ?? undefined,
           seniorityLevel: seniority || undefined,
           currentCountry: currentCountry || undefined,
-          currentCity: currentCity || undefined,
-          timezone: timezone || undefined,
+          currentCity: currentCity.trim() || undefined,
+          timezone: timezone.trim() || undefined,
           workAuthorizations: workAuths,
           requiresVisaSponsorship: visaNeeded ?? undefined,
           searchStatus: searchStatus || undefined
@@ -222,113 +290,26 @@ export function Component() {
         skills
       });
 
-      // 3. Atomically transition onboarding status to COMPLETED with matching expectedRevision
       await completeOnboarding({ expectedRevision: currentRev });
-
-      // 4. Immediately update auth context
       updateOnboardingStatus("COMPLETED");
 
-      setProfileData((prev) => (prev ? {
-        ...prev,
-        ...updated,
-        progress: prev.progress ? { ...prev.progress, status: "COMPLETED" } : null
-      } : null));
+      setProfileData((prev) => (prev ? { ...prev, ...updated } : null));
       populateEditForm(updated);
       setIsCompleting(false);
       setSaveSuccess(true);
       setTimeout(() => {
         setSaveSuccess(false);
         setIsEditing(false);
-      }, 800);
+      }, 700);
     } catch (err: unknown) {
       setIsCompleting(false);
       setSaveError(err instanceof Error ? err.message : "Failed to complete opportunity brief.");
     }
   }
 
-  const profile = profileData?.profile;
-  const preferences = profileData?.preferences;
-  const activeSkills = profileData?.skills ?? [];
-  const completeness = profileData?.completeness ?? 0;
-  const briefCompleteness = profileData?.briefCompleteness ?? 0;
-  const isSkipped = user?.onboardingStatus === "SKIPPED" || profileData?.progress?.status === "SKIPPED";
-
-  const fields = [
-    {
-      label: "Target roles",
-      value: preferences?.targetRoleTitles?.length
-        ? preferences.targetRoleTitles.join(", ")
-        : "Not set"
-    },
-    {
-      label: "Seniority & Search status",
-      value: `${profile?.seniorityLevel ? profile.seniorityLevel : "Unspecified"} · ${
-        profile?.searchStatus ? profile.searchStatus.replace(/_/g, " ") : "Not specified"
-      }`
-    },
-    {
-      label: "Primary disciplines",
-      value: preferences?.targetDisciplines?.length
-        ? preferences.targetDisciplines.join(", ")
-        : profile?.primaryDiscipline || "Not set"
-    },
-    {
-      label: "Professional headline",
-      value: profile?.headline || "Not set"
-    },
-    {
-      label: "Base location & Timezone",
-      value: profile?.currentCountry
-        ? `${profile.currentCity ? `${profile.currentCity}, ` : ""}${profile.currentCountry}${
-            profile.timezone ? ` (${profile.timezone})` : ""
-          }`
-        : "Not set"
-    },
-    {
-      label: "Remote preference",
-      value: preferences?.remotePreference
-        ? preferences.remotePreference.replace(/_/g, " ")
-        : "Not specified"
-    },
-    {
-      label: "Work authorizations",
-      value: profile?.workAuthorizations?.length
-        ? profile.workAuthorizations.join(", ")
-        : "None declared"
-    },
-    {
-      label: "Visa sponsorship & Relocation",
-      value: `${
-        profile?.requiresVisaSponsorship ? "Sponsorship required" : "No sponsorship required"
-      } · ${preferences?.relocationPreference ? preferences.relocationPreference.replace(/_/g, " ") : "No relocation declared"}`
-    },
-    {
-      label: "Preferred target countries",
-      value: preferences?.preferredCountries?.length
-        ? preferences.preferredCountries.join(", ")
-        : "None declared"
-    },
-    {
-      label: "Employment types",
-      value: preferences?.employmentTypes?.length
-        ? preferences.employmentTypes.join(", ")
-        : "Full-time (default)"
-    },
-    {
-      label: "Skills",
-      value: activeSkills.length
-        ? activeSkills.map((s) => s.displayName).join(", ")
-        : "None added yet"
-    },
-    {
-      label: "Compensation expectation",
-      value: preferences?.minSalary
-        ? `${preferences.salaryCurrency ?? "USD"} ${preferences.minSalary.toLocaleString()}${
-            preferences.maxSalary ? ` – ${preferences.maxSalary.toLocaleString()}` : "+"
-          } (${preferences.salaryPeriod ?? "YEARLY"})`
-        : "Not disclosed"
-    }
-  ];
+  if (isAdmin) {
+    return null;
+  }
 
   if (loading && !profileData) {
     return (
@@ -342,6 +323,102 @@ export function Component() {
       </PageContainer>
     );
   }
+
+  const profile = profileData?.profile;
+  const preferences = profileData?.preferences;
+  const activeSkills = profileData?.skills ?? [];
+  const completeness = profileData?.completeness ?? 0;
+  const briefCompleteness = profileData?.briefCompleteness ?? 0;
+  const isSkipped = user?.onboardingStatus === "SKIPPED";
+
+  // Honest display representations (no false defaults)
+  const sponsorshipLabel =
+    profile?.requiresVisaSponsorship === true
+      ? "Sponsorship required"
+      : profile?.requiresVisaSponsorship === false
+        ? "No sponsorship required"
+        : "Not declared";
+
+  const relocationLabel = preferences?.relocationPreference
+    ? preferences.relocationPreference.replace(/_/g, " ").toLowerCase()
+    : "Not specified";
+
+  const fields = [
+    {
+      label: "Target roles",
+      value: preferences?.targetRoleTitles?.length
+        ? preferences.targetRoleTitles.join(", ")
+        : "Not specified"
+    },
+    {
+      label: "Seniority & Experience",
+      value: `${profile?.seniorityLevel ? profile.seniorityLevel : "Unspecified"}${
+        profile?.experienceYears !== null && profile?.experienceYears !== undefined
+          ? ` (${profile.experienceYears} yrs)`
+          : ""
+      } · ${profile?.searchStatus ? profile.searchStatus.replace(/_/g, " ").toLowerCase() : "Not specified"}`
+    },
+    {
+      label: "Primary disciplines",
+      value: preferences?.targetDisciplines?.length
+        ? preferences.targetDisciplines.join(", ")
+        : "Not specified"
+    },
+    {
+      label: "Professional headline",
+      value: profile?.headline || "Not specified"
+    },
+    {
+      label: "Base location & Timezone",
+      value: profile?.currentCountry
+        ? `${profile.currentCity ? `${profile.currentCity}, ` : ""}${profile.currentCountry}${
+            profile.timezone ? ` (${profile.timezone})` : ""
+          }`
+        : "Not specified"
+    },
+    {
+      label: "Remote preference",
+      value: preferences?.remotePreference
+        ? preferences.remotePreference.replace(/_/g, " ")
+        : "Not specified"
+    },
+    {
+      label: "Work authorizations (No sponsorship needed)",
+      value: profile?.workAuthorizations?.length
+        ? profile.workAuthorizations.join(", ")
+        : "Not specified"
+    },
+    {
+      label: "Visa sponsorship & Relocation",
+      value: `${sponsorshipLabel} · Relocation: ${relocationLabel}`
+    },
+    {
+      label: "Preferred target countries",
+      value: preferences?.preferredCountries?.length
+        ? preferences.preferredCountries.join(", ")
+        : "Not specified"
+    },
+    {
+      label: "Employment types",
+      value: preferences?.employmentTypes?.length
+        ? preferences.employmentTypes.join(", ")
+        : "Not specified"
+    },
+    {
+      label: "Verified skills",
+      value: activeSkills.length
+        ? activeSkills.map((s) => s.displayName).join(", ")
+        : "None declared"
+    },
+    {
+      label: "Compensation expectation",
+      value: preferences?.minSalary
+        ? `${preferences.salaryCurrency ?? "USD"} ${preferences.minSalary.toLocaleString()}${
+            preferences.maxSalary ? ` – ${preferences.maxSalary.toLocaleString()}` : "+"
+          } (${preferences.salaryPeriod ?? "ANNUAL"})`
+        : "Not disclosed"
+    }
+  ];
 
   return (
     <PageContainer className="max-w-[980px]">
@@ -380,21 +457,28 @@ export function Component() {
         </div>
       )}
 
-      {/* Dual Completeness Dashboard */}
+      {/* Dual Completeness Dashboard with accessible progressbars */}
       <div className="grid sm:grid-cols-2 gap-4 mb-6">
         <div className="rounded-[var(--radius-card)] border border-line bg-white p-5 shadow-xs">
           <div className="flex items-center justify-between mb-2">
             <Kicker className="font-mono text-xs">Opportunity brief</Kicker>
             <span className="font-data text-sm font-semibold text-ink">{briefCompleteness}%</span>
           </div>
-          <div className="h-2 rounded-full bg-line/60 overflow-hidden">
+          <div
+            className="h-2 rounded-full bg-line/60 overflow-hidden"
+            role="progressbar"
+            aria-valuenow={briefCompleteness}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-label={`Opportunity brief completeness: ${briefCompleteness}%`}
+          >
             <div
               className="h-full bg-indigo transition-all duration-500 rounded-full"
               style={{ width: `${briefCompleteness}%` }}
             />
           </div>
           <p className="text-xs text-slate mt-2">
-            Powers your candidate ranking and Radar feed.
+            Core information required for candidate ranking and Radar feed.
           </p>
         </div>
 
@@ -403,17 +487,32 @@ export function Component() {
             <Kicker className="font-mono text-xs">Total profile completeness</Kicker>
             <span className="font-data text-sm font-semibold text-ink">{completeness}%</span>
           </div>
-          <div className="h-2 rounded-full bg-line/60 overflow-hidden">
+          <div
+            className="h-2 rounded-full bg-line/60 overflow-hidden"
+            role="progressbar"
+            aria-valuenow={completeness}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-label={`Total profile completeness: ${completeness}%`}
+          >
             <div
               className="h-full bg-emerald transition-all duration-500 rounded-full"
               style={{ width: `${completeness}%` }}
             />
           </div>
           <p className="text-xs text-slate mt-2">
-            Includes professional headline, bio, and career history.
+            Includes professional headline, biography, and full career background.
           </p>
         </div>
       </div>
+
+      {/* Biography Card (if declared) */}
+      {profile?.bio && (
+        <div className="rounded-[var(--radius-card)] border border-line bg-white p-5 mb-4 shadow-xs">
+          <Kicker className="text-[11px] font-mono text-slate mb-1">Professional Biography</Kicker>
+          <p className="text-sm text-ink leading-relaxed whitespace-pre-wrap">{profile.bio}</p>
+        </div>
+      )}
 
       {/* Canonical Attributes Grid */}
       <div className="grid sm:grid-cols-2 gap-4">
@@ -430,7 +529,7 @@ export function Component() {
 
       <SectionRule className="my-8" />
 
-      {/* Résumé Management Staging */}
+      {/* Résumé Management Staging (Transparent Unavailable State) */}
       <div className="rounded-[var(--radius-feature)] border border-line bg-white p-6 shadow-xs">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-base font-semibold text-ink font-serif">Résumé & Document Parsing</h2>
@@ -468,23 +567,61 @@ export function Component() {
         </div>
       </div>
 
-      {/* Modal: Inline Opportunity Brief Editor */}
+      {/* Accessible Opportunity Brief Editor Modal */}
       {isEditing && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4 overflow-y-auto">
-          <div className="relative w-full max-w-2xl rounded-[var(--radius-feature)] border border-line bg-white p-6 sm:p-8 shadow-xl my-8 max-h-[90vh] overflow-y-auto">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 overflow-y-auto"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !isSaving) {
+              setIsEditing(false);
+            }
+          }}
+          role="presentation"
+        >
+          <div
+            ref={modalRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="modal-profile-title"
+            className="relative w-full max-w-2xl rounded-[var(--radius-feature)] border border-line bg-white p-6 sm:p-8 shadow-xl my-8 max-h-[90vh] overflow-y-auto"
+          >
             <div className="flex items-center justify-between pb-4 border-b border-line mb-6">
               <div>
-                <h3 className="text-lg font-semibold text-ink font-serif">Update Opportunity Brief</h3>
-                <p className="text-xs text-slate mt-0.5">Edit canonical candidate preferences in place.</p>
+                <h3 id="modal-profile-title" className="text-lg font-semibold text-ink font-serif">
+                  Update Opportunity Brief
+                </h3>
+                <p className="text-xs text-slate mt-0.5">
+                  Edit canonical candidate preferences and career profile.
+                </p>
               </div>
               <button
                 type="button"
                 onClick={() => setIsEditing(false)}
-                className="text-slate hover:text-ink transition-colors p-1"
+                className="text-slate hover:text-ink transition-colors p-1 rounded-md focus-visible:ring-2 focus-visible:ring-indigo/30"
+                aria-label="Close dialog"
               >
                 <X size={18} />
               </button>
             </div>
+
+            {/* Concurrency Conflict Warning Banner */}
+            {conflictError && (
+              <div className="mb-5 rounded-[var(--radius-card)] border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
+                <div className="flex items-start gap-2.5">
+                  <AlertTriangle size={16} className="text-amber-700 shrink-0 mt-0.5" />
+                  <p className="text-xs">{conflictError}</p>
+                </div>
+                <Button
+                  type="button"
+                  onClick={handleResolveConflict}
+                  variant="primary"
+                  size="sm"
+                  icon={<RefreshCw size={13} />}
+                >
+                  Sync with latest
+                </Button>
+              </div>
+            )}
 
             {saveError && (
               <div className="mb-4 rounded-[var(--radius-control)] border border-rose-300 bg-rose-50 p-3 text-xs text-rose-800">
@@ -493,7 +630,7 @@ export function Component() {
             )}
 
             <form onSubmit={handleSaveBrief} className="space-y-6">
-              {/* Target Roles */}
+              {/* 1. Target Roles */}
               <div>
                 <label className="block text-xs font-semibold text-ink mb-1.5">Target Role Titles</label>
                 <div className="flex flex-wrap gap-2 mb-2">
@@ -507,6 +644,7 @@ export function Component() {
                         type="button"
                         onClick={() => setTargetRoles(targetRoles.filter((r) => r !== role))}
                         className="text-slate hover:text-rose-600"
+                        aria-label={`Remove role ${role}`}
                       >
                         <X size={11} />
                       </button>
@@ -515,14 +653,16 @@ export function Component() {
                 </div>
                 <div className="flex gap-2">
                   <Input
+                    ref={initialFocusRef}
                     placeholder="e.g. Senior Backend Engineer"
                     value={newRoleInput}
                     onChange={(e) => setNewRoleInput(e.target.value)}
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {
                         e.preventDefault();
-                        if (newRoleInput.trim() && !targetRoles.includes(newRoleInput.trim())) {
-                          setTargetRoles([...targetRoles, newRoleInput.trim()]);
+                        const trimmed = newRoleInput.trim();
+                        if (trimmed && !targetRoles.includes(trimmed) && targetRoles.length < 20) {
+                          setTargetRoles([...targetRoles, trimmed]);
                           setNewRoleInput("");
                         }
                       }
@@ -533,8 +673,9 @@ export function Component() {
                     variant="secondary"
                     size="sm"
                     onClick={() => {
-                      if (newRoleInput.trim() && !targetRoles.includes(newRoleInput.trim())) {
-                        setTargetRoles([...targetRoles, newRoleInput.trim()]);
+                      const trimmed = newRoleInput.trim();
+                      if (trimmed && !targetRoles.includes(trimmed) && targetRoles.length < 20) {
+                        setTargetRoles([...targetRoles, trimmed]);
                         setNewRoleInput("");
                       }
                     }}
@@ -544,7 +685,7 @@ export function Component() {
                 </div>
               </div>
 
-              {/* Disciplines */}
+              {/* 2. Target Disciplines */}
               <div>
                 <label className="block text-xs font-semibold text-ink mb-1.5">Target Disciplines</label>
                 <div className="flex flex-wrap gap-1.5">
@@ -560,8 +701,35 @@ export function Component() {
                 </div>
               </div>
 
-              {/* Seniority & Headline */}
-              <div className="grid sm:grid-cols-2 gap-4">
+              {/* 3. Headline */}
+              <div>
+                <label className="block text-xs font-semibold text-ink mb-1.5">Professional Headline</label>
+                <Input
+                  value={headline}
+                  onChange={(e) => setHeadline(e.target.value)}
+                  placeholder="e.g. Staff Distributed Systems Engineer · Infrastructure & Storage"
+                  maxLength={140}
+                />
+              </div>
+
+              {/* 4. Biography (Full Bio editor to resolve ceiling) */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-semibold text-ink">Professional Biography</label>
+                  <span className="text-[11px] font-mono text-slate">{bio.length}/2000</span>
+                </div>
+                <textarea
+                  value={bio}
+                  onChange={(e) => setBio(e.target.value)}
+                  rows={3}
+                  maxLength={2000}
+                  placeholder="Briefly describe your career narrative, architecture experience, and the problems you solve best."
+                  className="w-full rounded-[var(--radius-control)] border border-line bg-white px-3 py-2 text-sm text-ink focus:outline-hidden focus:ring-2 focus:ring-indigo/20 focus:border-indigo leading-relaxed"
+                />
+              </div>
+
+              {/* 5. Seniority, Experience Years, Search Status */}
+              <div className="grid sm:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-ink mb-1.5">Seniority Level</label>
                   <select
@@ -570,12 +738,27 @@ export function Component() {
                     className="w-full rounded-[var(--radius-control)] border border-line bg-white px-3 py-2 text-sm text-ink focus:outline-hidden focus:ring-2 focus:ring-indigo/20 focus:border-indigo"
                   >
                     <option value="">Unspecified</option>
-                    <option value="MID">Mid</option>
-                    <option value="SENIOR">Senior</option>
-                    <option value="LEAD">Lead</option>
-                    <option value="PRINCIPAL">Principal</option>
-                    <option value="DIRECTOR">Director</option>
+                    {SENIORITY_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
                   </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-ink mb-1.5">Experience (Years)</label>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={70}
+                    value={expYears ?? ""}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value, 10);
+                      setExpYears(isNaN(val) ? null : val);
+                    }}
+                    placeholder="e.g. 8"
+                  />
                 </div>
 
                 <div>
@@ -586,27 +769,19 @@ export function Component() {
                     className="w-full rounded-[var(--radius-control)] border border-line bg-white px-3 py-2 text-sm text-ink focus:outline-hidden focus:ring-2 focus:ring-indigo/20 focus:border-indigo"
                   >
                     <option value="">Unspecified</option>
-                    <option value="ACTIVELY_LOOKING">Actively looking</option>
-                    <option value="OPEN_TO_OFFERS">Open to offers</option>
-                    <option value="CASUAL">Casual</option>
-                    <option value="NOT_LOOKING">Not looking</option>
+                    {SEARCH_STATUS_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-ink mb-1.5">Professional Headline</label>
-                <Input
-                  value={headline}
-                  onChange={(e) => setHeadline(e.target.value)}
-                  placeholder="e.g. Staff Distributed Systems Engineer"
-                />
-              </div>
-
-              {/* Location & Remote */}
+              {/* 6. Base Location & Timezone */}
               <div className="grid sm:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-ink mb-1.5">Current Country (ISO-2)</label>
+                  <label className="block text-xs font-semibold text-ink mb-1.5">Current Country</label>
                   <select
                     value={currentCountry}
                     onChange={(e) => setCurrentCountry(e.target.value)}
@@ -631,25 +806,60 @@ export function Component() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-ink mb-1.5">Remote Scope</label>
+                  <label className="block text-xs font-semibold text-ink mb-1.5">Timezone</label>
+                  <Input
+                    value={timezone}
+                    onChange={(e) => setTimezone(e.target.value)}
+                    placeholder="e.g. America/Los_Angeles"
+                  />
+                </div>
+              </div>
+
+              {/* 7. Remote & Sponsorship Tri-State */}
+              <div className="grid sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-ink mb-1.5">Remote Work Mode</label>
                   <select
                     value={remotePref ?? ""}
                     onChange={(e) => setRemotePref((e.target.value as RemotePreference) || null)}
                     className="w-full rounded-[var(--radius-control)] border border-line bg-white px-3 py-2 text-sm text-ink focus:outline-hidden focus:ring-2 focus:ring-indigo/20 focus:border-indigo"
                   >
                     <option value="">Open to any</option>
-                    <option value="REMOTE_ONLY">Remote Only</option>
-                    <option value="HYBRID">Hybrid</option>
-                    <option value="ONSITE">On-site</option>
-                    <option value="OPEN_TO_ANY">Open to Any</option>
+                    {REMOTE_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-ink mb-1.5">
+                    Visa Sponsorship Requirement
+                  </label>
+                  <select
+                    value={visaNeeded === null ? "NOT_DECLARED" : visaNeeded ? "YES" : "NO"}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setVisaNeeded(v === "YES" ? true : v === "NO" ? false : null);
+                    }}
+                    className="w-full rounded-[var(--radius-control)] border border-line bg-white px-3 py-2 text-sm text-ink focus:outline-hidden focus:ring-2 focus:ring-indigo/20 focus:border-indigo"
+                  >
+                    {SPONSORSHIP_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>
 
-              {/* Work Authorizations & Sponsorship */}
+              {/* 8. Work Authorizations */}
               <div>
-                <label className="block text-xs font-semibold text-ink mb-1.5">Work Authorizations (No Sponsorship Needed)</label>
-                <div className="flex flex-wrap gap-1.5 mb-3">
+                <label className="block text-xs font-semibold text-ink mb-1.5">
+                  Work Authorizations (Legal right to work without sponsorship)
+                </label>
+                <div className="flex flex-wrap gap-1.5 mb-2">
                   {COMMON_COUNTRIES.map((c) => (
                     <FilterChip
                       key={c.code}
@@ -662,17 +872,51 @@ export function Component() {
                 </div>
               </div>
 
-              {/* Employment Types Accepted */}
+              {/* 9. Preferred Target Countries & Relocation */}
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-ink mb-1.5">
+                    Preferred Target Countries
+                  </label>
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    {COMMON_COUNTRIES.map((c) => (
+                      <FilterChip
+                        key={c.code}
+                        active={preferredCountries.includes(c.code)}
+                        onClick={() => toggleArrayItem(preferredCountries, c.code, setPreferredCountries)}
+                      >
+                        {c.name}
+                      </FilterChip>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-ink mb-1.5">
+                    Relocation Preference
+                  </label>
+                  <select
+                    value={relocationPref ?? ""}
+                    onChange={(e) => setRelocationPref((e.target.value as RelocationPreference) || null)}
+                    className="w-full rounded-[var(--radius-control)] border border-line bg-white px-3 py-2 text-sm text-ink focus:outline-hidden focus:ring-2 focus:ring-indigo/20 focus:border-indigo"
+                  >
+                    <option value="">Not specified</option>
+                    {RELOCATION_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* 10. Employment Types Accepted */}
               <div>
-                <label className="block text-xs font-semibold text-ink mb-1.5">Employment Types Accepted</label>
-                <div className="flex flex-wrap gap-1.5 mb-3">
-                  {[
-                    { value: "FULL_TIME", label: "Full-time" },
-                    { value: "CONTRACT", label: "Contract" },
-                    { value: "PART_TIME", label: "Part-time" },
-                    { value: "INTERNSHIP", label: "Internship" },
-                    { value: "TEMPORARY", label: "Temporary" }
-                  ].map((t) => (
+                <label className="block text-xs font-semibold text-ink mb-1.5">
+                  Employment Types Accepted
+                </label>
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  {EMPLOYMENT_TYPE_OPTIONS.map((t) => (
                     <FilterChip
                       key={t.value}
                       active={employmentTypes.includes(t.value as EmploymentType)}
@@ -684,7 +928,7 @@ export function Component() {
                 </div>
               </div>
 
-              {/* Skills */}
+              {/* 11. Verified Skills */}
               <div>
                 <label className="block text-xs font-semibold text-ink mb-1.5">Verified Skills</label>
                 <div className="flex flex-wrap gap-1.5 mb-2">
@@ -698,6 +942,7 @@ export function Component() {
                         type="button"
                         onClick={() => setSkills(skills.filter((sk) => sk.displayName !== s.displayName))}
                         className="text-slate hover:text-rose-600"
+                        aria-label={`Remove skill ${s.displayName}`}
                       >
                         <X size={11} />
                       </button>
@@ -706,16 +951,13 @@ export function Component() {
                 </div>
                 <div className="flex gap-2">
                   <Input
-                    placeholder="Add skill (e.g. Rust)"
+                    placeholder="Add skill (e.g. Rust, Kubernetes)"
                     value={newSkillInput}
                     onChange={(e) => setNewSkillInput(e.target.value)}
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {
                         e.preventDefault();
-                        if (newSkillInput.trim() && !skills.some((sk) => sk.displayName.toLowerCase() === newSkillInput.trim().toLowerCase())) {
-                          setSkills([...skills, { displayName: newSkillInput.trim() }]);
-                          setNewSkillInput("");
-                        }
+                        handleAddSkill();
                       }
                     }}
                   />
@@ -723,19 +965,14 @@ export function Component() {
                     type="button"
                     variant="secondary"
                     size="sm"
-                    onClick={() => {
-                      if (newSkillInput.trim() && !skills.some((sk) => sk.displayName.toLowerCase() === newSkillInput.trim().toLowerCase())) {
-                        setSkills([...skills, { displayName: newSkillInput.trim() }]);
-                        setNewSkillInput("");
-                      }
-                    }}
+                    onClick={handleAddSkill}
                   >
                     Add
                   </Button>
                 </div>
               </div>
 
-              {/* Compensation */}
+              {/* 12. Compensation Expectations (Optional) */}
               <div className="grid sm:grid-cols-4 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-ink mb-1.5">Min Salary</label>

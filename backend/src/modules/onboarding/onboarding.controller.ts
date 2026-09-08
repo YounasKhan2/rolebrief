@@ -2,11 +2,13 @@ import { Body, Controller, Get, Patch, Post, Put, UseGuards } from "@nestjs/comm
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { AuthenticatedUser, CurrentUser } from "../../auth/auth.decorators";
 import { CsrfGuard } from "../../auth/csrf.guard";
+import { UserRoleGuard } from "../../auth/user-role.guard";
 import { AutosaveOnboardingDto, CompleteOnboardingDto, SkipOnboardingDto } from "./dto/onboarding.dto";
 import { OnboardingService } from "./onboarding.service";
 
 @ApiTags("onboarding")
 @ApiBearerAuth()
+@UseGuards(UserRoleGuard)
 @Controller("me/onboarding")
 export class OnboardingController {
   constructor(private readonly onboardingService: OnboardingService) {}

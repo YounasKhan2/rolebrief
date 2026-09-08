@@ -1,6 +1,7 @@
-import { ApiPropertyOptional } from "@nestjs/swagger";
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { Type } from "class-transformer";
 import {
+  ArrayMaxSize,
   IsArray,
   IsBoolean,
   IsEnum,
@@ -65,7 +66,7 @@ export enum RelocationPreferenceEnum {
 }
 
 export class CandidateSkillInputDto {
-  @ApiPropertyOptional()
+  @ApiProperty()
   @IsString()
   @MaxLength(80)
   displayName!: string;
@@ -108,12 +109,6 @@ export class UpdateProfileDto {
   @IsEnum(SeniorityLevelEnum)
   seniorityLevel?: SeniorityLevelEnum;
 
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  @MaxLength(100)
-  primaryDiscipline?: string;
-
   @ApiPropertyOptional({ description: "ISO 3166-1 alpha-2 country code" })
   @IsOptional()
   @IsString()
@@ -129,17 +124,18 @@ export class UpdateProfileDto {
   @ApiPropertyOptional({ type: [String], description: "List of ISO 3166-1 alpha-2 country codes" })
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(50)
   @IsString({ each: true })
   @MaxLength(2, { each: true })
   workAuthorizations?: string[];
 
-  @ApiPropertyOptional({ description: "Candidate timezone" })
+  @ApiPropertyOptional({ description: "Account canonical timezone" })
   @IsOptional()
   @IsString()
   @MaxLength(100)
   timezone?: string;
 
-  @ApiPropertyOptional({ description: "Whether candidate requires employer visa sponsorship" })
+  @ApiPropertyOptional({ description: "Whether candidate requires employer visa sponsorship (null = not declared)" })
   @IsOptional()
   @IsBoolean()
   requiresVisaSponsorship?: boolean;
@@ -154,6 +150,7 @@ export class UpdatePreferencesDto {
   @ApiPropertyOptional({ type: [String] })
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(20)
   @IsString({ each: true })
   @MaxLength(100, { each: true })
   targetRoleTitles?: string[];
@@ -161,6 +158,7 @@ export class UpdatePreferencesDto {
   @ApiPropertyOptional({ type: [String] })
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(20)
   @IsString({ each: true })
   @MaxLength(100, { each: true })
   targetDisciplines?: string[];
@@ -173,6 +171,7 @@ export class UpdatePreferencesDto {
   @ApiPropertyOptional({ type: [String] })
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(50)
   @IsString({ each: true })
   @MaxLength(2, { each: true })
   preferredCountries?: string[];
@@ -180,6 +179,7 @@ export class UpdatePreferencesDto {
   @ApiPropertyOptional({ type: [String] })
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(50)
   @IsString({ each: true })
   @MaxLength(100, { each: true })
   preferredCities?: string[];
@@ -187,6 +187,7 @@ export class UpdatePreferencesDto {
   @ApiPropertyOptional({ enum: EmploymentTypeEnum, isArray: true })
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(10)
   @IsEnum(EmploymentTypeEnum, { each: true })
   employmentTypes?: EmploymentTypeEnum[];
 
@@ -220,6 +221,11 @@ export class UpdatePreferencesDto {
 }
 
 export class UpdateCandidateProfilePayloadDto {
+  @ApiProperty({ description: "Optimistic concurrency revision for candidate data" })
+  @IsInt()
+  @Min(0)
+  expectedRevision!: number;
+
   @ApiPropertyOptional()
   @IsOptional()
   @ValidateNested()
@@ -235,6 +241,7 @@ export class UpdateCandidateProfilePayloadDto {
   @ApiPropertyOptional({ type: [CandidateSkillInputDto] })
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(50)
   @ValidateNested({ each: true })
   @Type(() => CandidateSkillInputDto)
   skills?: CandidateSkillInputDto[];

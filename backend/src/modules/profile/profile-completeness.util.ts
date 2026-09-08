@@ -52,12 +52,16 @@ export function calculateOnboardingBriefCompleteness(
   if (profile.currentCountry) {
     location += 10;
   }
-  if (profile.workAuthorizations && profile.workAuthorizations.length > 0) {
-    location += 5;
-  }
   if (preferences?.remotePreference) {
     location += 10;
   }
+  if (profile.workAuthorizations && profile.workAuthorizations.length > 0) {
+    location += 5;
+  } else if (profile.requiresVisaSponsorship !== null && profile.requiresVisaSponsorship !== undefined) {
+    // Explicit declaration of sponsorship (Yes or No) earns completeness points
+    location += 5;
+  }
+  location = Math.min(25, location);
 
   // 3. Verified Skills (max 25%)
   let skillsScore = 0;

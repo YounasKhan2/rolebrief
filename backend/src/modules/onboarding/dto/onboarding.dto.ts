@@ -21,6 +21,12 @@ export class AutosaveOnboardingDto {
   @Min(0)
   expectedRevision!: number;
 
+  @ApiPropertyOptional({ description: "Optimistic concurrency revision number for candidate profile data" })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  expectedCandidateRevision?: number;
+
   @ApiPropertyOptional({ enum: OnboardingStepEnum, description: "Identifier of the active wizard step" })
   @IsOptional()
   @IsEnum(OnboardingStepEnum)
