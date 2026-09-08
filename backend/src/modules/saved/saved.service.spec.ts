@@ -4,6 +4,9 @@ import { test } from "node:test";
 import { BadRequestException, NotFoundException } from "@nestjs/common";
 import { SavedService } from "./saved.service";
 import { JobSlugValidationPipe } from "./saved.controller";
+import { decodeSavedCursor, encodeSavedCursor } from "./saved-cursor.util";
+
+const TEST_SECRET = "test-secret-key-at-least-16-bytes-long";
 
 function createMockPrisma(overrides: Record<string, any> = {}) {
   return {
@@ -34,6 +37,54 @@ function createMockJobsService() {
   } as any;
 }
 
+function createMockConfig() {
+  return {
+    cursorSigningSecret: TEST_SECRET
+  } as any;
+}
+
+test("SavedCursor: encodes and decodes valid signed cursor", () => {
+  const payload = {
+    v: 1 as const,
+    userId: "user_abc",
+    id: "item_xyz",
+    createdAt: new Date().toISOString()
+  };
+
+  const token = encodeSavedCursor(payload, TEST_SECRET);
+  assert.ok(token.includes("."), "Cursor token must be separated by dot");
+
+  const decoded = decodeSavedCursor(token, TEST_SECRET, "user_abc");
+  assert.equal(decoded.v, 1);
+  assert.equal(decoded.userId, "user_abc");
+  assert.equal(decoded.id, "item_xyz");
+  assert.equal(decoded.createdAt, payload.createdAt);
+});
+
+test("SavedCursor: rejects tampered signature or payload", () => {
+  const payload = {
+    v: 1 as const,
+    userId: "user_abc",
+    id: "item_xyz",
+    createdAt: new Date().toISOString()
+  };
+  const token = encodeSavedCursor(payload, TEST_SECRET);
+  const [b64, sig] = token.split(".");
+
+  // Tampered payload
+  const tamperedPayload = Buffer.from(JSON.stringify({ ...payload, id: "hacked" })).toString("base64url");
+  assert.throws(() => decodeSavedCursor(`${tamperedPayload}.${sig}`, TEST_SECRET, "user_abc"), BadRequestException);
+
+  // Tampered signature
+  assert.throws(() => decodeSavedCursor(`${b64}.tamperedSig12345`, TEST_SECRET, "user_abc"), BadRequestException);
+
+  // Wrong user
+  assert.throws(() => decodeSavedCursor(token, TEST_SECRET, "different_user"), BadRequestException);
+
+  // Malformed token
+  assert.throws(() => decodeSavedCursor("nodottoken", TEST_SECRET, "user_abc"), BadRequestException);
+});
+
 test("SavedService: getSavedJobSlugs returns array of slugs in order", async () => {
   const mockPrisma = createMockPrisma({
     savedItem: {
@@ -48,7 +99,7 @@ test("SavedService: getSavedJobSlugs returns array of slugs in order", async () 
     }
   });
 
-  const service = new SavedService(mockPrisma, createMockJobsService());
+  const service = new SavedService(mockPrisma, createMockJobsService(), createMockConfig());
   const slugs = await service.getSavedJobSlugs("user_1");
   assert.deepEqual(slugs, ["staff-platform-engineer", "senior-backend-engineer"]);
 });
@@ -85,7 +136,7 @@ test("SavedService: getSavedJobs returns serialized jobs with cursor pageInfo", 
     }
   });
 
-  const service = new SavedService(mockPrisma, createMockJobsService());
+  const service = new SavedService(mockPrisma, createMockJobsService(), createMockConfig());
   const result = await service.getSavedJobs("user_1");
 
   assert.equal(result.totalCount, 1);
@@ -96,7 +147,7 @@ test("SavedService: getSavedJobs returns serialized jobs with cursor pageInfo", 
   assert.equal(result.pageInfo.nextCursor, null);
 });
 
-test("SavedService: cursor pagination returns correct nextCursor and hasNextPage", async () => {
+test("SavedService: cursor pagination returns opaque HMAC nextCursor and hasNextPage", async () => {
   const now = new Date();
   const mockPrisma = createMockPrisma({
     savedItem: {
@@ -133,13 +184,19 @@ test("SavedService: cursor pagination returns correct nextCursor and hasNextPage
     }
   });
 
-  const service = new SavedService(mockPrisma, createMockJobsService());
+  const service = new SavedService(mockPrisma, createMockJobsService(), createMockConfig());
   const result = await service.getSavedJobs("user_1", { limit: 2 });
 
   assert.equal(result.totalCount, 3);
   assert.equal(result.data.length, 2);
   assert.equal(result.pageInfo.hasNextPage, true);
-  assert.equal(result.pageInfo.nextCursor, "si_2");
+  assert.ok(result.pageInfo.nextCursor, "nextCursor must be present");
+  assert.ok(result.pageInfo.nextCursor.includes("."), "nextCursor must be HMAC signed");
+
+  // Verify decoded content
+  const decoded = decodeSavedCursor(result.pageInfo.nextCursor, TEST_SECRET, "user_1");
+  assert.equal(decoded.id, "si_2");
+  assert.equal(decoded.userId, "user_1");
 });
 
 test("SavedService: multi-user isolation ensures User A cannot read or delete User B's records", async () => {
@@ -165,29 +222,25 @@ test("SavedService: multi-user isolation ensures User A cannot read or delete Us
         if (args.where.userId === "user_1") {
           return user1Records;
         }
-        return []; // user_2 has no records in this check
+        return [];
       },
       deleteMany: async (args: any) => {
         deletedWhere = args.where;
-        return { count: 0 }; // When user_2 attempts to delete User 1's job
+        return { count: 0 };
       }
     }
   });
 
-  const service = new SavedService(mockPrisma, createMockJobsService());
+  const service = new SavedService(mockPrisma, createMockJobsService(), createMockConfig());
 
-  // User 1 sees their record
   const u1Saved = await service.getSavedJobs("user_1");
   assert.equal(u1Saved.data.length, 1);
   assert.equal(u1Saved.data[0].slug, "job-alpha");
 
-  // User 2 cannot see User 1's record
   const u2Saved = await service.getSavedJobs("user_2");
   assert.equal(u2Saved.data.length, 0);
 
-  // User 2 attempts to unsave User 1's job
   await service.unsaveJob("user_2", "job-alpha");
-  // Verification: delete query was strictly scoped to userId: user_2
   assert.equal(deletedWhere.userId, "user_2");
   assert.equal(deletedWhere.itemId, "job-alpha");
 });
@@ -216,7 +269,7 @@ test("SavedService: preserved expired jobs retain status and flag", async () => 
     }
   });
 
-  const service = new SavedService(mockPrisma, createMockJobsService());
+  const service = new SavedService(mockPrisma, createMockJobsService(), createMockConfig());
   const result = await service.getSavedJobs("user_1");
 
   assert.equal(result.data.length, 1);
@@ -231,7 +284,7 @@ test("SavedService: saveJob throws NotFoundException for nonexistent slug", asyn
     }
   });
 
-  const service = new SavedService(mockPrisma, createMockJobsService());
+  const service = new SavedService(mockPrisma, createMockJobsService(), createMockConfig());
   await assert.rejects(
     () => service.saveJob("user_1", "non-existent-slug"),
     NotFoundException
@@ -252,7 +305,7 @@ test("SavedService: saveJob upserts SavedItem idempotently", async () => {
     }
   });
 
-  const service = new SavedService(mockPrisma, createMockJobsService());
+  const service = new SavedService(mockPrisma, createMockJobsService(), createMockConfig());
   const res = await service.saveJob("user_1", "real-job-slug");
 
   assert.deepEqual(res, { success: true, saved: true, slug: "real-job-slug" });
@@ -275,7 +328,7 @@ test("SavedService: unsaveJob deletes item idempotently", async () => {
     }
   });
 
-  const service = new SavedService(mockPrisma, createMockJobsService());
+  const service = new SavedService(mockPrisma, createMockJobsService(), createMockConfig());
   const res = await service.unsaveJob("user_1", "slug-to-remove");
 
   assert.deepEqual(res, { success: true, saved: false, slug: "slug-to-remove" });
@@ -289,21 +342,16 @@ test("SavedService: unsaveJob deletes item idempotently", async () => {
 test("JobSlugValidationPipe: accepts valid slugs and rejects invalid/path-traversal slugs", () => {
   const pipe = new JobSlugValidationPipe();
 
-  // Valid
   assert.equal(pipe.transform("staff-software-engineer"), "staff-software-engineer");
   assert.equal(pipe.transform("job_123_abc"), "job_123_abc");
   assert.equal(pipe.transform("A1-B2_C3"), "A1-B2_C3");
 
-  // Invalid: path traversal
   assert.throws(() => pipe.transform("../../../etc/passwd"), BadRequestException);
   assert.throws(() => pipe.transform("job/123"), BadRequestException);
-
-  // Invalid: spaces or special chars
   assert.throws(() => pipe.transform("job 123"), BadRequestException);
   assert.throws(() => pipe.transform("job@role"), BadRequestException);
   assert.throws(() => pipe.transform(""), BadRequestException);
 
-  // Invalid: exceeds 120 chars
   const longSlug = "a".repeat(121);
   assert.throws(() => pipe.transform(longSlug), BadRequestException);
 });

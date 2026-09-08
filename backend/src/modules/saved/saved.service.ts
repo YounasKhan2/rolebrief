@@ -1,14 +1,17 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
+import { AppConfigService } from "../../common/config/app-config.service";
 import { PrismaService } from "../../prisma/prisma.service";
 import { JobsService } from "../jobs/jobs.service";
 import { SavedJobsQueryDto } from "./dto/saved-query.dto";
+import { decodeSavedCursor, encodeSavedCursor } from "./saved-cursor.util";
 
 @Injectable()
 export class SavedService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly jobsService: JobsService
+    private readonly jobsService: JobsService,
+    private readonly config: AppConfigService
   ) {}
 
   async getSavedJobSlugs(userId: string): Promise<string[]> {
@@ -30,6 +33,12 @@ export class SavedService {
   async getSavedJobs(userId: string, query: SavedJobsQueryDto = new SavedJobsQueryDto()) {
     const limit = Math.min(Math.max(query.limit ?? 20, 1), 50);
     const cursor = query.cursor;
+
+    let cursorId: string | undefined;
+    if (cursor) {
+      const decoded = decodeSavedCursor(cursor, this.config.cursorSigningSecret, userId);
+      cursorId = decoded.id;
+    }
 
     const totalCount = await this.prisma.savedItem.count({
       where: {
@@ -55,8 +64,8 @@ export class SavedService {
           itemType: "JOB"
         },
         take: limit + 1,
-        skip: cursor ? 1 : 0,
-        cursor: cursor ? { id: cursor } : undefined,
+        skip: cursorId ? 1 : 0,
+        cursor: cursorId ? { id: cursorId } : undefined,
         orderBy: [
           { createdAt: "desc" },
           { id: "desc" }
@@ -76,7 +85,19 @@ export class SavedService {
 
     const hasNextPage = items.length > limit;
     const pageItems = hasNextPage ? items.slice(0, limit) : items;
-    const nextCursor = hasNextPage && pageItems.length > 0 ? pageItems[pageItems.length - 1].id : null;
+    let nextCursor: string | null = null;
+    if (hasNextPage && pageItems.length > 0) {
+      const last = pageItems[pageItems.length - 1];
+      nextCursor = encodeSavedCursor(
+        {
+          v: 1,
+          userId,
+          id: last.id,
+          createdAt: last.createdAt.toISOString()
+        },
+        this.config.cursorSigningSecret
+      );
+    }
 
     const jobs = pageItems
       .filter((item): item is typeof item & { job: NonNullable<typeof item.job> } => Boolean(item.job))

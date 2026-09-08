@@ -146,6 +146,7 @@ export function JobCard({
                 label={isJobSaved ? "Saved" : "Save job"}
                 onClick={handleSave}
                 disabled={isJobPending}
+                aria-busy={isJobPending ? "true" : "false"}
                 className={classNames(
                   "relative z-10 size-9 shrink-0",
                   isJobPending && "opacity-50 cursor-not-allowed"

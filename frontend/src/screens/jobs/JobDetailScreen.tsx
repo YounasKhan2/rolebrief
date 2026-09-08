@@ -103,6 +103,7 @@ export function Component() {
         variant="secondary"
         onClick={handleToggleSave}
         disabled={isPending}
+        aria-busy={isPending ? "true" : "false"}
         icon={isSaved ? <BookmarkCheck size={16} className="text-indigo" /> : <Bookmark size={16} />}
       >
         {isSaved ? "Saved" : "Save"}
