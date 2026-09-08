@@ -120,7 +120,7 @@ export async function createApplication(payload: CreateApplicationPayload): Prom
   return authRequest<TrackedApplication>("/tracker", {
     method: "POST",
     csrf: true,
-    body: JSON.stringify(payload)
+    body: payload
   });
 }
 
@@ -131,7 +131,7 @@ export async function updateApplication(
   return authRequest<TrackedApplication>(`/tracker/${encodeURIComponent(id)}`, {
     method: "PATCH",
     csrf: true,
-    body: JSON.stringify(payload)
+    body: payload
   });
 }
 

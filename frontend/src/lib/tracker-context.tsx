@@ -172,11 +172,9 @@ export function TrackerProvider({ children }: { children: ReactNode }) {
       pendingKeysRef.current.add(slug);
       setPendingKeys(new Set(pendingKeysRef.current));
 
-      // Optimistic slug addition
-      setTrackedJobSlugs((prev) => new Set(prev).add(slug));
-
       try {
         const app = await apiCreateApplication({ jobSlug: slug, stage: "SAVED" });
+        setTrackedJobSlugs((prev) => new Set(prev).add(slug));
         channelRef.current?.postMessage({ type: "tracked", slug });
         toast({
           kind: "success",
@@ -185,12 +183,6 @@ export function TrackerProvider({ children }: { children: ReactNode }) {
         void refreshTracker();
         return app;
       } catch (err: any) {
-        // Rollback
-        setTrackedJobSlugs((prev) => {
-          const next = new Set(prev);
-          next.delete(slug);
-          return next;
-        });
         toast({
           kind: "error",
           message: err?.message || "Could not track job. Please try again."

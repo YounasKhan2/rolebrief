@@ -1,4 +1,7 @@
 import { API_BASE_URL, ApiError } from "./api";
+import { serializeRequestBody } from "./request-body";
+
+export { serializeRequestBody };
 
 export type AuthRole = "USER" | "ADMIN";
 export type AuthStatus = "PENDING_VERIFICATION" | "ACTIVE" | "LOCKED" | "DISABLED";
@@ -86,13 +89,13 @@ export function refresh(): Promise<{ user: AuthUser }> {
 
 export async function authRequest<T>(
   path: string,
-  options: { method?: string; body?: unknown; csrf?: boolean } = {},
+  options: { method?: string; body?: unknown; csrf?: boolean; headers?: Record<string, string> } = {},
   retried = false
 ): Promise<T> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort("timeout"), DEFAULT_TIMEOUT_MS);
-  const headers: Record<string, string> = { Accept: "application/json" };
-  if (options.body) headers["Content-Type"] = "application/json";
+  const initialHeaders: Record<string, string> = { Accept: "application/json", ...options.headers };
+  const { body: serializedBody, headers } = serializeRequestBody(options.body, initialHeaders);
   if (options.csrf) {
     let token = csrfToken();
     if (!token && path !== "/auth/csrf") {
@@ -105,7 +108,7 @@ export async function authRequest<T>(
     const response = await fetch(`${API_BASE_URL}${path}`, {
       method: options.method ?? "GET",
       headers,
-      body: options.body ? JSON.stringify(options.body) : undefined,
+      body: serializedBody,
       credentials: "include",
       signal: controller.signal
     });

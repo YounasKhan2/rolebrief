@@ -150,6 +150,9 @@ function joinSignals(controller: AbortController, signal?: AbortSignal) {
   signal.addEventListener("abort", () => controller.abort(signal.reason), { once: true });
 }
 
+import { serializeRequestBody } from "./request-body";
+export { serializeRequestBody };
+
 export async function requestJson<T>(
   path: string,
   options: { signal?: AbortSignal; timeoutMs?: number; method?: string; body?: unknown; headers?: Record<string, string>; credentials?: RequestCredentials } = {},
@@ -158,11 +161,14 @@ export async function requestJson<T>(
   joinSignals(controller, options.signal);
   const timeout = window.setTimeout(() => controller.abort("timeout"), options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
 
+  const initialHeaders: Record<string, string> = { Accept: "application/json", ...options.headers };
+  const { body: serializedBody, headers } = serializeRequestBody(options.body, initialHeaders);
+
   try {
     const response = await fetch(`${API_BASE_URL}${path}`, {
       method: options.method ?? "GET",
-      headers: { Accept: "application/json", ...(options.body ? { "Content-Type": "application/json" } : {}), ...options.headers },
-      body: options.body ? JSON.stringify(options.body) : undefined,
+      headers,
+      body: serializedBody,
       credentials: options.credentials,
       signal: controller.signal,
     });
