@@ -49,7 +49,10 @@ export interface CanonicalRemoteRestrictions {
   countries: { alpha2: string | null; name: string; slug: string }[];
   countryCodes: string[];
   labels: string[];
+  unresolvedLabels: string[];
   timezones: string[];
+  timezoneOffsetMinutes: number[];
+  provider?: string;
 }
 
 export interface CanonicalJobInput<TRecord = unknown> {

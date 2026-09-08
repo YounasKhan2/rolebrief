@@ -19,6 +19,7 @@
     "migrate:dev": "prisma migrate dev",
     "migrate:deploy": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
+    "backfill:job-country-codes": "tsx src/scripts/backfill-job-country-codes.ts",
     "test": "node --import tsx --test \"src/**/*.spec.ts\""
   },
   "dependencies": {

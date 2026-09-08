@@ -1,13 +1,30 @@
 import { createHash } from "node:crypto";
 import { WorkMode } from "@prisma/client";
+import { CountryResolverService } from "../../common/country/country-resolver.service";
 import { CanonicalJobInput, CanonicalRemoteRestrictions } from "../provider-adapter";
 import { HimalayasJobDto } from "./himalayas.dto";
 
-export function normalizeHimalayasJob(job: HimalayasJobDto): CanonicalJobInput<HimalayasJobDto> {
+const defaultCountryResolver = new CountryResolverService();
+
+export function normalizeHimalayasJob(
+  job: HimalayasJobDto,
+  countryResolver: CountryResolverService = defaultCountryResolver
+): CanonicalJobInput<HimalayasJobDto> {
   const seniority = job.seniority.length > 0 ? job.seniority.join(", ") : null;
-  const { locations, locationLabels } = normalizeLocationRestrictions(job.locationRestrictions);
-  const timezoneRestrictions = job.timezoneRestrictions.map((timezone) => String(timezone));
-  const remote = normalizeRemoteRestrictions(locations, locationLabels, timezoneRestrictions);
+  const { countries, countryCodes, labels, unresolvedLabels } = normalizeLocationRestrictions(
+    job.locationRestrictions,
+    countryResolver
+  );
+  const timezones = job.timezoneRestrictions.map((timezone) => String(timezone));
+  const timezoneOffsetMinutes = normalizeTimezoneOffsetMinutes(job.timezoneRestrictions);
+  const remote = normalizeRemoteRestrictions(
+    countries,
+    countryCodes,
+    labels,
+    unresolvedLabels,
+    timezones,
+    timezoneOffsetMinutes
+  );
   const sourcePublishedAt = parseProviderDate(job.pubDate);
   const providerExpiresAt = parseProviderDate(job.expiryDate);
   const contentHash = hash(
@@ -75,13 +92,27 @@ export function normalizeHimalayasJob(job: HimalayasJobDto): CanonicalJobInput<H
   };
 }
 
-function normalizeRemoteRestrictions(
+export function normalizeTimezoneOffsetMinutes(timezoneRestrictions: (string | number)[]): number[] {
+  const offsets: number[] = [];
+  for (const tz of timezoneRestrictions) {
+    const num = typeof tz === "number" ? tz : parseFloat(tz);
+    if (!Number.isNaN(num)) {
+      offsets.push(Math.round(num * 60));
+    }
+  }
+  return Array.from(new Set(offsets)).sort((a, b) => a - b);
+}
+
+export function normalizeRemoteRestrictions(
   countries: { alpha2: string | null; name: string; slug: string }[],
+  countryCodes: string[],
   labels: string[],
-  timezones: string[]
+  unresolvedLabels: string[],
+  timezones: string[],
+  timezoneOffsetMinutes: number[]
 ): CanonicalRemoteRestrictions {
-  const hasCountries = countries.length > 0 || labels.length > 0;
-  const hasTimezones = timezones.length > 0;
+  const hasCountries = countryCodes.length > 0 || labels.length > 0 || unresolvedLabels.length > 0;
+  const hasTimezones = timezoneOffsetMinutes.length > 0 || timezones.length > 0;
   const scope = hasCountries && hasTimezones
     ? "COUNTRY_AND_TIMEZONE_LIMITED"
     : hasCountries
@@ -93,30 +124,118 @@ function normalizeRemoteRestrictions(
   return {
     scope,
     countries,
-    countryCodes: countries.map((country) => country.alpha2).filter((alpha2): alpha2 is string => Boolean(alpha2)),
+    countryCodes,
     labels,
-    timezones
+    unresolvedLabels,
+    timezones,
+    timezoneOffsetMinutes,
+    provider: "himalayas.guid"
   };
 }
 
-function normalizeLocationRestrictions(restrictions: HimalayasJobDto["locationRestrictions"]) {
-  const locations: { alpha2: string | null; name: string; slug: string }[] = [];
-  const locationLabels: string[] = [];
+export function normalizeLocationRestrictions(
+  restrictions: HimalayasJobDto["locationRestrictions"],
+  resolver: CountryResolverService
+) {
+  const countries: { alpha2: string | null; name: string; slug: string }[] = [];
+  const countryCodes: string[] = [];
+  const labels: string[] = [];
+  const unresolvedLabels: string[] = [];
 
   for (const restriction of restrictions) {
     if (typeof restriction === "string") {
-      locationLabels.push(restriction);
+      const res = resolver.resolve(restriction);
+      if (res.status === "RESOLVED" || res.status === "ALIAS_RESOLVED") {
+        countryCodes.push(res.alpha2!);
+        labels.push(res.canonicalLabel!);
+        countries.push({
+          alpha2: res.alpha2,
+          name: res.canonicalLabel!,
+          slug: slugify(res.canonicalLabel!)
+        });
+      } else {
+        const trimmed = res.normalizedLabel || restriction.trim();
+        if (trimmed) {
+          unresolvedLabels.push(trimmed);
+          labels.push(trimmed);
+        }
+      }
       continue;
     }
 
-    locations.push({
-      alpha2: restriction.alpha2 ?? null,
-      name: restriction.name,
-      slug: restriction.slug
-    });
+    if (restriction.alpha2) {
+      const res = resolver.resolve(restriction.alpha2);
+      if (res.status === "RESOLVED" || res.status === "ALIAS_RESOLVED") {
+        countryCodes.push(res.alpha2!);
+        const canonicalName = res.canonicalLabel ?? restriction.name;
+        labels.push(canonicalName);
+        countries.push({
+          alpha2: res.alpha2,
+          name: canonicalName,
+          slug: restriction.slug
+        });
+      } else {
+        const resByName = resolver.resolve(restriction.name);
+        if (resByName.status === "RESOLVED" || resByName.status === "ALIAS_RESOLVED") {
+          countryCodes.push(resByName.alpha2!);
+          labels.push(resByName.canonicalLabel!);
+          countries.push({
+            alpha2: resByName.alpha2,
+            name: resByName.canonicalLabel!,
+            slug: restriction.slug
+          });
+        } else {
+          unresolvedLabels.push(restriction.name);
+          labels.push(restriction.name);
+          countries.push({
+            alpha2: null,
+            name: restriction.name,
+            slug: restriction.slug
+          });
+        }
+      }
+    } else {
+      const resByName = resolver.resolve(restriction.name);
+      if (resByName.status === "RESOLVED" || resByName.status === "ALIAS_RESOLVED") {
+        countryCodes.push(resByName.alpha2!);
+        labels.push(resByName.canonicalLabel!);
+        countries.push({
+          alpha2: resByName.alpha2,
+          name: resByName.canonicalLabel!,
+          slug: restriction.slug
+        });
+      } else {
+        unresolvedLabels.push(restriction.name);
+        labels.push(restriction.name);
+        countries.push({
+          alpha2: null,
+          name: restriction.name,
+          slug: restriction.slug
+        });
+      }
+    }
   }
 
-  return { locations, locationLabels };
+  const uniqueCountryCodes = Array.from(new Set(countryCodes)).sort();
+  const uniqueLabels = Array.from(new Set(labels));
+  const uniqueUnresolved = Array.from(new Set(unresolvedLabels));
+  const uniqueCountries: { alpha2: string | null; name: string; slug: string }[] = [];
+  const seenCountryKeys = new Set<string>();
+
+  for (const c of countries) {
+    const key = c.alpha2 ?? c.name;
+    if (!seenCountryKeys.has(key)) {
+      seenCountryKeys.add(key);
+      uniqueCountries.push(c);
+    }
+  }
+
+  return {
+    countries: uniqueCountries,
+    countryCodes: uniqueCountryCodes,
+    labels: uniqueLabels,
+    unresolvedLabels: uniqueUnresolved
+  };
 }
 
 function slugify(value: string) {

@@ -36,3 +36,72 @@ test("uses provider guid for stable slug identity", () => {
   assert.equal(first.externalId, "same-guid");
   assert.equal(first.slug, second.slug);
 });
+
+test("normalizes string country names and provider aliases to ISO-2 codes", () => {
+  const normalized = normalizeHimalayasJob(
+    sampleHimalayasJob({
+      locationRestrictions: [
+        "United States",
+        "Congo, The Democratic Republic of the",
+        "Germany"
+      ],
+      timezoneRestrictions: []
+    })
+  );
+
+  assert.deepEqual(normalized.remote.countryCodes, ["CD", "DE", "US"]);
+  assert.deepEqual(normalized.remote.labels, ["United States", "Democratic Republic of the Congo", "Germany"]);
+  assert.deepEqual(normalized.remote.unresolvedLabels, []);
+  assert.equal(normalized.remote.scope, "COUNTRY_LIMITED");
+});
+
+test("preserves unresolved location restrictions and reports them without throwing", () => {
+  const normalized = normalizeHimalayasJob(
+    sampleHimalayasJob({
+      locationRestrictions: [
+        "United States",
+        "Atlantis Unknown Region",
+        "Pacific Ocean Free Zone"
+      ],
+      timezoneRestrictions: ["-5"]
+    })
+  );
+
+  assert.deepEqual(normalized.remote.countryCodes, ["US"]);
+  assert.deepEqual(normalized.remote.unresolvedLabels, ["Atlantis Unknown Region", "Pacific Ocean Free Zone"]);
+  assert.equal(normalized.remote.labels.includes("Atlantis Unknown Region"), true);
+  assert.equal(normalized.remote.labels.includes("United States"), true);
+  assert.equal(normalized.remote.scope, "COUNTRY_AND_TIMEZONE_LIMITED");
+  assert.deepEqual(normalized.remote.timezoneOffsetMinutes, [-300]);
+});
+
+test("computes integer timezone offset minutes across positive, negative, and fractional hours", () => {
+  const normalized = normalizeHimalayasJob(
+    sampleHimalayasJob({
+      locationRestrictions: [],
+      timezoneRestrictions: ["-8", "-5", "5.5", 9]
+    })
+  );
+
+  assert.equal(normalized.remote.scope, "TIMEZONE_LIMITED");
+  assert.deepEqual(normalized.remote.timezoneOffsetMinutes, [-480, -300, 330, 540]);
+  assert.deepEqual(normalized.remote.countryCodes, []);
+  assert.deepEqual(normalized.remote.labels, []);
+  assert.deepEqual(normalized.remote.unresolvedLabels, []);
+});
+
+test("evaluates empty restrictions as WORLDWIDE scope", () => {
+  const normalized = normalizeHimalayasJob(
+    sampleHimalayasJob({
+      locationRestrictions: [],
+      timezoneRestrictions: []
+    })
+  );
+
+  assert.equal(normalized.remote.scope, "WORLDWIDE");
+  assert.deepEqual(normalized.remote.countryCodes, []);
+  assert.deepEqual(normalized.remote.labels, []);
+  assert.deepEqual(normalized.remote.unresolvedLabels, []);
+  assert.deepEqual(normalized.remote.timezoneOffsetMinutes, []);
+});
+
