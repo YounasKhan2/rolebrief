@@ -9,6 +9,7 @@ import {
   Building2,
   ExternalLink,
   Trash2,
+  Archive,
   Clock,
   History,
   AlertTriangle,
@@ -61,7 +62,13 @@ export function ApplicationDetailDialog({
   onUpdated,
   onDeleted
 }: ApplicationDetailDialogProps) {
-  const { updateStage, updateApplication, deleteApplication } = useTracker();
+  const {
+    updateStage,
+    updateApplication,
+    archiveApplication,
+    restoreApplication,
+    deleteApplication
+  } = useTracker();
 
   const [targetStage, setTargetStage] = useState<ApplicationStage>("SAVED");
   const [stageNote, setStageNote] = useState("");
@@ -74,6 +81,7 @@ export function ApplicationDetailDialog({
   const [interviewAt, setInterviewAt] = useState("");
   const [reminderAt, setReminderAt] = useState("");
   const [isSavingDetails, setIsSavingDetails] = useState(false);
+  const [isArchiving, setIsArchiving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState("");
 
@@ -115,6 +123,29 @@ export function ApplicationDetailDialog({
       setError(err?.message || "Failed to update stage");
     } finally {
       setIsChangingStage(false);
+    }
+  };
+
+  const handleToggleLifecycle = async () => {
+    setIsArchiving(true);
+    setError("");
+
+    try {
+      if (application.lifecycle === "ARCHIVED") {
+        const restored = await restoreApplication(application.id, application.revision);
+        if (restored) {
+          onUpdated?.(restored);
+        }
+      } else {
+        const archived = await archiveApplication(application.id, application.revision);
+        if (archived) {
+          onUpdated?.(archived);
+        }
+      }
+    } catch (err: any) {
+      setError(err?.message || "Failed to update lifecycle");
+    } finally {
+      setIsArchiving(false);
     }
   };
 
@@ -169,24 +200,42 @@ export function ApplicationDetailDialog({
       onClose={onClose}
       title="Application Details"
       footer={
-        <div className="w-full flex items-center justify-between">
-          <Button
-            variant="secondary"
-            className="text-red hover:bg-red/10 border-red/30"
-            onClick={handleDelete}
-            disabled={isDeleting || isSavingDetails || isChangingStage}
-            icon={<Trash2 size={15} />}
-          >
-            {isDeleting ? "Removing..." : "Remove"}
-          </Button>
-          <div className="flex gap-2">
-            <Button variant="secondary" onClick={onClose}>
+        <div className="w-full flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              className="text-red hover:bg-red/10 border-red/30 min-h-[44px]"
+              onClick={handleDelete}
+              disabled={isDeleting || isSavingDetails || isChangingStage || isArchiving}
+              icon={<Trash2 size={15} />}
+            >
+              {isDeleting ? "Removing..." : "Remove"}
+            </Button>
+            <Button
+              variant="secondary"
+              className="min-h-[44px]"
+              onClick={handleToggleLifecycle}
+              disabled={isDeleting || isSavingDetails || isChangingStage || isArchiving}
+              icon={<Archive size={15} />}
+            >
+              {isArchiving
+                ? application.lifecycle === "ARCHIVED"
+                  ? "Restoring..."
+                  : "Archiving..."
+                : application.lifecycle === "ARCHIVED"
+                ? "Restore to Active"
+                : "Archive"}
+            </Button>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" className="min-h-[44px]" onClick={onClose}>
               Close
             </Button>
             <Button
               variant="primary"
+              className="min-h-[44px]"
               onClick={handleSaveDetails as any}
-              disabled={isSavingDetails || isChangingStage}
+              disabled={isSavingDetails || isChangingStage || isArchiving}
               icon={<Save size={15} />}
             >
               {isSavingDetails ? "Saving..." : "Save Changes"}
@@ -221,9 +270,16 @@ export function ApplicationDetailDialog({
               </div>
             </div>
             <div className="flex flex-col items-end gap-1.5">
-              <Badge tone={STAGE_TONES[application.stage]}>
-                {STAGE_LABELS[application.stage]}
-              </Badge>
+              <div className="flex items-center gap-1.5">
+                {application.lifecycle === "ARCHIVED" && (
+                  <Badge tone="neutral">
+                    Archived
+                  </Badge>
+                )}
+                <Badge tone={STAGE_TONES[application.stage]}>
+                  {STAGE_LABELS[application.stage]}
+                </Badge>
+              </div>
               {application.isJobExpired && (
                 <Badge tone="red">
                   Expired listing
@@ -231,6 +287,21 @@ export function ApplicationDetailDialog({
               )}
             </div>
           </div>
+
+          {application.employerDeadlineAt && (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber/10 border border-amber/20 text-xs text-amber font-medium">
+              <Clock size={14} className="shrink-0" />
+              <span>
+                <strong>Employer Application Deadline:</strong>{" "}
+                {new Date(application.employerDeadlineAt).toLocaleDateString(undefined, {
+                  weekday: "short",
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric"
+                })}
+              </span>
+            </div>
+          )}
 
           <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-line/60 text-xs text-slate">
             {application.jobSlug && (
@@ -318,7 +389,7 @@ export function ApplicationDetailDialog({
             Dates & Next Steps
           </span>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <Input
               label="Applied Date"
               type="date"
@@ -332,6 +403,14 @@ export function ApplicationDetailDialog({
               type="date"
               value={interviewAt}
               onChange={(e) => setInterviewAt(e.target.value)}
+              leading={<Calendar size={15} />}
+            />
+
+            <Input
+              label="Reminder Date"
+              type="date"
+              value={reminderAt}
+              onChange={(e) => setReminderAt(e.target.value)}
               leading={<Calendar size={15} />}
             />
           </div>

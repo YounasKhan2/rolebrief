@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { test, afterEach } from "node:test";
 import {
   createApplication,
-  updateApplication
+  updateApplication,
+  archiveApplication,
+  restoreApplication
 } from "./tracker-api";
 import { serializeRequestBody, removeContentTypeHeader, hasContentTypeHeader } from "./request-body";
 import { authRequest, setCachedCsrfToken } from "./auth-api";
@@ -249,7 +251,7 @@ test("updateApplication: sends PATCH /tracker/:id with single-stringified JSON b
         id: "app_1",
         userId: "user_1",
         jobSlug: "backend-lead",
-        status: "APPLIED",
+        stage: "APPLIED",
         revision: 1,
         createdAt: "2026-09-08T00:00:00.000Z",
         updatedAt: "2026-09-08T00:00:00.000Z"
@@ -263,7 +265,7 @@ test("updateApplication: sends PATCH /tracker/:id with single-stringified JSON b
 
   setCachedCsrfToken("csrf-test-token");
 
-  const app = await updateApplication("app_1", { status: "APPLIED", expectedRevision: 0 });
+  const app = await updateApplication("app_1", { stage: "APPLIED", expectedRevision: 0 });
 
   assert.equal(capturedMethod, "PATCH");
   assert.match(capturedUrl, /\/tracker\/app_1$/);
@@ -273,7 +275,77 @@ test("updateApplication: sends PATCH /tracker/:id with single-stringified JSON b
   assert.equal(typeof capturedBody, "string");
   assert.equal(capturedBody.startsWith('"{\\"'), false);
   const parsed = JSON.parse(capturedBody);
-  assert.deepEqual(parsed, { status: "APPLIED", expectedRevision: 0 });
-  assert.equal(app.status, "APPLIED");
+  assert.deepEqual(parsed, { stage: "APPLIED", expectedRevision: 0 });
+  assert.equal(app.stage, "APPLIED");
   assert.equal(app.revision, 1);
+});
+
+test("archiveApplication: sends PATCH /tracker/:id/archive with expectedRevision and CSRF", async () => {
+  let capturedUrl = "";
+  let capturedMethod = "";
+  let capturedHeaders: Record<string, string> = {};
+
+  globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+    capturedUrl = url.toString();
+    capturedMethod = init?.method || "GET";
+    capturedHeaders = (init?.headers || {}) as Record<string, string>;
+
+    return new Response(
+      JSON.stringify({
+        id: "app_1",
+        roleTitle: "Software Engineer",
+        lifecycle: "ARCHIVED",
+        revision: 2
+      }),
+      {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      }
+    );
+  }) as any;
+
+  setCachedCsrfToken("csrf-archive-token");
+
+  const app = await archiveApplication("app_1", 1);
+
+  assert.equal(capturedMethod, "PATCH");
+  assert.match(capturedUrl, /\/tracker\/app_1\/archive\?expectedRevision=1$/);
+  assert.equal(capturedHeaders["x-rolebrief-csrf"], "csrf-archive-token");
+  assert.equal(app.lifecycle, "ARCHIVED");
+  assert.equal(app.revision, 2);
+});
+
+test("restoreApplication: sends PATCH /tracker/:id/restore with expectedRevision and CSRF", async () => {
+  let capturedUrl = "";
+  let capturedMethod = "";
+  let capturedHeaders: Record<string, string> = {};
+
+  globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+    capturedUrl = url.toString();
+    capturedMethod = init?.method || "GET";
+    capturedHeaders = (init?.headers || {}) as Record<string, string>;
+
+    return new Response(
+      JSON.stringify({
+        id: "app_1",
+        roleTitle: "Software Engineer",
+        lifecycle: "ACTIVE",
+        revision: 3
+      }),
+      {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      }
+    );
+  }) as any;
+
+  setCachedCsrfToken("csrf-restore-token");
+
+  const app = await restoreApplication("app_1", 2);
+
+  assert.equal(capturedMethod, "PATCH");
+  assert.match(capturedUrl, /\/tracker\/app_1\/restore\?expectedRevision=2$/);
+  assert.equal(capturedHeaders["x-rolebrief-csrf"], "csrf-restore-token");
+  assert.equal(app.lifecycle, "ACTIVE");
+  assert.equal(app.revision, 3);
 });

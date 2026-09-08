@@ -10,9 +10,11 @@ import {
   Patch,
   Post,
   Query,
+  Res,
   UseGuards,
   ValidationPipe
 } from "@nestjs/common";
+import type { Response } from "express";
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { AuthenticatedUser, CurrentUser } from "../../auth/auth.decorators";
 import { CsrfGuard } from "../../auth/csrf.guard";
@@ -51,17 +53,52 @@ export class TrackerController {
   }
 
   @Post()
-  @HttpCode(HttpStatus.CREATED)
   @UseGuards(CsrfGuard)
   @ApiOperation({ summary: "Track a job or create a manual application" })
-  @ApiResponse({ status: 201, description: "Application created or tracked" })
+  @ApiResponse({ status: 201, description: "Application created" })
+  @ApiResponse({ status: 200, description: "Application already tracked or restored" })
   @ApiResponse({ status: 400, description: "Invalid payload or validation failure" })
   @ApiResponse({ status: 404, description: "Referenced job not found" })
-  create(
+  async create(
     @CurrentUser() user: AuthenticatedUser,
-    @Body(new ValidationPipe({ transform: true, whitelist: true })) dto: CreateApplicationDto
+    @Body(new ValidationPipe({ transform: true, whitelist: true })) dto: CreateApplicationDto,
+    @Res({ passthrough: true }) res: Response
   ) {
-    return this.trackerService.create(user.id, dto);
+    const result = await this.trackerService.create(user.id, dto);
+    if (result.alreadyTracked || result.restored) {
+      res.status(HttpStatus.OK);
+    } else {
+      res.status(HttpStatus.CREATED);
+    }
+    return result;
+  }
+
+  @Patch(":id/archive")
+  @UseGuards(CsrfGuard)
+  @ApiOperation({ summary: "Archive an application with optimistic concurrency check" })
+  @ApiResponse({ status: 200, description: "Application archived" })
+  @ApiResponse({ status: 404, description: "Application not found" })
+  @ApiResponse({ status: 409, description: "Conflict: Stale revision" })
+  archive(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("id") id: string,
+    @Query("expectedRevision", ParseIntPipe) expectedRevision: number
+  ) {
+    return this.trackerService.archive(user.id, id, expectedRevision);
+  }
+
+  @Patch(":id/restore")
+  @UseGuards(CsrfGuard)
+  @ApiOperation({ summary: "Restore an archived application with optimistic concurrency check" })
+  @ApiResponse({ status: 200, description: "Application restored" })
+  @ApiResponse({ status: 404, description: "Application not found" })
+  @ApiResponse({ status: 409, description: "Conflict: Stale revision" })
+  restore(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("id") id: string,
+    @Query("expectedRevision", ParseIntPipe) expectedRevision: number
+  ) {
+    return this.trackerService.restore(user.id, id, expectedRevision);
   }
 
   @Patch(":id")

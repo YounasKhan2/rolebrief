@@ -65,6 +65,11 @@ export class CreateApplicationDto {
   @IsOptional()
   @IsUrl({ require_protocol: true, protocols: ["http", "https"] })
   @MaxLength(2048)
+  applicationUrl?: string;
+
+  @IsOptional()
+  @IsUrl({ require_protocol: true, protocols: ["http", "https"] })
+  @MaxLength(2048)
   sourceUrl?: string;
 
   @IsOptional()
@@ -131,6 +136,11 @@ export class UpdateApplicationDto {
   @IsOptional()
   @IsISO8601()
   interviewAt?: string | null;
+
+  @IsOptional()
+  @IsUrl({ require_protocol: true, protocols: ["http", "https"] })
+  @MaxLength(2048)
+  applicationUrl?: string | null;
 
   @IsOptional()
   @IsUrl({ require_protocol: true, protocols: ["http", "https"] })

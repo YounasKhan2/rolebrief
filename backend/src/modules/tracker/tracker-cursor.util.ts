@@ -5,6 +5,7 @@ export interface TrackerCursorPayload {
   v: 1;
   userId: string;
   stageFilter: string;
+  lifecycleFilter?: string;
   updatedAt: string;
   id: string;
 }
@@ -27,7 +28,8 @@ export function decodeTrackerCursor(
   cursor: string,
   secret: string,
   expectedUserId: string,
-  expectedStageFilter?: string
+  expectedStageFilter?: string,
+  expectedLifecycleFilter?: string
 ): TrackerCursorPayload {
   if (!cursor || typeof cursor !== "string") {
     throw new BadRequestException("Invalid cursor format");
@@ -84,10 +86,19 @@ export function decodeTrackerCursor(
     throw new BadRequestException("Cursor filter parameters mismatch");
   }
 
+  if (expectedLifecycleFilter !== undefined) {
+    const normExpectedLifecycle = expectedLifecycleFilter || "";
+    const normParsedLifecycle = parsed.lifecycleFilter || "";
+    if (normParsedLifecycle !== normExpectedLifecycle) {
+      throw new BadRequestException("Cursor lifecycle filter parameters mismatch");
+    }
+  }
+
   return {
     v: 1,
     userId: parsed.userId,
     stageFilter: normParsedStage,
+    lifecycleFilter: parsed.lifecycleFilter,
     updatedAt: parsed.updatedAt,
     id: parsed.id
   };

@@ -42,7 +42,8 @@ const STAGES: ApplicationStage[] = [
 export function Component() {
   const { stageCounts, updateStage, isPending, refreshTracker } = useTracker();
 
-  const [view, setView] = useState<"list" | "board">("board");
+  const [view, setView] = useState<"board" | "list">("board");
+  const [lifecycleFilter, setLifecycleFilter] = useState<"ACTIVE" | "ARCHIVED">("ACTIVE");
   const [stageFilter, setStageFilter] = useState<ApplicationStage | "ALL">("ALL");
   const [applications, setApplications] = useState<TrackedApplication[]>([]);
   const [loading, setLoading] = useState(true);
@@ -56,6 +57,7 @@ export function Component() {
       setLoading(true);
       const res = await fetchApplications({
         stage: stageFilter === "ALL" ? undefined : stageFilter,
+        lifecycle: lifecycleFilter,
         limit: 50
       });
       if (res) {
@@ -66,7 +68,7 @@ export function Component() {
     } finally {
       setLoading(false);
     }
-  }, [stageFilter]);
+  }, [stageFilter, lifecycleFilter]);
 
   useEffect(() => {
     void loadData();
@@ -112,7 +114,16 @@ export function Component() {
         title="Every application, one clear view."
         description="Status, next action and history with accessible keyboard navigation and drag-and-drop."
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <SegmentedControl
+              value={lifecycleFilter}
+              onChange={(val) => setLifecycleFilter(val as "ACTIVE" | "ARCHIVED")}
+              size="sm"
+              options={[
+                { value: "ACTIVE", label: "Active" },
+                { value: "ARCHIVED", label: "Archived" }
+              ]}
+            />
             <SegmentedControl
               value={view}
               onChange={setView}
@@ -125,6 +136,7 @@ export function Component() {
             <Button
               icon={<Plus size={16} />}
               onClick={() => setIsAddOpen(true)}
+              className="min-h-[44px]"
             >
               Add Role
             </Button>
@@ -132,7 +144,18 @@ export function Component() {
         }
       />
 
-      {totalTracked === 0 && !loading ? (
+      {lifecycleFilter === "ARCHIVED" && applications.length === 0 && !loading ? (
+        <EmptyState
+          icon={<LayoutList size={40} />}
+          title="No archived applications"
+          body="Applications you archive will be stored here safely without cluttering your active pipeline."
+          action={
+            <Button variant="secondary" onClick={() => setLifecycleFilter("ACTIVE")}>
+              View Active Applications
+            </Button>
+          }
+        />
+      ) : totalTracked === 0 && lifecycleFilter === "ACTIVE" && !loading ? (
         <EmptyState
           icon={<LayoutList size={40} />}
           title="No applications tracked yet"
@@ -161,7 +184,7 @@ export function Component() {
                     : "bg-soft text-slate hover:text-ink"
                 }`}
               >
-                All ({totalTracked})
+                All ({lifecycleFilter === "ARCHIVED" ? applications.length : totalTracked})
               </button>
               {STAGES.map((s) => (
                 <button
@@ -373,7 +396,7 @@ export function Component() {
                                     handleStageSelect(app, e.target.value as ApplicationStage)
                                   }
                                   disabled={isPending(app.id)}
-                                  className="text-[11px] font-medium rounded-md border border-line bg-white px-2 py-1 text-slate hover:text-ink focus:outline-none focus:ring-1 focus:ring-indigo transition-colors max-w-[130px]"
+                                  className="text-[11px] font-medium rounded-md border border-line bg-white px-2 py-1.5 min-h-[38px] text-slate hover:text-ink focus:outline-none focus:ring-1 focus:ring-indigo transition-colors max-w-[130px]"
                                 >
                                   <option value={app.stage}>
                                     Stage: {STAGE_LABELS[app.stage]}
@@ -390,7 +413,7 @@ export function Component() {
                                     setSelectedApplication(app);
                                     setIsDetailOpen(true);
                                   }}
-                                  className="text-[11px] font-semibold text-indigo hover:underline px-1 py-0.5"
+                                  className="text-[11px] font-semibold text-indigo hover:underline px-2 py-1 min-h-[44px] inline-flex items-center"
                                 >
                                   Details
                                 </button>

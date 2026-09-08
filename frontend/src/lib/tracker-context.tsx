@@ -15,9 +15,11 @@ import {
   CreateApplicationPayload,
   TrackedApplication,
   UpdateApplicationPayload,
+  archiveApplication as apiArchiveApplication,
   createApplication as apiCreateApplication,
   deleteApplication as apiDeleteApplication,
   fetchApplications as apiFetchApplications,
+  restoreApplication as apiRestoreApplication,
   updateApplication as apiUpdateApplication
 } from "./tracker-api";
 
@@ -38,6 +40,8 @@ export interface TrackerContextType {
     id: string,
     payload: UpdateApplicationPayload
   ) => Promise<TrackedApplication | null>;
+  archiveApplication: (id: string, expectedRevision: number) => Promise<TrackedApplication | null>;
+  restoreApplication: (id: string, expectedRevision: number) => Promise<TrackedApplication | null>;
   deleteApplication: (id: string, expectedRevision: number) => Promise<boolean>;
   refreshTracker: () => Promise<void>;
   isLoading: boolean;
@@ -61,6 +65,8 @@ const TrackerContext = createContext<TrackerContextType>({
   addManualApplication: async () => null,
   updateStage: async () => null,
   updateApplication: async () => null,
+  archiveApplication: async () => null,
+  restoreApplication: async () => null,
   deleteApplication: async () => false,
   refreshTracker: async () => {},
   isLoading: false
@@ -176,10 +182,22 @@ export function TrackerProvider({ children }: { children: ReactNode }) {
         const app = await apiCreateApplication({ jobSlug: slug, stage: "SAVED" });
         setTrackedJobSlugs((prev) => new Set(prev).add(slug));
         channelRef.current?.postMessage({ type: "tracked", slug });
-        toast({
-          kind: "success",
-          message: `Added "${app.roleTitle}" to your application tracker.`
-        });
+        if (app.alreadyTracked) {
+          toast({
+            kind: "info",
+            message: `"${app.roleTitle}" is already in your application tracker.`
+          });
+        } else if ((app as any).restored) {
+          toast({
+            kind: "success",
+            message: `Restored "${app.roleTitle}" from archive to your application tracker.`
+          });
+        } else {
+          toast({
+            kind: "success",
+            message: `Added "${app.roleTitle}" to your application tracker.`
+          });
+        }
         void refreshTracker();
         return app;
       } catch (err: any) {
@@ -306,6 +324,82 @@ export function TrackerProvider({ children }: { children: ReactNode }) {
     [toast, refreshTracker]
   );
 
+  const archiveApplication = useCallback(
+    async (id: string, expectedRevision: number): Promise<TrackedApplication | null> => {
+      if (pendingKeysRef.current.has(id)) return null;
+
+      pendingKeysRef.current.add(id);
+      setPendingKeys(new Set(pendingKeysRef.current));
+
+      try {
+        const archived = await apiArchiveApplication(id, expectedRevision);
+        channelRef.current?.postMessage({ type: "updated" });
+        toast({
+          kind: "success",
+          message: `Archived application for "${archived.roleTitle}".`
+        });
+        void refreshTracker();
+        return archived;
+      } catch (err: any) {
+        if (err?.status === 409) {
+          toast({
+            kind: "warning",
+            message: "Conflict: this application was modified elsewhere. Reloading..."
+          });
+          void refreshTracker();
+        } else {
+          toast({
+            kind: "error",
+            message: err?.message || "Failed to archive application."
+          });
+        }
+        return null;
+      } finally {
+        pendingKeysRef.current.delete(id);
+        setPendingKeys(new Set(pendingKeysRef.current));
+      }
+    },
+    [toast, refreshTracker]
+  );
+
+  const restoreApplication = useCallback(
+    async (id: string, expectedRevision: number): Promise<TrackedApplication | null> => {
+      if (pendingKeysRef.current.has(id)) return null;
+
+      pendingKeysRef.current.add(id);
+      setPendingKeys(new Set(pendingKeysRef.current));
+
+      try {
+        const restored = await apiRestoreApplication(id, expectedRevision);
+        channelRef.current?.postMessage({ type: "updated" });
+        toast({
+          kind: "success",
+          message: `Restored application for "${restored.roleTitle}".`
+        });
+        void refreshTracker();
+        return restored;
+      } catch (err: any) {
+        if (err?.status === 409) {
+          toast({
+            kind: "warning",
+            message: "Conflict: this application was modified elsewhere. Reloading..."
+          });
+          void refreshTracker();
+        } else {
+          toast({
+            kind: "error",
+            message: err?.message || "Failed to restore application."
+          });
+        }
+        return null;
+      } finally {
+        pendingKeysRef.current.delete(id);
+        setPendingKeys(new Set(pendingKeysRef.current));
+      }
+    },
+    [toast, refreshTracker]
+  );
+
   const deleteApplication = useCallback(
     async (id: string, expectedRevision: number): Promise<boolean> => {
       if (pendingKeysRef.current.has(id)) return false;
@@ -354,6 +448,8 @@ export function TrackerProvider({ children }: { children: ReactNode }) {
       addManualApplication,
       updateStage,
       updateApplication,
+      archiveApplication,
+      restoreApplication,
       deleteApplication,
       refreshTracker,
       isLoading
@@ -367,6 +463,8 @@ export function TrackerProvider({ children }: { children: ReactNode }) {
       addManualApplication,
       updateStage,
       updateApplication,
+      archiveApplication,
+      restoreApplication,
       deleteApplication,
       refreshTracker,
       isLoading

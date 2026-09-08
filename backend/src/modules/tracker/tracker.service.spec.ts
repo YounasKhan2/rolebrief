@@ -406,3 +406,171 @@ test("TrackerService: serialize accurately flags isJobExpired for delisted/expir
   const activeApp = await service.getById("user_1", "app_active");
   assert.equal(activeApp.isJobExpired, false);
 });
+
+// 8. Archived application re-tracking restores to ACTIVE
+test("TrackerService: re-tracking an archived job restores it to ACTIVE with history entry", async () => {
+  let updatedData: any = null;
+  const historyCreated: any[] = [];
+
+  const mockPrisma = createMockPrisma({
+    job: {
+      findUnique: async () => ({
+        id: "job_archived_1",
+        slug: "archived-role-slug",
+        canonicalTitle: "Archived Role",
+        company: { canonicalName: "Old Corp" },
+        source: { name: "Himalayas" },
+        locations: [],
+        providerRecords: []
+      })
+    },
+    application: {
+      findUnique: async () => ({
+        id: "app_archived_1",
+        userId: "user_1",
+        jobId: "job_archived_1",
+        roleTitle: "Archived Role",
+        stage: ApplicationStage.SAVED,
+        lifecycle: ApplicationLifecycle.ARCHIVED,
+        revision: 2,
+        history: []
+      })
+    },
+    txPrisma: {
+      application: {
+        update: async (args: any) => {
+          updatedData = args.data;
+          return {
+            id: "app_archived_1",
+            userId: "user_1",
+            roleTitle: "Archived Role",
+            stage: ApplicationStage.SAVED,
+            lifecycle: ApplicationLifecycle.ACTIVE,
+            revision: 3,
+            history: []
+          };
+        }
+      },
+      applicationHistory: {
+        create: async (args: any) => {
+          historyCreated.push(args.data);
+          return { id: "hist_restored_1", ...args.data };
+        }
+      }
+    }
+  });
+
+  const service = new TrackerService(mockPrisma, createMockJobsService(), createMockConfig());
+  const result = await service.create("user_1", { jobSlug: "archived-role-slug" });
+
+  assert.equal(result.alreadyTracked, false);
+  assert.equal(result.restored, true);
+  assert.equal(updatedData.lifecycle, ApplicationLifecycle.ACTIVE);
+  assert.equal(historyCreated.length, 1);
+  assert.match(historyCreated[0].note, /Restored from archive/);
+});
+
+// 9. Signed cursor binds lifecycleFilter
+test("TrackerCursor: encodes and validates lifecycleFilter", () => {
+  const payload = {
+    v: 1 as const,
+    userId: "user_123",
+    stageFilter: "SAVED",
+    lifecycleFilter: "ARCHIVED",
+    updatedAt: new Date().toISOString(),
+    id: "app_arch_1"
+  };
+
+  const token = encodeTrackerCursor(payload, TEST_SECRET);
+  const decoded = decodeTrackerCursor(token, TEST_SECRET, "user_123", "SAVED", "ARCHIVED");
+  assert.equal(decoded.lifecycleFilter, "ARCHIVED");
+
+  // Rejects when queried with mismatched lifecycle
+  assert.throws(
+    () => decodeTrackerCursor(token, TEST_SECRET, "user_123", "SAVED", "ACTIVE"),
+    BadRequestException
+  );
+});
+
+// 10. Provider job deletion safety: serializes gracefully when jobId/job is null
+test("TrackerService: serialize handles orphaned application after provider job deletion", async () => {
+  const mockPrisma = createMockPrisma({
+    application: {
+      findFirst: async () => ({
+        id: "app_orphaned",
+        userId: "user_1",
+        jobId: null, // deleted by provider with onDelete: SetNull
+        job: null,
+        roleTitle: "Software Engineer",
+        companyName: "Acme",
+        stage: ApplicationStage.APPLIED,
+        revision: 1,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        history: []
+      })
+    }
+  });
+
+  const service = new TrackerService(mockPrisma, createMockJobsService(), createMockConfig());
+  const app = await service.getById("user_1", "app_orphaned");
+
+  assert.equal(app.id, "app_orphaned");
+  assert.equal(app.jobId, null);
+  assert.equal(app.companyLogoUrl, null);
+  assert.equal(app.isJobExpired, false);
+});
+
+// 11. Archive and Restore methods
+test("TrackerService: archive and restore update lifecycle and record history", async () => {
+  let updatedData: any = null;
+  const historyCreated: any[] = [];
+  let currentLifecycle = ApplicationLifecycle.ACTIVE;
+
+  const mockPrisma = createMockPrisma({
+    application: {
+      findFirst: async () => ({
+        id: "app_lifecycle_test",
+        userId: "user_1",
+        roleTitle: "Staff Engineer",
+        stage: ApplicationStage.SAVED,
+        lifecycle: currentLifecycle,
+        revision: 0
+      }),
+      findUniqueOrThrow: async () => ({
+        id: "app_lifecycle_test",
+        userId: "user_1",
+        roleTitle: "Staff Engineer",
+        stage: ApplicationStage.SAVED,
+        lifecycle: currentLifecycle,
+        revision: 1,
+        history: []
+      }),
+      updateMany: async (args: any) => {
+        if (args.data.lifecycle) currentLifecycle = args.data.lifecycle;
+        updatedData = args.data;
+        return { count: 1 };
+      }
+    },
+    applicationHistory: {
+      create: async (args: any) => {
+        historyCreated.push(args.data);
+        return { id: `hist_${historyCreated.length}`, ...args.data };
+      }
+    }
+  });
+
+  const service = new TrackerService(mockPrisma, createMockJobsService(), createMockConfig());
+
+  // Archive
+  await service.archive("user_1", "app_lifecycle_test", 0);
+  assert.equal(updatedData.lifecycle, ApplicationLifecycle.ARCHIVED);
+  assert.equal(historyCreated.length, 1);
+  assert.equal(historyCreated[0].note, "Archived application");
+
+  // Restore
+  await service.restore("user_1", "app_lifecycle_test", 0);
+  assert.equal(updatedData.lifecycle, ApplicationLifecycle.ACTIVE);
+  assert.equal(historyCreated.length, 2);
+  assert.equal(historyCreated[1].note, "Restored application to active");
+});

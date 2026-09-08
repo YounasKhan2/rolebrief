@@ -64,6 +64,7 @@ export interface CreateApplicationPayload {
   jobSlug?: string;
   roleTitle?: string;
   companyName?: string;
+  applicationUrl?: string;
   stage?: ApplicationStage;
   appliedAt?: string;
   nextAction?: string;
@@ -83,6 +84,7 @@ export interface UpdateApplicationPayload {
   stageChangeNote?: string;
   roleTitle?: string;
   companyName?: string;
+  applicationUrl?: string;
   nextAction?: string;
   nextActionAt?: string;
   notes?: string;
@@ -133,6 +135,32 @@ export async function updateApplication(
     csrf: true,
     body: payload
   });
+}
+
+export async function archiveApplication(
+  id: string,
+  expectedRevision: number
+): Promise<TrackedApplication> {
+  return authRequest<TrackedApplication>(
+    `/tracker/${encodeURIComponent(id)}/archive?expectedRevision=${expectedRevision}`,
+    {
+      method: "PATCH",
+      csrf: true
+    }
+  );
+}
+
+export async function restoreApplication(
+  id: string,
+  expectedRevision: number
+): Promise<TrackedApplication> {
+  return authRequest<TrackedApplication>(
+    `/tracker/${encodeURIComponent(id)}/restore?expectedRevision=${expectedRevision}`,
+    {
+      method: "PATCH",
+      csrf: true
+    }
+  );
 }
 
 export async function deleteApplication(

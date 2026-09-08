@@ -92,7 +92,8 @@ export class TrackerService {
         query.cursor,
         this.config.cursorSigningSecret,
         userId,
-        stage || ""
+        stage || "",
+        lifecycle || ""
       );
       cursorId = decoded.id;
     }
@@ -148,6 +149,7 @@ export class TrackerService {
           v: 1,
           userId,
           stageFilter: stage || "",
+          lifecycleFilter: lifecycle || "",
           updatedAt: last.updatedAt.toISOString(),
           id: last.id
         },
@@ -244,14 +246,65 @@ export class TrackerService {
           }
         },
         include: {
+          job: {
+            select: {
+              id: true,
+              slug: true,
+              status: true,
+              expiresAt: true,
+              company: { select: { canonicalName: true, logoUrl: true } }
+            }
+          },
           history: { orderBy: { occurredAt: "desc" } }
         }
       });
 
       if (existing) {
+        if (existing.lifecycle === ApplicationLifecycle.ARCHIVED) {
+          const restored = await this.prisma.$transaction(async (tx) => {
+            const updated = await tx.application.update({
+              where: { id: existing.id },
+              data: {
+                lifecycle: ApplicationLifecycle.ACTIVE,
+                revision: { increment: 1 }
+              },
+              include: {
+                job: {
+                  select: {
+                    id: true,
+                    slug: true,
+                    status: true,
+                    expiresAt: true,
+                    company: { select: { canonicalName: true, logoUrl: true } }
+                  }
+                },
+                history: { orderBy: { occurredAt: "desc" } }
+              }
+            });
+
+            await tx.applicationHistory.create({
+              data: {
+                applicationId: existing.id,
+                fromStage: existing.stage,
+                toStage: existing.stage,
+                note: "Restored from archive by re-tracking"
+              }
+            });
+
+            return updated;
+          });
+
+          return {
+            ...this.serialize(restored),
+            alreadyTracked: false,
+            restored: true
+          };
+        }
+
         return {
           ...this.serialize(existing),
-          alreadyTracked: true
+          alreadyTracked: true,
+          restored: false
         };
       }
     }
@@ -276,7 +329,7 @@ export class TrackerService {
           companyName,
           jobSlug,
           providerName,
-          applicationUrl,
+          applicationUrl: dto.applicationUrl || applicationUrl || null,
           locationLabel,
           workMode,
           employerDeadlineAt,
@@ -311,7 +364,11 @@ export class TrackerService {
       });
     });
 
-    return this.serialize(created);
+    return {
+      ...this.serialize(created),
+      alreadyTracked: false,
+      restored: false
+    };
   }
 
   async update(userId: string, id: string, dto: UpdateApplicationDto) {
@@ -355,8 +412,11 @@ export class TrackerService {
     if (dto.interviewAt !== undefined) updateData.interviewAt = dto.interviewAt ? new Date(dto.interviewAt) : null;
     if (dto.sourceUrl !== undefined) updateData.sourceUrl = dto.sourceUrl;
     if (dto.sourceLabel !== undefined) updateData.sourceLabel = dto.sourceLabel;
+    if (dto.applicationUrl !== undefined) updateData.applicationUrl = dto.applicationUrl;
     if (dto.contactName !== undefined) updateData.contactName = dto.contactName;
     if (dto.contactEmail !== undefined) updateData.contactEmail = dto.contactEmail;
+
+    const lifecycleChanging = dto.lifecycle && dto.lifecycle !== current.lifecycle;
 
     const result = await this.prisma.$transaction(async (tx) => {
       const res = await tx.application.updateMany({
@@ -386,6 +446,17 @@ export class TrackerService {
         });
       }
 
+      if (lifecycleChanging) {
+        await tx.applicationHistory.create({
+          data: {
+            applicationId: id,
+            fromStage: current.stage,
+            toStage: dto.stage || current.stage,
+            note: dto.lifecycle === ApplicationLifecycle.ARCHIVED ? "Archived application" : "Restored application to active"
+          }
+        });
+      }
+
       return tx.application.findUniqueOrThrow({
         where: { id },
         include: {
@@ -410,6 +481,13 @@ export class TrackerService {
     return this.update(userId, id, {
       expectedRevision,
       lifecycle: ApplicationLifecycle.ARCHIVED
+    });
+  }
+
+  async restore(userId: string, id: string, expectedRevision: number) {
+    return this.update(userId, id, {
+      expectedRevision,
+      lifecycle: ApplicationLifecycle.ACTIVE
     });
   }
 
