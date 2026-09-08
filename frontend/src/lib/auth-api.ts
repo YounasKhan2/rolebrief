@@ -1,5 +1,6 @@
 import { API_BASE_URL, ApiError } from "./api";
 import { serializeRequestBody } from "./request-body";
+import { clearCachedThemePreferences } from "./accessibility";
 
 export { serializeRequestBody };
 
@@ -18,12 +19,22 @@ export interface AuthUser {
   onboardingStatus?: OnboardingStatus;
 }
 
+export interface AuthSessionDevice {
+  browser: string;
+  os: string;
+  isMobile: boolean;
+}
+
 export interface AuthSession {
   id: string;
   createdAt: string;
-  lastUsedAt: string;
+  lastActiveAt?: string;
+  lastUsedAt?: string;
   expiresAt: string;
   userAgent: string | null;
+  ipAddress?: string | null;
+  isCurrent?: boolean;
+  device?: AuthSessionDevice;
 }
 
 const DEFAULT_TIMEOUT_MS = 8000;
@@ -174,6 +185,7 @@ export async function logout() {
     return await authRequest<{ message: string }>("/auth/logout", { method: "POST", csrf: true });
   } finally {
     inMemoryCsrfToken = null;
+    clearCachedThemePreferences();
   }
 }
 
@@ -202,7 +214,17 @@ export function sessions() {
 }
 
 export function revokeSession(sessionId: string) {
-  return authRequest<{ message: string }>(`/auth/sessions/${encodeURIComponent(sessionId)}`, { method: "DELETE", csrf: true });
+  return authRequest<{ message: string; isCurrentRevoked?: boolean }>(
+    `/auth/sessions/${encodeURIComponent(sessionId)}`,
+    { method: "DELETE", csrf: true }
+  );
+}
+
+export function revokeOtherSessions() {
+  return authRequest<{ message: string; revokedCount: number }>(
+    "/auth/sessions/revoke-others",
+    { method: "POST", csrf: true }
+  );
 }
 
 export async function logoutAll() {
@@ -210,6 +232,7 @@ export async function logoutAll() {
     return await authRequest<{ message: string }>("/auth/logout-all", { method: "POST", csrf: true });
   } finally {
     inMemoryCsrfToken = null;
+    clearCachedThemePreferences();
   }
 }
 

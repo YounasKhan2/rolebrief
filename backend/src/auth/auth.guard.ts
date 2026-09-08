@@ -32,10 +32,14 @@ export class AuthGuard implements CanActivate {
       throw new UnauthorizedException("Account is not active.");
     }
 
-    await this.prisma.session.update({
-      where: { id: session.id },
-      data: { lastUsedAt: now }
-    });
+    // Throttle activity updates: update at most once every 15 minutes per session
+    const THROTTLE_MS = 15 * 60 * 1000;
+    if (!session.lastUsedAt || (now.getTime() - session.lastUsedAt.getTime() > THROTTLE_MS)) {
+      await this.prisma.session.update({
+        where: { id: session.id },
+        data: { lastUsedAt: now }
+      });
+    }
 
     const authUser = {
       id: session.user.id,

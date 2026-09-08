@@ -92,9 +92,10 @@ export class AuthController {
 
   @Post("change-password")
   @UseGuards(CsrfGuard)
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: "Change password for the authenticated user and revoke other sessions" })
-  changePassword(@CurrentUser() user: AuthenticatedUser, @Body() body: ChangePasswordDto) {
-    return this.auth.changePassword(user, body.currentPassword, body.newPassword);
+  changePassword(@CurrentUser() user: AuthenticatedUser, @Body() body: ChangePasswordDto, @Req() req: Request) {
+    return this.auth.changePassword(user, body.currentPassword, body.newPassword, req);
   }
 
   @Get("sessions")
@@ -105,9 +106,21 @@ export class AuthController {
 
   @Delete("sessions/:sessionId")
   @UseGuards(CsrfGuard)
-  @ApiOperation({ summary: "Revoke one active session for the authenticated user" })
-  revokeSession(@CurrentUser() user: AuthenticatedUser, @Param("sessionId") sessionId: string) {
-    return this.auth.revokeSession(user, sessionId);
+  @ApiOperation({ summary: "Revoke one active session family for the authenticated user" })
+  revokeSession(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("sessionId") sessionId: string,
+    @Res({ passthrough: true }) res: Response
+  ) {
+    return this.auth.revokeSession(user, sessionId, res);
+  }
+
+  @Post("sessions/revoke-others")
+  @UseGuards(CsrfGuard)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: "Revoke all other active session families preserving the current session" })
+  revokeOthers(@CurrentUser() user: AuthenticatedUser) {
+    return this.auth.revokeOtherSessions(user);
   }
 
   @Post("logout-all")

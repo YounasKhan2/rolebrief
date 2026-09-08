@@ -5,7 +5,7 @@ import { randomUUID } from "crypto";
 import { AppConfigService } from "../common/config/app-config.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { ACCESS_COOKIE, CSRF_COOKIE, REFRESH_COOKIE } from "./auth.constants";
-import { addSeconds, hashToken, normalizeEmail, randomToken, redactEmail, safeUserAgent } from "./auth.utils";
+import { addSeconds, derivePublicSessionId, hashToken, maskIpAddress, normalizeEmail, parseUserAgent, randomToken, redactEmail, safeUserAgent } from "./auth.utils";
 import { PasswordService } from "./password.service";
 import { EmailService } from "./email/email.service";
 import { AuthRateLimitService } from "./rate-limit.service";
@@ -240,35 +240,155 @@ export class AuthService {
     return { message: "Password updated. Please log in again." };
   }
 
-  async changePassword(user: AuthenticatedUser, currentPassword: string, newPassword: string) {
+  async changePassword(user: AuthenticatedUser, currentPassword: string, newPassword: string, req?: Request) {
+    // 5 attempts per 15 minutes per user
+    await this.rateLimit.consume("change_password_user", user.id, 5, 900);
+    if (req) {
+      // Secondary IP-based rate limit: 15 attempts per 15 minutes
+      await this.rateLimit.consume("change_password_ip", this.clientKey(req), 15, 900);
+    }
     const existing = await this.prisma.user.findUniqueOrThrow({ where: { id: user.id } });
     const valid = await this.passwords.verify(existing.passwordHash, currentPassword);
     if (!valid) throw new UnauthorizedException("Current password is incorrect.");
     const passwordHash = await this.passwords.hash(newPassword);
     const now = new Date();
+
+    const currentSession = await this.prisma.session.findUnique({
+      where: { id: user.sessionId },
+      select: { tokenFamilyId: true }
+    });
+    const currentFamilyId = currentSession?.tokenFamilyId;
+
     await this.prisma.$transaction([
       this.prisma.user.update({ where: { id: user.id }, data: { passwordHash, passwordChangedAt: now } }),
-      this.prisma.session.updateMany({ where: { userId: user.id, id: { not: user.sessionId }, revokedAt: null }, data: { revokedAt: now, revokedReason: "password_changed" } })
+      // Revoke every other active session across all token families
+      this.prisma.session.updateMany({
+        where: {
+          userId: user.id,
+          tokenFamilyId: { not: currentFamilyId },
+          revokedAt: null
+        },
+        data: { revokedAt: now, revokedReason: "password_changed" }
+      })
     ]);
     await this.enqueueSafely("password_changed", () => this.email.sendPasswordChanged(existing.id, existing.email));
     return { message: "Password changed." };
   }
 
   async listSessions(user: AuthenticatedUser) {
+    const now = new Date();
     const sessions = await this.prisma.session.findMany({
-      where: { userId: user.id, revokedAt: null, expiresAt: { gt: new Date() } },
+      where: { userId: user.id, revokedAt: null, expiresAt: { gt: now } },
       orderBy: { lastUsedAt: "desc" },
-      select: { id: true, createdAt: true, lastUsedAt: true, expiresAt: true, userAgent: true }
+      select: {
+        id: true,
+        tokenFamilyId: true,
+        createdAt: true,
+        lastUsedAt: true,
+        expiresAt: true,
+        userAgent: true,
+        ipAddress: true
+      }
     });
-    return { sessions };
+
+    const currentSession = await this.prisma.session.findUnique({
+      where: { id: user.sessionId },
+      select: { tokenFamilyId: true }
+    });
+
+    // Group by tokenFamilyId (representing physical device / browser login)
+    const familyMap = new Map<string, (typeof sessions)[0] & { earliestCreated: Date }>();
+    for (const s of sessions) {
+      const existing = familyMap.get(s.tokenFamilyId);
+      if (!existing) {
+        familyMap.set(s.tokenFamilyId, { ...s, earliestCreated: s.createdAt });
+      } else {
+        if (s.createdAt < existing.earliestCreated) {
+          existing.earliestCreated = s.createdAt;
+        }
+        if (s.lastUsedAt > existing.lastUsedAt) {
+          existing.lastUsedAt = s.lastUsedAt;
+          existing.userAgent = s.userAgent;
+          existing.ipAddress = s.ipAddress;
+          existing.expiresAt = s.expiresAt;
+        }
+      }
+    }
+
+    const secret = this.config.auth.sessionSecret;
+    return {
+      sessions: Array.from(familyMap.values()).map((fam) => ({
+        id: derivePublicSessionId(fam.tokenFamilyId, secret),
+        createdAt: fam.earliestCreated,
+        lastActiveAt: fam.lastUsedAt,
+        expiresAt: fam.expiresAt,
+        userAgent: fam.userAgent,
+        ipAddress: maskIpAddress(fam.ipAddress),
+        isCurrent: fam.tokenFamilyId === currentSession?.tokenFamilyId,
+        device: parseUserAgent(fam.userAgent)
+      }))
+    };
   }
 
-  async revokeSession(user: AuthenticatedUser, sessionId: string) {
+  async revokeSession(user: AuthenticatedUser, publicSessionId: string, res?: Response) {
+    // 10 single-session revocations per minute per user
+    await this.rateLimit.consume("revoke_session", user.id, 10, 60);
+
+    const activeSessions = await this.prisma.session.findMany({
+      where: { userId: user.id, revokedAt: null },
+      select: { id: true, tokenFamilyId: true }
+    });
+
+    const secret = this.config.auth.sessionSecret;
+    let targetFamilyId: string | null = null;
+    for (const s of activeSessions) {
+      if (derivePublicSessionId(s.tokenFamilyId, secret) === publicSessionId) {
+        targetFamilyId = s.tokenFamilyId;
+        break;
+      }
+    }
+
+    if (!targetFamilyId) {
+      return { message: "Session revoked.", isCurrentRevoked: false };
+    }
+
+    const currentSession = await this.prisma.session.findUnique({
+      where: { id: user.sessionId },
+      select: { tokenFamilyId: true }
+    });
+    const isCurrentRevoked = targetFamilyId === currentSession?.tokenFamilyId;
+
     await this.prisma.session.updateMany({
-      where: { userId: user.id, id: sessionId, revokedAt: null },
+      where: { userId: user.id, tokenFamilyId: targetFamilyId, revokedAt: null },
       data: { revokedAt: new Date(), revokedReason: "user_revoked" }
     });
-    return { message: "Session revoked." };
+
+    if (isCurrentRevoked && res) {
+      this.clearAuthCookies(res);
+    }
+
+    return { message: "Session revoked.", isCurrentRevoked };
+  }
+
+  async revokeOtherSessions(user: AuthenticatedUser) {
+    // 5 revoke-others requests per hour per user
+    await this.rateLimit.consume("revoke_others", user.id, 5, 3600);
+
+    const currentSession = await this.prisma.session.findUniqueOrThrow({
+      where: { id: user.sessionId },
+      select: { tokenFamilyId: true }
+    });
+
+    const res = await this.prisma.session.updateMany({
+      where: {
+        userId: user.id,
+        tokenFamilyId: { not: currentSession.tokenFamilyId },
+        revokedAt: null
+      },
+      data: { revokedAt: new Date(), revokedReason: "user_revoked_others" }
+    });
+
+    return { message: "All other sessions signed out.", revokedCount: res.count };
   }
 
   async logoutAll(user: AuthenticatedUser, res: Response) {
