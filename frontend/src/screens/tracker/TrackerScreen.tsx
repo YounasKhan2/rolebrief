@@ -19,8 +19,7 @@ import { relativeTime } from "../../lib/format";
 import { useTracker } from "../../lib/tracker-context";
 import {
   ApplicationStage,
-  TrackedApplication,
-  fetchApplications
+  TrackedApplication
 } from "../../lib/tracker-api";
 import { AddApplicationDialog } from "../../components/tracker/AddApplicationDialog";
 import {
@@ -40,39 +39,28 @@ const STAGES: ApplicationStage[] = [
 ];
 
 export function Component() {
-  const { stageCounts, updateStage, isPending, refreshTracker } = useTracker();
+  const {
+    applications,
+    stageCounts,
+    totalCount,
+    lifecycleFilter,
+    setLifecycleFilter,
+    stageFilter,
+    setStageFilter,
+    loadMore,
+    hasNextPage,
+    isLoadingMore,
+    isLoading,
+    updateStage,
+    isPending,
+    refreshTracker
+  } = useTracker();
 
   const [view, setView] = useState<"board" | "list">("board");
-  const [lifecycleFilter, setLifecycleFilter] = useState<"ACTIVE" | "ARCHIVED">("ACTIVE");
-  const [stageFilter, setStageFilter] = useState<ApplicationStage | "ALL">("ALL");
-  const [applications, setApplications] = useState<TrackedApplication[]>([]);
-  const [loading, setLoading] = useState(true);
 
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [selectedApplication, setSelectedApplication] = useState<TrackedApplication | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
-
-  const loadData = useCallback(async () => {
-    try {
-      setLoading(true);
-      const res = await fetchApplications({
-        stage: stageFilter === "ALL" ? undefined : stageFilter,
-        lifecycle: lifecycleFilter,
-        limit: 50
-      });
-      if (res) {
-        setApplications(res.data);
-      }
-    } catch {
-      // background error handling
-    } finally {
-      setLoading(false);
-    }
-  }, [stageFilter, lifecycleFilter]);
-
-  useEffect(() => {
-    void loadData();
-  }, [loadData]);
 
   const handleStageSelect = async (
     app: TrackedApplication,
@@ -80,13 +68,8 @@ export function Component() {
   ) => {
     if (newStage === app.stage) return;
     const updated = await updateStage(app.id, newStage, app.revision);
-    if (updated) {
-      setApplications((prev) =>
-        prev.map((item) => (item.id === updated.id ? updated : item))
-      );
-      if (selectedApplication?.id === updated.id) {
-        setSelectedApplication(updated);
-      }
+    if (updated && selectedApplication?.id === updated.id) {
+      setSelectedApplication(updated);
     }
   };
 
@@ -144,7 +127,7 @@ export function Component() {
         }
       />
 
-      {lifecycleFilter === "ARCHIVED" && applications.length === 0 && !loading ? (
+      {lifecycleFilter === "ARCHIVED" && applications.length === 0 && !isLoading ? (
         <EmptyState
           icon={<LayoutList size={40} />}
           title="No archived applications"
@@ -155,7 +138,7 @@ export function Component() {
             </Button>
           }
         />
-      ) : totalTracked === 0 && lifecycleFilter === "ACTIVE" && !loading ? (
+      ) : totalTracked === 0 && lifecycleFilter === "ACTIVE" && !isLoading ? (
         <EmptyState
           icon={<LayoutList size={40} />}
           title="No applications tracked yet"
@@ -306,6 +289,18 @@ export function Component() {
                   </div>
                 ))
               )}
+              {hasNextPage && (
+                <div className="p-4 border-t border-line flex justify-center bg-white">
+                  <Button
+                    variant="secondary"
+                    onClick={() => void loadMore()}
+                    disabled={isLoadingMore}
+                    className="min-h-[44px]"
+                  >
+                    {isLoadingMore ? "Loading more..." : "Load more applications"}
+                  </Button>
+                </div>
+              )}
             </div>
           ) : (
             // Board View (Kanban with Drag-and-Drop AND Accessible Select Dropdown on Every Card)
@@ -436,7 +431,6 @@ export function Component() {
         open={isAddOpen}
         onClose={() => setIsAddOpen(false)}
         onCreated={() => {
-          void loadData();
           void refreshTracker();
         }}
       />
@@ -451,13 +445,11 @@ export function Component() {
         }}
         onUpdated={(updated) => {
           setSelectedApplication(updated);
-          setApplications((prev) =>
-            prev.map((item) => (item.id === updated.id ? updated : item))
-          );
           void refreshTracker();
         }}
-        onDeleted={(deletedId) => {
-          setApplications((prev) => prev.filter((item) => item.id !== deletedId));
+        onDeleted={() => {
+          setIsDetailOpen(false);
+          setSelectedApplication(null);
           void refreshTracker();
         }}
       />

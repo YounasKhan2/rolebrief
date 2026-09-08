@@ -51,6 +51,12 @@ export class AppConfigService {
         recovery: this.config.get("AUTH_RATE_LIMIT_RECOVERY", { infer: true }),
         refresh: this.config.get("AUTH_RATE_LIMIT_REFRESH", { infer: true })
       },
+      trackerRateLimits: {
+        read: this.config.get("TRACKER_RATE_LIMIT_READ", { infer: true }),
+        mutate: this.config.get("TRACKER_RATE_LIMIT_MUTATE", { infer: true }),
+        delete: this.config.get("TRACKER_RATE_LIMIT_DELETE", { infer: true })
+      },
+      rateLimitFailClosed: this.config.get("RATE_LIMIT_FAIL_CLOSED", { infer: true }),
       bootstrap: {
         enabled: this.config.get("BOOTSTRAP_ADMIN_ENABLED", { infer: true }),
         email: this.config.get("BOOTSTRAP_ADMIN_EMAIL", { infer: true }),

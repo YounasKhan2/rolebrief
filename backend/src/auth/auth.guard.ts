@@ -37,7 +37,7 @@ export class AuthGuard implements CanActivate {
       data: { lastUsedAt: now }
     });
 
-    req[AUTH_USER_KEY] = {
+    const authUser = {
       id: session.user.id,
       name: session.user.name,
       email: session.user.email,
@@ -47,6 +47,8 @@ export class AuthGuard implements CanActivate {
       sessionId: session.id,
       onboardingStatus: session.user.onboarding?.status ?? OnboardingStatus.NOT_STARTED
     };
+    req[AUTH_USER_KEY] = authUser;
+    (req as any).user = authUser;
     return true;
   }
 }

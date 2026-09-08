@@ -24,9 +24,11 @@ import {
   UpdateApplicationDto
 } from "./dto/tracker.dto";
 import { TrackerService } from "./tracker.service";
+import { TrackerRateLimitGuard } from "./tracker-rate-limit.guard";
 
 @ApiTags("tracker")
 @ApiBearerAuth()
+@UseGuards(TrackerRateLimitGuard)
 @Controller("tracker")
 export class TrackerController {
   constructor(private readonly trackerService: TrackerService) {}

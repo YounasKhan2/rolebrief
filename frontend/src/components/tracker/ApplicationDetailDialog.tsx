@@ -83,6 +83,7 @@ export function ApplicationDetailDialog({
   const [isSavingDetails, setIsSavingDetails] = useState(false);
   const [isArchiving, setIsArchiving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -175,15 +176,13 @@ export function ApplicationDetailDialog({
     }
   };
 
-  const handleDelete = async () => {
-    if (!window.confirm(`Are you sure you want to remove "${application.roleTitle}" from tracker?`)) {
-      return;
-    }
-
+  const handlePermanentDelete = async () => {
     setIsDeleting(true);
+    setError("");
     try {
       const ok = await deleteApplication(application.id, application.revision);
       if (ok) {
+        setIsConfirmDeleteOpen(false);
         onDeleted?.(application.id);
         onClose();
       }
@@ -195,6 +194,7 @@ export function ApplicationDetailDialog({
   };
 
   return (
+    <>
     <Dialog
       open={open}
       onClose={onClose}
@@ -205,11 +205,11 @@ export function ApplicationDetailDialog({
             <Button
               variant="secondary"
               className="text-red hover:bg-red/10 border-red/30 min-h-[44px]"
-              onClick={handleDelete}
+              onClick={() => setIsConfirmDeleteOpen(true)}
               disabled={isDeleting || isSavingDetails || isChangingStage || isArchiving}
               icon={<Trash2 size={15} />}
             >
-              {isDeleting ? "Removing..." : "Remove"}
+              {isDeleting ? "Deleting..." : "Delete..."}
             </Button>
             <Button
               variant="secondary"
@@ -288,7 +288,7 @@ export function ApplicationDetailDialog({
             </div>
           </div>
 
-          {application.employerDeadlineAt && (
+          {application.employerDeadlineAt ? (
             <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber/10 border border-amber/20 text-xs text-amber font-medium">
               <Clock size={14} className="shrink-0" />
               <span>
@@ -299,6 +299,13 @@ export function ApplicationDetailDialog({
                   day: "numeric",
                   year: "numeric"
                 })}
+              </span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-soft/60 border border-line text-xs text-slate font-medium">
+              <Clock size={14} className="shrink-0" />
+              <span>
+                <strong>Employer Application Deadline:</strong> Not provided
               </span>
             </div>
           )}
@@ -487,5 +494,59 @@ export function ApplicationDetailDialog({
         </div>
       </div>
     </Dialog>
+
+    {/* Dedicated Permanent Deletion Confirmation Dialog */}
+    <Dialog
+      open={isConfirmDeleteOpen}
+      onClose={() => setIsConfirmDeleteOpen(false)}
+      title="Permanently Delete Application"
+      footer={
+        <div className="w-full flex items-center justify-between gap-2">
+          <Button
+            variant="secondary"
+            onClick={() => setIsConfirmDeleteOpen(false)}
+            disabled={isDeleting}
+          >
+            Cancel
+          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              onClick={async () => {
+                setIsConfirmDeleteOpen(false);
+                await handleToggleLifecycle();
+              }}
+              disabled={isDeleting || isArchiving}
+              icon={<Archive size={15} />}
+            >
+              Archive Instead
+            </Button>
+            <Button
+              variant="primary"
+              className="bg-red hover:bg-red/90 text-white border-transparent min-h-[44px]"
+              onClick={handlePermanentDelete}
+              disabled={isDeleting}
+              icon={<Trash2 size={15} />}
+            >
+              {isDeleting ? "Deleting..." : "Permanently Delete"}
+            </Button>
+          </div>
+        </div>
+      }
+    >
+      <div className="space-y-3 py-2">
+        <p className="text-sm text-ink leading-relaxed">
+          Are you sure you want to permanently delete <strong>{application.roleTitle}</strong>?
+        </p>
+        <div className="p-3 rounded-lg bg-red/10 border border-red/20 text-xs text-red space-y-1">
+          <p className="font-semibold">This action cannot be undone.</p>
+          <p>All stage transitions, historical timelines, and notes associated with this application will be permanently wiped.</p>
+        </div>
+        <p className="text-xs text-slate">
+          If you simply wish to take this role off your active pipeline without losing historical records, we recommend choosing <strong>Archive Instead</strong>.
+        </p>
+      </div>
+    </Dialog>
+    </>
   );
 }

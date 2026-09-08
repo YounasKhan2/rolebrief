@@ -22,6 +22,6 @@ import { AuthRateLimitService } from "./rate-limit.service";
     { provide: APP_GUARD, useClass: AuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard }
   ],
-  exports: [AuthService, PasswordService, CsrfGuard]
+  exports: [AuthService, PasswordService, CsrfGuard, AuthRateLimitService]
 })
 export class AuthModule {}

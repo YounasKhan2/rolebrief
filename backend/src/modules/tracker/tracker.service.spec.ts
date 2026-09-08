@@ -574,3 +574,225 @@ test("TrackerService: archive and restore update lifecycle and record history", 
   assert.equal(historyCreated.length, 2);
   assert.equal(historyCreated[1].note, "Restored application to active");
 });
+
+// 12. Keyset pagination tuple boundary & tied timestamps
+test("TrackerService: keyset tuple boundary generates correct query and traverses tied timestamps with zero drops/duplicates", async () => {
+  let capturedFindManyArgs: any = null;
+
+  // Create 6 records with tied updatedAt timestamps:
+  // Item 1 & 2 share timestamp T1
+  // Item 3 & 4 share timestamp T2
+  // Item 5 & 6 share timestamp T3
+  const t1 = new Date("2026-09-08T10:00:00.000Z");
+  const t2 = new Date("2026-09-08T09:00:00.000Z");
+  const t3 = new Date("2026-09-08T08:00:00.000Z");
+
+  const records = [
+    { id: "app_6", userId: "u1", updatedAt: t1, createdAt: t1, stage: ApplicationStage.SAVED, lifecycle: ApplicationLifecycle.ACTIVE, revision: 0, history: [] },
+    { id: "app_5", userId: "u1", updatedAt: t1, createdAt: t1, stage: ApplicationStage.SAVED, lifecycle: ApplicationLifecycle.ACTIVE, revision: 0, history: [] },
+    { id: "app_4", userId: "u1", updatedAt: t2, createdAt: t2, stage: ApplicationStage.SAVED, lifecycle: ApplicationLifecycle.ACTIVE, revision: 0, history: [] },
+    { id: "app_3", userId: "u1", updatedAt: t2, createdAt: t2, stage: ApplicationStage.SAVED, lifecycle: ApplicationLifecycle.ACTIVE, revision: 0, history: [] },
+    { id: "app_2", userId: "u1", updatedAt: t3, createdAt: t3, stage: ApplicationStage.SAVED, lifecycle: ApplicationLifecycle.ACTIVE, revision: 0, history: [] },
+    { id: "app_1", userId: "u1", updatedAt: t3, createdAt: t3, stage: ApplicationStage.SAVED, lifecycle: ApplicationLifecycle.ACTIVE, revision: 0, history: [] }
+  ];
+
+  const mockPrisma = createMockPrisma({
+    application: {
+      count: async () => 6,
+      groupBy: async () => [{ stage: ApplicationStage.SAVED, _count: { _all: 6 } }],
+      findMany: async (args: any) => {
+        capturedFindManyArgs = args;
+        let filtered = [...records];
+        if (args.where?.OR) {
+          const [ltBranch, eqLtBranch] = args.where.OR;
+          const cursorDate = ltBranch.updatedAt.lt;
+          const cursorId = eqLtBranch.id.lt;
+          filtered = filtered.filter((r) => {
+            return (
+              r.updatedAt.getTime() < cursorDate.getTime() ||
+              (r.updatedAt.getTime() === cursorDate.getTime() && r.id < cursorId)
+            );
+          });
+        }
+        return filtered.slice(0, args.take);
+      }
+    }
+  });
+
+  const service = new TrackerService(mockPrisma, createMockJobsService(), createMockConfig());
+
+  // Page 1: take 2
+  const p1 = await service.list("u1", { limit: 2 });
+  assert.equal(p1.data.length, 2);
+  assert.equal(p1.data[0].id, "app_6");
+  assert.equal(p1.data[1].id, "app_5");
+  assert.equal(p1.pageInfo.hasNextPage, true);
+  assert.ok(p1.pageInfo.nextCursor);
+
+  // Page 2: pass cursor from Page 1
+  const p2 = await service.list("u1", { limit: 2, cursor: p1.pageInfo.nextCursor! });
+  assert.equal(p2.data.length, 2);
+  assert.equal(p2.data[0].id, "app_4");
+  assert.equal(p2.data[1].id, "app_3");
+  assert.equal(p2.pageInfo.hasNextPage, true);
+
+  // Verify tuple boundary in captured Prisma args:
+  assert.ok(capturedFindManyArgs.where.OR, "Must have OR clause for tuple boundary");
+  assert.equal(capturedFindManyArgs.where.OR.length, 2);
+  assert.ok(capturedFindManyArgs.where.OR[0].updatedAt.lt);
+  assert.equal(capturedFindManyArgs.where.OR[1].id.lt, "app_5");
+
+  // Page 3: pass cursor from Page 2
+  const p3 = await service.list("u1", { limit: 2, cursor: p2.pageInfo.nextCursor! });
+  assert.equal(p3.data.length, 2);
+  assert.equal(p3.data[0].id, "app_2");
+  assert.equal(p3.data[1].id, "app_1");
+  assert.equal(p3.pageInfo.hasNextPage, false);
+  assert.equal(p3.pageInfo.nextCursor, null);
+
+  // Assert 0 duplicates and 0 drops
+  const allTraversedIds = [...p1.data, ...p2.data, ...p3.data].map((a) => a.id);
+  assert.equal(allTraversedIds.length, 6);
+  assert.deepEqual(allTraversedIds, ["app_6", "app_5", "app_4", "app_3", "app_2", "app_1"]);
+  const uniqueIds = new Set(allTraversedIds);
+  assert.equal(uniqueIds.size, 6, "Zero duplicates across pages with tied timestamps");
+});
+
+// 13. History immutability & zero phantom history events
+test("TrackerService: history is append-only on valid stage change; no history created on metadata update or failed revision", async () => {
+  const historyStore: any[] = [];
+  let currentRevision = 1;
+
+  const mockPrisma = createMockPrisma({
+    application: {
+      findFirst: async () => ({
+        id: "app_immut",
+        userId: "user_immut",
+        stage: ApplicationStage.SAVED,
+        lifecycle: ApplicationLifecycle.ACTIVE,
+        revision: currentRevision,
+        notes: "initial note",
+        createdAt: new Date(),
+        updatedAt: new Date()
+      }),
+      updateMany: async (args: any) => {
+        if (args.where.revision === currentRevision) {
+          currentRevision++;
+          return { count: 1 };
+        }
+        return { count: 0 };
+      },
+      findUniqueOrThrow: async () => ({
+        id: "app_immut",
+        userId: "user_immut",
+        stage: ApplicationStage.SAVED,
+        lifecycle: ApplicationLifecycle.ACTIVE,
+        revision: currentRevision,
+        notes: "updated note",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        history: historyStore
+      })
+    },
+    applicationHistory: {
+      create: async (args: any) => {
+        historyStore.push(args.data);
+        return { id: `hist_${historyStore.length}`, ...args.data };
+      }
+    }
+  });
+
+  const service = new TrackerService(mockPrisma, createMockJobsService(), createMockConfig());
+
+  // A: Metadata update (notes changed, stage unchanged) => 0 history entries appended
+  await service.update("user_immut", "app_immut", {
+    expectedRevision: 1,
+    notes: "updated note"
+  });
+  assert.equal(historyStore.length, 0, "No history entry created on metadata-only update");
+
+  // B: Stale revision conflict => throws 409 and 0 history entries appended
+  await assert.rejects(
+    async () => {
+      await service.update("user_immut", "app_immut", {
+        expectedRevision: 1, // Stale! Current is 2
+        stage: ApplicationStage.APPLIED
+      });
+    },
+    ConflictException
+  );
+  assert.equal(historyStore.length, 0, "No history entry created on failed/stale revision");
+
+  // C: Valid stage transition => appends exactly 1 history entry
+  await service.update("user_immut", "app_immut", {
+    expectedRevision: 2, // Current is 2
+    stage: ApplicationStage.APPLIED,
+    stageChangeNote: "Applied on career site"
+  });
+  assert.equal(historyStore.length, 1, "Exactly 1 history entry appended on valid stage transition");
+  assert.equal(historyStore[0].fromStage, ApplicationStage.SAVED);
+  assert.equal(historyStore[0].toStage, ApplicationStage.APPLIED);
+  assert.equal(historyStore[0].note, "Applied on career site");
+});
+
+// 14. Employer deadline provenance: strictly from Job.applicationDeadlineAt
+test("TrackerService: employerDeadlineAt comes strictly from Job.applicationDeadlineAt, not expiresAt", async () => {
+  const jobWithDeadline = {
+    id: "job_deadlined",
+    slug: "deadline-role",
+    canonicalTitle: "Role With Deadline",
+    applicationDeadlineAt: new Date("2026-10-01T00:00:00Z"),
+    expiresAt: new Date("2026-12-31T00:00:00Z"),
+    company: { canonicalName: "TechCorp" },
+    source: { name: "Himalayas" },
+    locations: [],
+    providerRecords: []
+  };
+
+  const jobWithoutDeadline = {
+    id: "job_no_deadline",
+    slug: "no-deadline-role",
+    canonicalTitle: "Role Without Deadline",
+    applicationDeadlineAt: null,
+    expiresAt: new Date("2026-12-31T00:00:00Z"), // Has expiresAt, but NOT applicationDeadlineAt
+    company: { canonicalName: "TechCorp" },
+    source: { name: "Himalayas" },
+    locations: [],
+    providerRecords: []
+  };
+
+  let capturedCreatedApp: any = null;
+  const mockPrisma = createMockPrisma({
+    job: {
+      findUnique: async (args: any) => {
+        if (args.where.slug === "deadline-role") return jobWithDeadline;
+        if (args.where.slug === "no-deadline-role") return jobWithoutDeadline;
+        return null;
+      }
+    },
+    application: {
+      findUnique: async () => null,
+      create: async (args: any) => {
+        capturedCreatedApp = args.data;
+        return { id: "app_new", ...args.data };
+      },
+      findUniqueOrThrow: async () => ({
+        id: "app_new",
+        ...capturedCreatedApp,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        history: []
+      })
+    }
+  });
+
+  const service = new TrackerService(mockPrisma, createMockJobsService(), createMockConfig());
+
+  // Test 1: With explicit applicationDeadlineAt
+  const res1 = await service.create("u1", { jobSlug: "deadline-role" });
+  assert.equal(res1.employerDeadlineAt, "2026-10-01T00:00:00.000Z");
+
+  // Test 2: Without applicationDeadlineAt (even with expiresAt present)
+  const res2 = await service.create("u1", { jobSlug: "no-deadline-role" });
+  assert.equal(res2.employerDeadlineAt, null, "Must NOT fall back to expiresAt");
+});

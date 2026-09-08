@@ -85,8 +85,8 @@ export class TrackerService {
       stageCounts[group.stage] = group._count._all;
     }
 
-    // 2. Decode cursor if present
-    let cursorId: string | undefined;
+    // 2. Decode cursor if present and construct tuple keyset boundary
+    let cursorBoundary: Prisma.ApplicationWhereInput | undefined;
     if (query.cursor) {
       const decoded = decodeTrackerCursor(
         query.cursor,
@@ -95,23 +95,37 @@ export class TrackerService {
         stage || "",
         lifecycle || ""
       );
-      cursorId = decoded.id;
+      const cursorDate = new Date(decoded.updatedAt);
+      cursorBoundary = {
+        OR: [
+          { updatedAt: { lt: cursorDate } },
+          {
+            updatedAt: cursorDate,
+            id: { lt: decoded.id }
+          }
+        ]
+      };
     }
 
-    // 3. Paginated list query
+    // 3. Paginated list query with keyset boundary
     const where: Prisma.ApplicationWhereInput = {
       userId,
       lifecycle,
-      ...(stage ? { stage } : {})
+      ...(stage ? { stage } : {}),
+      ...(cursorBoundary ? cursorBoundary : {})
     };
 
     const [totalCount, items] = await Promise.all([
-      this.prisma.application.count({ where }),
+      this.prisma.application.count({
+        where: {
+          userId,
+          lifecycle,
+          ...(stage ? { stage } : {})
+        }
+      }),
       this.prisma.application.findMany({
         where,
         take: limit + 1,
-        skip: cursorId ? 1 : 0,
-        cursor: cursorId ? { id: cursorId } : undefined,
         orderBy: [
           { updatedAt: "desc" },
           { id: "desc" }

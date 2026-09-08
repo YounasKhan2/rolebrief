@@ -12,8 +12,51 @@ import { AppConfigService } from "../config/app-config.service";
       useFactory: (config: AppConfigService) => ({
         pinoHttp: {
           level: config.logLevel,
-          redact: ["req.headers.authorization", "req.headers.cookie", "res.headers.set-cookie"],
-          genReqId: (req) => req.headers["x-request-id"]?.toString() ?? randomUUID()
+          redact: {
+            paths: [
+              "req.headers.authorization",
+              "req.headers.cookie",
+              "req.headers['x-rolebrief-csrf']",
+              "res.headers['set-cookie']",
+              "password",
+              "token",
+              "secret",
+              "notes",
+              "nextAction",
+              "contactName",
+              "contactEmail",
+              "sourceUrl",
+              "applicationUrl",
+              "*.password",
+              "*.token",
+              "*.secret",
+              "*.notes",
+              "*.nextAction",
+              "*.contactName",
+              "*.contactEmail",
+              "*.sourceUrl",
+              "*.applicationUrl"
+            ],
+            censor: "[REDACTED]"
+          },
+          genReqId: (req) => req.headers["x-request-id"]?.toString() ?? randomUUID(),
+          serializers: {
+            req: (req: any) => ({
+              id: req.id,
+              method: req.method,
+              // Strip query parameters to prevent leaking tokens, cursors, or revisions in log URLs
+              url: req.url ? req.url.split("?")[0] : req.url,
+              userId: req.raw?.user?.id || undefined
+            }),
+            res: (res: any) => ({
+              statusCode: res.statusCode
+            }),
+            err: (err: any) => ({
+              type: err.type,
+              message: err.message,
+              stack: config.nodeEnv === "production" ? undefined : err.stack
+            })
+          }
         }
       })
     })

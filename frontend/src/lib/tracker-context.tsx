@@ -24,10 +24,19 @@ import {
 } from "./tracker-api";
 
 export interface TrackerContextType {
+  applications: TrackedApplication[];
   trackedJobSlugs: Set<string>;
   isTracked: (slug: string) => boolean;
   isPending: (key: string) => boolean;
   stageCounts: Record<ApplicationStage, number>;
+  lifecycleFilter: "ACTIVE" | "ARCHIVED";
+  setLifecycleFilter: (lifecycle: "ACTIVE" | "ARCHIVED") => void;
+  stageFilter: ApplicationStage | "ALL";
+  setStageFilter: (stage: ApplicationStage | "ALL") => void;
+  loadMore: () => Promise<void>;
+  hasNextPage: boolean;
+  isLoadingMore: boolean;
+  totalCount: number;
   trackJob: (slug: string) => Promise<TrackedApplication | null>;
   addManualApplication: (payload: CreateApplicationPayload) => Promise<TrackedApplication | null>;
   updateStage: (
@@ -44,6 +53,7 @@ export interface TrackerContextType {
   restoreApplication: (id: string, expectedRevision: number) => Promise<TrackedApplication | null>;
   deleteApplication: (id: string, expectedRevision: number) => Promise<boolean>;
   refreshTracker: () => Promise<void>;
+  resetAndRefresh: (lifecycle?: "ACTIVE" | "ARCHIVED", stage?: ApplicationStage | "ALL") => Promise<void>;
   isLoading: boolean;
 }
 
@@ -57,10 +67,19 @@ const DEFAULT_STAGE_COUNTS: Record<ApplicationStage, number> = {
 };
 
 const TrackerContext = createContext<TrackerContextType>({
+  applications: [],
   trackedJobSlugs: new Set(),
   isTracked: () => false,
   isPending: () => false,
   stageCounts: DEFAULT_STAGE_COUNTS,
+  lifecycleFilter: "ACTIVE",
+  setLifecycleFilter: () => {},
+  stageFilter: "ALL",
+  setStageFilter: () => {},
+  loadMore: async () => {},
+  hasNextPage: false,
+  isLoadingMore: false,
+  totalCount: 0,
   trackJob: async () => null,
   addManualApplication: async () => null,
   updateStage: async () => null,
@@ -69,6 +88,7 @@ const TrackerContext = createContext<TrackerContextType>({
   restoreApplication: async () => null,
   deleteApplication: async () => false,
   refreshTracker: async () => {},
+  resetAndRefresh: async () => {},
   isLoading: false
 });
 
@@ -82,6 +102,14 @@ export function TrackerProvider({ children }: { children: ReactNode }) {
   const { isAuthenticated, user } = useAuth();
   const toast = useToast();
 
+  const [applications, setApplications] = useState<TrackedApplication[]>([]);
+  const [lifecycleFilter, setLifecycleFilter] = useState<"ACTIVE" | "ARCHIVED">("ACTIVE");
+  const [stageFilter, setStageFilter] = useState<ApplicationStage | "ALL">("ALL");
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [hasNextPage, setHasNextPage] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [totalCount, setTotalCount] = useState(0);
+
   const [trackedJobSlugs, setTrackedJobSlugs] = useState<Set<string>>(new Set());
   const [stageCounts, setStageCounts] = useState<Record<ApplicationStage, number>>(DEFAULT_STAGE_COUNTS);
   const [pendingKeys, setPendingKeys] = useState<Set<string>>(new Set());
@@ -90,30 +118,107 @@ export function TrackerProvider({ children }: { children: ReactNode }) {
   const pendingKeysRef = useRef<Set<string>>(new Set());
   const channelRef = useRef<BroadcastChannel | null>(null);
 
-  const refreshTracker = useCallback(async () => {
-    if (!isAuthenticated) {
-      setTrackedJobSlugs(new Set());
-      setStageCounts(DEFAULT_STAGE_COUNTS);
-      return;
-    }
-
-    try {
-      setIsLoading(true);
-      const res = await apiFetchApplications({ limit: 50 });
-      if (res) {
-        setStageCounts(res.stageCounts || DEFAULT_STAGE_COUNTS);
-        const slugs = new Set<string>();
-        for (const app of res.data) {
-          if (app.jobSlug) slugs.add(app.jobSlug);
-        }
-        setTrackedJobSlugs(slugs);
+  const resetAndRefresh = useCallback(
+    async (
+      targetLifecycle: "ACTIVE" | "ARCHIVED" = lifecycleFilter,
+      targetStage: ApplicationStage | "ALL" = stageFilter
+    ) => {
+      if (!isAuthenticated) {
+        setApplications([]);
+        setTrackedJobSlugs(new Set());
+        setStageCounts(DEFAULT_STAGE_COUNTS);
+        setNextCursor(null);
+        setHasNextPage(false);
+        setTotalCount(0);
+        return;
       }
-    } catch {
-      // background error handled quietly
+
+      try {
+        setIsLoading(true);
+        const res = await apiFetchApplications({
+          lifecycle: targetLifecycle,
+          stage: targetStage === "ALL" ? undefined : targetStage,
+          limit: 20
+        });
+        if (res) {
+          setApplications(res.data);
+          setStageCounts(res.stageCounts || DEFAULT_STAGE_COUNTS);
+          setTotalCount(res.totalCount || 0);
+          setNextCursor(res.pageInfo?.nextCursor || null);
+          setHasNextPage(Boolean(res.pageInfo?.hasNextPage));
+          const slugs = new Set<string>();
+          for (const app of res.data) {
+            if (app.jobSlug) slugs.add(app.jobSlug);
+          }
+          setTrackedJobSlugs(slugs);
+        }
+      } catch {
+        // background error handled quietly
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [isAuthenticated, lifecycleFilter, stageFilter]
+  );
+
+  const handleSetLifecycleFilter = useCallback(
+    (lifecycle: "ACTIVE" | "ARCHIVED") => {
+      setLifecycleFilter(lifecycle);
+      void resetAndRefresh(lifecycle, stageFilter);
+    },
+    [resetAndRefresh, stageFilter]
+  );
+
+  const handleSetStageFilter = useCallback(
+    (stage: ApplicationStage | "ALL") => {
+      setStageFilter(stage);
+      void resetAndRefresh(lifecycleFilter, stage);
+    },
+    [resetAndRefresh, lifecycleFilter]
+  );
+
+  const refreshTracker = useCallback(async () => {
+    await resetAndRefresh(lifecycleFilter, stageFilter);
+  }, [resetAndRefresh, lifecycleFilter, stageFilter]);
+
+  const loadMore = useCallback(async () => {
+    if (!hasNextPage || !nextCursor || isLoadingMore || !isAuthenticated) return;
+    try {
+      setIsLoadingMore(true);
+      const res = await apiFetchApplications({
+        lifecycle: lifecycleFilter,
+        stage: stageFilter === "ALL" ? undefined : stageFilter,
+        cursor: nextCursor,
+        limit: 20
+      });
+      if (res) {
+        setApplications((prev) => {
+          const existingIds = new Set(prev.map((a) => a.id));
+          const newItems = res.data.filter((a) => !existingIds.has(a.id));
+          return [...prev, ...newItems];
+        });
+        setNextCursor(res.pageInfo?.nextCursor || null);
+        setHasNextPage(Boolean(res.pageInfo?.hasNextPage));
+        setStageCounts(res.stageCounts || DEFAULT_STAGE_COUNTS);
+        setTotalCount(res.totalCount || 0);
+      }
+    } catch (err: any) {
+      toast({
+        kind: "error",
+        message: err?.message || "Failed to load more applications."
+      });
     } finally {
-      setIsLoading(false);
+      setIsLoadingMore(false);
     }
-  }, [isAuthenticated]);
+  }, [
+    hasNextPage,
+    nextCursor,
+    isLoadingMore,
+    isAuthenticated,
+    lifecycleFilter,
+    stageFilter,
+    toast
+  ]);
 
   // Auth sync
   useEffect(() => {
@@ -440,10 +545,19 @@ export function TrackerProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo(
     () => ({
+      applications,
       trackedJobSlugs,
       isTracked,
       isPending,
       stageCounts,
+      lifecycleFilter,
+      setLifecycleFilter: handleSetLifecycleFilter,
+      stageFilter,
+      setStageFilter: handleSetStageFilter,
+      loadMore,
+      hasNextPage,
+      isLoadingMore,
+      totalCount,
       trackJob,
       addManualApplication,
       updateStage,
@@ -452,13 +566,23 @@ export function TrackerProvider({ children }: { children: ReactNode }) {
       restoreApplication,
       deleteApplication,
       refreshTracker,
+      resetAndRefresh,
       isLoading
     }),
     [
+      applications,
       trackedJobSlugs,
       isTracked,
       isPending,
       stageCounts,
+      lifecycleFilter,
+      handleSetLifecycleFilter,
+      stageFilter,
+      handleSetStageFilter,
+      loadMore,
+      hasNextPage,
+      isLoadingMore,
+      totalCount,
       trackJob,
       addManualApplication,
       updateStage,
@@ -467,6 +591,7 @@ export function TrackerProvider({ children }: { children: ReactNode }) {
       restoreApplication,
       deleteApplication,
       refreshTracker,
+      resetAndRefresh,
       isLoading
     ]
   );
