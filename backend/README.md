@@ -1,76 +1,242 @@
-# RoleBrief Backend
+# RoleBrief - Backend
 
-NestJS modular monolith scaffold for the RoleBrief API, worker, and scheduler processes.
+<p align="center">
+  <strong>Provider-neutral career intelligence API and processing platform.</strong><br />
+  NestJS API, worker, scheduler, and PostgreSQL persistence for RoleBrief
+</p>
 
-## Local Services
+[Frontend Documentation](../frontend/README.md)
 
-From the repository root:
+## Overview
 
-```bash
-docker compose up postgres redis
+The backend is a NestJS modular monolith with three entrypoints: an HTTP API, a BullMQ worker, and a scheduler. It serves public job discovery, cookie-based authentication, candidate onboarding and profile workflows, saved jobs, application tracking, and admin user management. It also ingests job data from the enabled Himalayas provider and delivers auth email jobs.
+
+## Tech Stack
+
+| Technology | Purpose |
+| --- | --- |
+| NestJS 11 | HTTP API and application modules |
+| TypeScript | Static typing and compilation |
+| PostgreSQL 16 | Relational persistence |
+| Prisma 6 | ORM, generated client, and migrations |
+| Redis 7 | Health checks, rate limits, and BullMQ backing store |
+| BullMQ | Ingestion and email delivery queues |
+| Argon2 | Password hashing |
+| Swagger | API documentation at `/api/docs` |
+| Helmet and Pino | Security headers and structured logging |
+
+## Backend Architecture
+
+```mermaid
+flowchart LR
+    Client[Frontend or API client] --> API[NestJS API]
+    API --> Guards[Auth, role, CSRF, and rate-limit guards]
+    Guards --> Controllers[Domain controllers]
+    Controllers --> Services[Domain services]
+    Services --> Prisma[Prisma service]
+    Prisma --> Postgres[(PostgreSQL)]
+    Services --> Queues[BullMQ queues]
+    Queues --> Worker[Worker process]
+    Worker --> Provider[Himalayas adapter]
+    Worker --> Email[Email delivery]
+    Queues --> Redis[(Redis)]
+    Scheduler[Scheduler process] --> Queues
 ```
 
-Run migrations:
+## Project Structure
 
-```bash
-cd backend
-cp .env.example .env
+```text
+src/
+├── auth/             Sessions, cookies, CSRF, RBAC, password, and email flows
+├── admin/            Admin user-management API
+├── common/            Configuration, logging, and shared rate-limit support
+├── health/            Liveness and PostgreSQL/Redis readiness checks
+├── modules/           Jobs, saved, tracker, profile, onboarding, and product domains
+├── providers/         Provider adapters, ingestion orchestration, and persistence
+├── queue/             BullMQ registration, queue names, and Redis probing
+├── scheduler/         Recurring provider synchronization
+├── prisma/             Prisma module and database service
+├── main.ts             HTTP API bootstrap
+├── worker.ts           Worker application-context bootstrap
+└── scheduler.ts        Scheduler application-context bootstrap
+prisma/
+├── schema.prisma      Database schema
+└── migrations/        Versioned Prisma migrations
+```
+
+## Request Lifecycle
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant N as Nest API
+    participant G as Global guards
+    participant V as ValidationPipe
+    participant K as Controller
+    participant S as Domain service
+    participant P as Prisma
+    participant D as PostgreSQL
+    C->>N: HTTP request under /api/v1
+    N->>G: Auth, role, CSRF, and rate-limit checks
+    G->>V: Permit request
+    V->>K: Transform and validate DTO
+    V->>K: Dispatch validated request
+    K->>S: Invoke domain operation
+    S->>P: Query or transaction
+    P->>D: SQL
+    D-->>P: Result
+    P-->>S: Domain data
+    S-->>K: Response data
+    K-->>C: JSON response
+```
+
+## Modules and API Groups
+
+All HTTP routes use the global `/api/v1` prefix. Controllers are grouped by domain:
+
+- **Health:** `/health/live` and `/health/ready`.
+- **Authentication:** signup, login, logout, refresh, current user, sessions, email verification, password recovery, password change, and logout-all under `/auth`.
+- **Jobs:** public search, facets, job details, and related jobs under `/jobs`.
+- **Saved jobs:** authenticated saved-job listing, slug listing, save, and unsave under `/saved`.
+- **Candidate workflows:** onboarding under `/me/onboarding` and profile under `/me/profile`.
+- **Application tracker:** cursor-paginated applications, details, create, update, archive, restore, and delete under `/tracker`.
+- **Administration:** user listing, user details, role changes, and status changes under `/admin`.
+
+The application registers news, companies, matching, eligibility, and alerts module boundaries, but the current backend does not expose controllers for those domains. The frontend screens for several of them therefore remain fixture-backed or local-only.
+
+DTOs use `class-validator` and `class-transformer`; the global validation pipe transforms input, whitelists fields, and rejects non-whitelisted fields. Swagger documents the API at `http://127.0.0.1:3000/api/docs`.
+
+## Authentication and Authorization
+
+```mermaid
+flowchart LR
+    Browser --> CSRF[GET /auth/csrf]
+    Browser --> Login[POST /auth/login]
+    Login --> Cookies[Opaque HttpOnly access and refresh cookies]
+    Cookies --> AuthGuard[Global AuthGuard]
+    AuthGuard --> Roles[RolesGuard for ADMIN routes]
+    Roles --> CSRFGuard[CSRF guard on state changes]
+    CSRFGuard --> Controller[Protected controller]
+    Refresh[POST /auth/refresh] --> Rotate[Rotate refresh session]
+    Rotate --> Cookies
+```
+
+Passwords are hashed with Argon2. Sessions are stored as hashed access/refresh credentials, refresh sessions rotate and can be revoked individually or globally, and authenticated state-changing requests require the `rb_csrf` cookie plus `x-rolebrief-csrf` header. Accounts must be verified and active before normal authenticated access. Roles are `USER` and `ADMIN`; admin routes require `ADMIN`. Redis-backed limits protect login, signup, recovery, refresh, and tracker operations.
+
+## Database
+
+Prisma reads `DATABASE_URL` and generates the client from `prisma/schema.prisma`. Migrations are stored in `prisma/migrations`. The schema groups entities into:
+
+- **Identity:** `User`, `Session`, verification/reset tokens, auth audit events, and email deliveries.
+- **Job catalog:** `Company`, `Job`, `Location`, `JobLocation`, `Source`, `ProviderRecord`, `JobOccurrence`, and `Salary`.
+- **Candidate activity:** `SavedItem`, `Application`, `ApplicationHistory`, and alerts/deliveries.
+- **Profile:** onboarding progress, candidate profile, preferences, and skills.
+- **Ingestion audit:** ingestion runs, checkpoints, freshness events, and audit events.
+
+```mermaid
+erDiagram
+    USER ||--o{ SESSION : has
+    USER ||--o{ SAVED_ITEM : saves
+    USER ||--o{ APPLICATION : tracks
+    USER ||--o| CANDIDATE_PROFILE : owns
+    JOB ||--o{ SAVED_ITEM : is_saved
+    JOB ||--o{ APPLICATION : is_tracked
+    JOB }o--|| COMPANY : belongs_to
+    JOB }o--|| SOURCE : comes_from
+    JOB ||--o{ JOB_LOCATION : has
+    LOCATION ||--o{ JOB_LOCATION : describes
+```
+
+## Background Processing and Integrations
+
+The scheduler creates recurring `providers.himalayas.ingest` jobs when `HIMALAYAS_ENABLED=true`. The worker consumes provider ingestion and `auth.email.send` jobs. Ingestion validates and normalizes provider records, persists jobs and provider history through Prisma, records checkpoints and run metrics, and supports retry, delay, backfill, incremental, and smoke modes. Queue names also include verification, enrichment, and alerts for the broader queue boundary; only the ingestion and auth email processors are currently registered.
+
+Implemented external integrations:
+
+- **Himalayas:** job provider at the configured `HIMALAYAS_API_URL`.
+- **Resend or development email provider:** verification, recovery, and password-change notifications. Resend is optional; development defaults to the fake provider.
+
+## Environment Variables
+
+Copy `.env.example` to `.env` and keep real credentials out of version control.
+
+| Variable group | Variables | Purpose |
+| --- | --- | --- |
+| Runtime | `NODE_ENV`, `PORT`, `LOG_LEVEL` | Process mode, HTTP port, and logging |
+| Browser/API | `PUBLIC_APP_URL`, `FRONTEND_ORIGIN` | Public links and exact credentialed CORS origins |
+| Persistence | `DATABASE_URL`, `DATABASE_POOL_SIZE`, `REDIS_URL` | PostgreSQL and Redis connections |
+| Queues | `QUEUE_PREFIX`, `WORKER_CONCURRENCY` | BullMQ namespace and worker capacity |
+| Auth | `AUTH_ISSUER`, `AUTH_AUDIENCE`, `SESSION_SECRET`, `CURSOR_SIGNING_SECRET`, `ACCESS_TOKEN_TTL`, `REFRESH_SESSION_TTL`, `COOKIE_SECURE`, `COOKIE_SAME_SITE` | Session and cookie configuration |
+| Limits | `AUTH_RATE_LIMIT_LOGIN`, `AUTH_RATE_LIMIT_SIGNUP`, `AUTH_RATE_LIMIT_RECOVERY`, `AUTH_RATE_LIMIT_REFRESH`, `TRACKER_RATE_LIMIT_READ`, `TRACKER_RATE_LIMIT_MUTATE`, `TRACKER_RATE_LIMIT_DELETE`, `RATE_LIMIT_FAIL_CLOSED` | Abuse and tracker limits |
+| Email | `EMAIL_PROVIDER`, `EMAIL_DELIVERY_ENABLED`, `EMAIL_EXPOSE_DEV_LINKS`, `EMAIL_FROM`, `RESEND_FROM_EMAIL`, `RESEND_REPLY_TO`, `SMTP_URL`, `RESEND_API_KEY` | Email provider and delivery settings |
+| Admin bootstrap | `BOOTSTRAP_ADMIN_ENABLED`, `BOOTSTRAP_ADMIN_EMAIL`, `BOOTSTRAP_ADMIN_PASSWORD` | Explicit initial admin creation |
+| Himalayas | `HIMALAYAS_ENABLED`, `HIMALAYAS_API_URL`, `HIMALAYAS_PAGE_LIMIT`, `HIMALAYAS_REQUEST_TIMEOUT_MS`, `HIMALAYAS_INITIAL_BACKFILL_MAX_PAGES`, `HIMALAYAS_SYNC_MAX_PAGES`, `HIMALAYAS_REQUEST_DELAY_MS`, `HIMALAYAS_UNCHANGED_STOP_THRESHOLD`, `HIMALAYAS_MAX_RETRIES`, `HIMALAYAS_RETRY_DELAY_MS`, `HIMALAYAS_RATE_LIMIT_DELAY_MS`, `HIMALAYAS_CRON`, `HIMALAYAS_LIVE_SMOKE`, `HIMALAYAS_LIVE_SMOKE_PERSIST` | Provider ingestion behavior |
+| Optional telemetry | `APITUBE_API_KEY`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `SENTRY_DSN` | Optional integration/telemetry configuration |
+
+Secret values are intentionally omitted from this documentation.
+
+## Local Development
+
+Prerequisites are Node.js, pnpm, and Docker Desktop. From the repository root, start PostgreSQL and Redis:
+
+```powershell
+docker compose up -d postgres redis
+```
+
+From `backend`:
+
+```powershell
+Copy-Item .env.example .env
 pnpm install
 pnpm prisma:generate
 pnpm migrate:dev
 pnpm dev:api
 ```
 
-The API uses `/api/v1` as its global prefix.
-Swagger is available at `/api/docs` and documents the cookie-auth, CSRF, verification, reset, session, jobs, and admin endpoints.
+The API defaults to port `3000`. Seed data with `pnpm db:seed` when needed. Use `pnpm migrate:deploy` for an existing database and `pnpm exec prisma studio` to inspect it.
 
-## Authentication
+For a full Compose backend, use `docker compose up -d postgres redis api worker scheduler`, then apply tools with `docker compose --profile tools run --rm migrate` or seed with the corresponding `seed` service. Stop services with `docker compose down`; add `-v` only when intentionally deleting local volumes.
 
-RoleBrief uses backend-enforced email/password authentication with Argon2id hashes, USER/ADMIN roles, opaque HttpOnly cookies, rotating refresh sessions, CSRF headers for state-changing authenticated requests, and Redis-backed abuse limits.
+## Build and Production Processes
 
-Public signup never accepts a role. To create an administrator, run the explicit bootstrap job with untracked local environment values:
-
-```bash
-BOOTSTRAP_ADMIN_ENABLED=true pnpm bootstrap:admin
+```powershell
+pnpm build
+pnpm start:api
+pnpm start:worker
+pnpm start:scheduler
 ```
 
-Keep `BOOTSTRAP_ADMIN_PASSWORD` only in an untracked local or deployment secret store. Re-running bootstrap is idempotent for an existing admin and will not reset the password.
+The API, worker, and scheduler use the same compiled backend image in Compose and select behavior by entrypoint command.
 
-Auth endpoints live under `/api/v1/auth`; admin user-management endpoints live under `/api/v1/admin` and require the ADMIN role. Frontend and API origins must be listed exactly in `FRONTEND_ORIGIN`; CORS uses credentials and does not allow wildcard origins.
+## Testing and Quality
 
-## Email with Resend
-
-Create a Resend account, generate an API key, and verify the sending domain in Resend. Set these values in the untracked `backend/.env` file:
-
-```bash
-EMAIL_PROVIDER=resend
-EMAIL_DELIVERY_ENABLED=true
-RESEND_FROM_EMAIL=RoleBrief <no-reply@your-verified-domain.com>
-RESEND_REPLY_TO=support@your-verified-domain.com
-RESEND_API_KEY=<resend-api-key>
-FRONTEND_ORIGIN=https://app.your-domain.com
+```powershell
+pnpm test
+pnpm typecheck
+pnpm lint
 ```
 
-Restart the API and worker after changing environment variables. Signup verification, resend verification, password reset, and password-change notifications are queued through BullMQ and delivered by the worker. Delivery records store status and provider message IDs, but never plaintext verification/reset tokens or full email bodies.
+Tests use Node's built-in test runner with `tsx` and cover auth, email, jobs, onboarding, saved jobs, tracker, HTML sanitization, Himalayas normalization/ingestion, and scheduler behavior. The jobs integration test requires a configured `DATABASE_URL`.
 
-Keep `EMAIL_PROVIDER=dev` for automated tests and local development. Development links are hidden by default; set `EMAIL_EXPOSE_DEV_LINKS=true` only in a local development environment when you explicitly need to inspect a test link.
+## Security
 
-For initial Resend testing, `onboarding@resend.dev` can only deliver to the email address associated with your Resend account. Production recipients require a verified sending domain.
+Verified controls include global authentication and role guards, Argon2 password hashing, opaque HttpOnly cookies, refresh rotation and revocation, CSRF protection, exact-origin credentialed CORS, Helmet headers, DTO validation, Redis-backed rate limiting, generic recovery responses to reduce account enumeration, structured logging, and token-hash storage for verification/reset records.
 
-When running with Docker Compose, backend services load `.env.example` first and the untracked `backend/.env` second. Keep safe defaults in `.env.example`; put real Resend keys, sender addresses, and local frontend origin ordering in `backend/.env`.
+## Backend Architecture Diagram
 
-Operational rollback note: the auth migration is forward-only. It adds durable auth tables and converts placeholder `User.role`/`User.status` strings into enums without changing jobs/provider records. Existing legacy users should be verified/reset or removed intentionally before production use.
-
-## Process Entrypoints
-
-- API: `pnpm start:api`
-- Worker: `pnpm start:worker`
-- Scheduler: `pnpm start:scheduler`
-- Migrations: `pnpm migrate:deploy`
-
-API, worker, and scheduler share the same immutable Docker image and select behavior by command.
-
-## Health
-
-- `GET /api/v1/health/live` checks process liveness only.
-- `GET /api/v1/health/ready` checks required local dependencies.
+```mermaid
+flowchart TB
+    Frontend[RoleBrief frontend] --> HTTP[/api/v1 HTTP API/]
+    HTTP --> Auth[Auth and RBAC]
+    HTTP --> Domains[Jobs, profile, onboarding, saved, tracker, admin]
+    Domains --> Prisma[Prisma data access]
+    Prisma --> Postgres[(PostgreSQL)]
+    Domains --> Queue[BullMQ]
+    Queue --> Redis[(Redis)]
+    Scheduler[Scheduler] --> Queue
+    Queue --> Worker[Worker]
+    Worker --> Ingestion[Himalayas ingestion]
+    Worker --> Delivery[Email delivery]
+    Ingestion --> Provider[Himalayas API]
+    Delivery --> Resend[Resend or dev provider]
+```
