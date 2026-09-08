@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post, Req, Res, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Post, Req, Res, UseGuards } from "@nestjs/common";
 import { ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { Request, Response } from "express";
 import { AuthService } from "./auth.service";
@@ -15,7 +15,7 @@ export class AuthController {
   @Get("csrf")
   @ApiOperation({ summary: "Issue a readable CSRF cookie for authenticated state-changing requests" })
   csrf(@Res({ passthrough: true }) res: Response) {
-    return this.auth.setCsrfCookie(res);
+    return { csrf: this.auth.setCsrfCookie(res) };
   }
 
   @Public()
@@ -35,10 +35,12 @@ export class AuthController {
   }
 
   @Post("logout")
+  @Public()
   @UseGuards(CsrfGuard)
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: "Log out the current session" })
-  logout(@CurrentUser() user: AuthenticatedUser, @Res({ passthrough: true }) res: Response) {
-    return this.auth.logout(user, res);
+  logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    return this.auth.logout(req, res);
   }
 
   @Public()
@@ -110,6 +112,7 @@ export class AuthController {
 
   @Post("logout-all")
   @UseGuards(CsrfGuard)
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: "Revoke all sessions for the authenticated user" })
   logoutAll(@CurrentUser() user: AuthenticatedUser, @Res({ passthrough: true }) res: Response) {
     return this.auth.logoutAll(user, res);

@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { NavLink, Outlet, ScrollRestoration, Link } from "react-router";
+import { useEffect, useRef, useState } from "react";
+import { NavLink, Outlet, ScrollRestoration, Link, useNavigate } from "react-router";
 import {
   Radar,
   Search,
@@ -10,11 +10,16 @@ import {
   Command,
   Settings,
   Shield,
+  User,
+  LogOut,
+  Loader2,
+  ChevronDown,
 } from "lucide-react";
 import { Wordmark } from "../rolebrief/Wordmark";
 import { classNames } from "../../lib/format";
 import { CommandPalette } from "./CommandPalette";
 import { useAuth } from "../../lib/auth";
+import { useToast } from "../ui/toast";
 
 const primaryNav = [
   { to: "/app/radar", label: "Radar", icon: Radar },
@@ -31,6 +36,178 @@ const bottomNav = [
   { to: "/app/tracker", label: "Tracker", icon: ListChecks },
   { to: "/app/saved", label: "Saved", icon: Bookmark },
 ];
+
+export function UserMenu() {
+  const { user, isAdmin, logout } = useAuth();
+  const navigate = useNavigate();
+  const toast = useToast();
+  const [open, setOpen] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (
+        menuRef.current &&
+        !menuRef.current.contains(e.target as Node) &&
+        triggerRef.current &&
+        !triggerRef.current.contains(e.target as Node)
+      ) {
+        setOpen(false);
+      }
+    }
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        setOpen(false);
+        triggerRef.current?.focus();
+      }
+    }
+    if (open) {
+      document.addEventListener("mousedown", handleClickOutside);
+      document.addEventListener("keydown", handleKeyDown);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open]);
+
+  function handleMenuKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    if (!menuRef.current) return;
+    const items = Array.from(
+      menuRef.current.querySelectorAll<HTMLElement>('[role="menuitem"]:not([disabled])')
+    );
+    if (!items.length) return;
+    const currentIndex = items.indexOf(document.activeElement as HTMLElement);
+
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      const nextIndex = currentIndex < items.length - 1 ? currentIndex + 1 : 0;
+      items[nextIndex]?.focus();
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      const prevIndex = currentIndex > 0 ? currentIndex - 1 : items.length - 1;
+      items[prevIndex]?.focus();
+    } else if (e.key === "Home") {
+      e.preventDefault();
+      items[0]?.focus();
+    } else if (e.key === "End") {
+      e.preventDefault();
+      items[items.length - 1]?.focus();
+    }
+  }
+
+  async function handleLogout() {
+    setLoggingOut(true);
+    try {
+      await logout();
+      setOpen(false);
+      navigate("/", { replace: true });
+    } catch {
+      toast({
+        kind: "error",
+        message: "Couldn’t sign out. Check your connection and try again.",
+        actionLabel: "Retry",
+        undo: () => void handleLogout(),
+      });
+    } finally {
+      setLoggingOut(false);
+    }
+  }
+
+  return (
+    <div className="relative">
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={() => setOpen((prev) => !prev)}
+        aria-expanded={open}
+        aria-haspopup="true"
+        aria-label="User account menu"
+        className="inline-flex items-center gap-1.5 p-0.5 rounded-full hover:bg-soft transition-colors focus-visible:ring-2 focus-visible:ring-indigo/30 focus-visible:outline-none ml-1"
+      >
+        <span className="inline-flex items-center justify-center size-9 rounded-full bg-navy text-white text-[13px] font-semibold shadow-sm">
+          {user?.initials ?? "RB"}
+        </span>
+        <ChevronDown size={13} className={classNames("text-slate transition-transform duration-150 hidden sm:inline-block", open ? "rotate-180" : "")} />
+      </button>
+
+      {open && (
+        <div
+          ref={menuRef}
+          onKeyDown={handleMenuKeyDown}
+          role="menu"
+          aria-orientation="vertical"
+          className="absolute right-0 mt-2 w-64 rounded-[var(--radius-card)] bg-white border border-line shadow-lg py-2 z-50 animate-in fade-in zoom-in-95 duration-100"
+        >
+          <div className="px-4 py-2 border-b border-line/60">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm font-semibold text-ink truncate">{user?.name || "Account"}</p>
+              {isAdmin && (
+                <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-indigo-tint text-indigo font-bold">
+                  Admin
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-slate truncate mt-0.5">{user?.email}</p>
+          </div>
+
+          <div className="py-1">
+            <Link
+              to="/app/profile"
+              onClick={() => setOpen(false)}
+              className="flex items-center gap-2.5 px-4 py-2 text-sm text-ink hover:bg-soft transition-colors"
+              role="menuitem"
+            >
+              <User size={16} className="text-slate" />
+              <span>Your profile</span>
+            </Link>
+
+            <Link
+              to="/app/settings"
+              onClick={() => setOpen(false)}
+              className="flex items-center gap-2.5 px-4 py-2 text-sm text-ink hover:bg-soft transition-colors"
+              role="menuitem"
+            >
+              <Settings size={16} className="text-slate" />
+              <span>Settings</span>
+            </Link>
+
+            {isAdmin && (
+              <Link
+                to="/admin"
+                onClick={() => setOpen(false)}
+                className="flex items-center gap-2.5 px-4 py-2 text-sm text-indigo hover:bg-indigo-tint/50 transition-colors"
+                role="menuitem"
+              >
+                <Shield size={16} className="text-indigo" />
+                <span>Admin console</span>
+              </Link>
+            )}
+          </div>
+
+          <div className="border-t border-line/60 pt-1">
+            <button
+              type="button"
+              onClick={() => void handleLogout()}
+              disabled={loggingOut}
+              className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-red hover:bg-red-tint/50 transition-colors disabled:opacity-50 text-left"
+              role="menuitem"
+            >
+              {loggingOut ? (
+                <Loader2 size={16} className="animate-spin text-red" />
+              ) : (
+                <LogOut size={16} className="text-red" />
+              )}
+              <span>{loggingOut ? "Signing out..." : "Sign out"}</span>
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function AppShell() {
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -106,9 +283,7 @@ export default function AppShell() {
                 <Shield size={18} />
               </NavLink>
             )}
-            <NavLink to="/app/profile" aria-label="Profile" className="inline-flex items-center justify-center size-9 rounded-full bg-navy text-white text-[13px] font-semibold ml-1">
-              {user?.initials ?? "RB"}
-            </NavLink>
+            <UserMenu />
           </div>
         </div>
       </header>

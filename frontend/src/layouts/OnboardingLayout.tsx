@@ -2,7 +2,8 @@ import React, { createContext, useContext, useState } from "react";
 import { Outlet, useNavigate } from "react-router";
 import { Check, Loader2, AlertTriangle, LogOut } from "lucide-react";
 import { Wordmark } from "../components/rolebrief/Wordmark";
-import { logout } from "../lib/auth-api";
+import { useAuth } from "../lib/auth";
+import { useToast } from "../components/ui/toast";
 
 export type SaveStatus = "idle" | "saving" | "saved" | "conflict" | "error";
 
@@ -28,6 +29,8 @@ export function useOnboardingLayout() {
 
 export function OnboardingLayout() {
   const navigate = useNavigate();
+  const toast = useToast();
+  const { logout } = useAuth();
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [statusMessage, setStatusMessage] = useState<string | undefined>();
   const [retryAutosave, setRetryAutosave] = useState<(() => void) | undefined>();
@@ -37,8 +40,16 @@ export function OnboardingLayout() {
     setIsLoggingOut(true);
     try {
       await logout();
+      navigate("/", { replace: true });
+    } catch {
+      toast({
+        kind: "error",
+        message: "Couldn’t sign out. Check your connection and try again.",
+        actionLabel: "Retry",
+        undo: () => void handleLogout(),
+      });
     } finally {
-      navigate("/login", { replace: true });
+      setIsLoggingOut(false);
     }
   }
 

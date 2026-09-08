@@ -13,11 +13,29 @@ export interface AuthState {
   isAuthenticated: boolean;
   isAdmin: boolean;
   error: Error | null;
+  isLoggingOut: boolean;
   login: (email: string, password: string) => Promise<void>;
   signup: (name: string, email: string, password: string) => Promise<string>;
   logout: () => Promise<void>;
+  logoutAll: () => Promise<void>;
   reload: () => Promise<void>;
   updateOnboardingStatus: (status: api.OnboardingStatus) => void;
+}
+
+const AUTH_CHANNEL_NAME = "rolebrief_auth";
+const AUTH_STORAGE_KEY = "rb_cross_tab_sync";
+
+function broadcastConfirmedLogout() {
+  try {
+    if (typeof BroadcastChannel !== "undefined") {
+      const channel = new BroadcastChannel(AUTH_CHANNEL_NAME);
+      channel.postMessage({ type: "LOGOUT", timestamp: Date.now() });
+      channel.close();
+    }
+  } catch {}
+  try {
+    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ type: "LOGOUT", timestamp: Date.now() }));
+  } catch {}
 }
 
 const AuthContext = createContext<AuthState>({
@@ -26,9 +44,11 @@ const AuthContext = createContext<AuthState>({
   isAuthenticated: false,
   isAdmin: false,
   error: null,
+  isLoggingOut: false,
   login: async () => {},
   signup: async () => "",
   logout: async () => {},
+  logoutAll: async () => {},
   reload: async () => {},
   updateOnboardingStatus: () => {},
 });
@@ -41,10 +61,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [status, setStatus] = useState<AuthStatus>("loading");
   const [authError, setAuthError] = useState<Error | null>(null);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
   const userRef = useRef<AuthUser | null>(null);
   userRef.current = user;
 
   const reload = useCallback(async () => {
+    setIsLoggingOut(false);
     setStatus("loading");
     setAuthError(null);
     try {
@@ -78,7 +101,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void reload();
   }, [reload]);
 
+  // Listen for confirmed cross-tab logout events
+  useEffect(() => {
+    let channel: BroadcastChannel | null = null;
+    try {
+      if (typeof BroadcastChannel !== "undefined") {
+        channel = new BroadcastChannel(AUTH_CHANNEL_NAME);
+        channel.onmessage = (event) => {
+          if (event.data?.type === "LOGOUT") {
+            setUser(null);
+            setStatus("unauthenticated");
+            setAuthError(null);
+            api.resetCsrfToken();
+          }
+        };
+      }
+    } catch {}
+
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === AUTH_STORAGE_KEY && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          if (parsed?.type === "LOGOUT") {
+            setUser(null);
+            setStatus("unauthenticated");
+            setAuthError(null);
+            api.resetCsrfToken();
+          }
+        } catch {}
+      }
+    };
+
+    window.addEventListener("storage", handleStorage);
+
+    return () => {
+      if (channel) channel.close();
+      window.removeEventListener("storage", handleStorage);
+    };
+  }, []);
+
   const login = useCallback(async (email: string, password: string) => {
+    setIsLoggingOut(false);
     const result = await api.login(email, password);
     setUser(result.user);
     setStatus("authenticated");
@@ -93,12 +156,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return result.message;
   }, []);
 
-  const logout = useCallback(async () => {
-    await api.logout().catch(() => undefined);
+  const performLogout = useCallback(async (isAll: boolean) => {
+    // 1. Call server endpoint first. Do NOT evict local state before server confirmation.
+    if (isAll) {
+      await api.logoutAll();
+    } else {
+      await api.logout();
+    }
+
+    // 2. Only on confirmed backend success:
+    setIsLoggingOut(true);
     setUser(null);
     setStatus("unauthenticated");
     setAuthError(null);
+    api.resetCsrfToken();
+    broadcastConfirmedLogout();
   }, []);
+
+  const logout = useCallback(() => performLogout(false), [performLogout]);
+  const logoutAll = useCallback(() => performLogout(true), [performLogout]);
 
   const updateOnboardingStatus = useCallback((onboardingStatus: api.OnboardingStatus) => {
     setUser((prev) => (prev ? { ...prev, onboardingStatus } : null));
@@ -110,12 +186,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isAuthenticated: status === "authenticated" && user !== null,
     isAdmin: user?.role === "ADMIN",
     error: authError,
+    isLoggingOut,
     login,
     signup,
     logout,
+    logoutAll,
     reload,
     updateOnboardingStatus
-  }), [authError, login, logout, reload, signup, status, updateOnboardingStatus, user]);
+  }), [authError, isLoggingOut, login, logout, logoutAll, reload, signup, status, updateOnboardingStatus, user]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

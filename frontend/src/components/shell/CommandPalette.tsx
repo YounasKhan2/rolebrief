@@ -15,10 +15,13 @@ import {
   Building2,
   CornerDownLeft,
   ArrowRight,
+  LogOut,
 } from "lucide-react";
 import { jobs, companies, news, companyName } from "../../lib/fixtures";
 import { classNames } from "../../lib/format";
 import { CompanyLogo } from "../ui/primitives";
+import { useAuth } from "../../lib/auth";
+import { useToast } from "../ui/toast";
 
 type Item = {
   id: string;
@@ -28,6 +31,7 @@ type Item = {
   to: string;
   icon: React.ReactNode;
   keywords?: string;
+  action?: () => void;
 };
 
 const navItems: Item[] = [
@@ -77,17 +81,50 @@ const all = [...navItems, ...jobItems, ...companyItems, ...newsItems];
 
 export function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void }) {
   const navigate = useNavigate();
+  const toast = useToast();
+  const { logout, isAuthenticated } = useAuth();
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  async function handleLogout() {
+    try {
+      await logout();
+      navigate("/", { replace: true });
+    } catch {
+      toast({
+        kind: "error",
+        message: "Couldn’t sign out. Check your connection and try again.",
+        actionLabel: "Retry",
+        undo: () => void handleLogout(),
+      });
+    }
+  }
+
+  const accountItems = useMemo<Item[]>(() => {
+    if (!isAuthenticated) return [];
+    return [
+      {
+        id: "a-logout",
+        label: "Sign out",
+        sub: "Sign out of your RoleBrief session",
+        group: "Account",
+        to: "",
+        icon: <LogOut size={16} className="text-red" />,
+        keywords: "sign out log out logout disconnect leave exit",
+        action: () => void handleLogout(),
+      },
+    ];
+  }, [isAuthenticated, logout]);
+
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return navItems;
-    return all
+    const items = [...all, ...accountItems];
+    if (!q) return [...navItems, ...accountItems];
+    return items
       .filter((i) => `${i.label} ${i.sub ?? ""} ${i.keywords ?? ""} ${i.group}`.toLowerCase().includes(q))
       .slice(0, 12);
-  }, [query]);
+  }, [query, accountItems]);
 
   useEffect(() => {
     setActive(0);
@@ -115,7 +152,11 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
 
   function go(item: Item) {
     onClose();
-    navigate(item.to);
+    if (item.action) {
+      item.action();
+    } else if (item.to) {
+      navigate(item.to);
+    }
   }
 
   const grouped = results.reduce<Record<string, Item[]>>((acc, item) => {

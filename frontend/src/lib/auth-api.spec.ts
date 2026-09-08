@@ -3,6 +3,9 @@ import { test, beforeEach, afterEach } from "node:test";
 import {
   refresh,
   me,
+  logout,
+  logoutAll,
+  resetCsrfToken,
   resetRefreshMutexForTesting,
   getInFlightRefreshPromise,
   type AuthUser
@@ -206,4 +209,74 @@ test("refresh endpoint 401: does not trigger recursive refresh", async () => {
   );
 
   assert.equal(refreshCallCount, 1, "Refresh endpoint must not call itself recursively");
+});
+
+test("logout sends POST /auth/logout with CSRF and resets inMemoryCsrfToken", async () => {
+  let calledUrl = "";
+  let calledMethod = "";
+
+  globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+    calledUrl = url.toString();
+    calledMethod = init?.method ?? "GET";
+    return new Response(JSON.stringify({ message: "Logged out." }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" }
+    });
+  }) as typeof fetch;
+
+  const result = await logout();
+  assert.equal(result.message, "Logged out.");
+  assert.ok(calledUrl.includes("/auth/logout"));
+  assert.equal(calledMethod, "POST");
+});
+
+test("logout 401 never triggers refresh attempt", async () => {
+  let refreshCalled = false;
+
+  globalThis.fetch = (async (url: string | URL | Request) => {
+    const urlStr = url.toString();
+    if (urlStr.includes("/auth/refresh")) {
+      refreshCalled = true;
+      return new Response(JSON.stringify({ user: mockUser }), { status: 200 });
+    }
+    if (urlStr.includes("/auth/logout")) {
+      return new Response(JSON.stringify({ message: "Unauthorized" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" }
+      });
+    }
+    return new Response(null, { status: 404 });
+  }) as typeof fetch;
+
+  await assert.rejects(async () => {
+    await logout();
+  });
+
+  assert.equal(refreshCalled, false, "401 on /auth/logout must never trigger refresh");
+});
+
+test("logoutAll sends POST /auth/logout-all and 401 never triggers refresh", async () => {
+  let calledUrl = "";
+  let refreshCalled = false;
+
+  globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+    const urlStr = url.toString();
+    if (urlStr.includes("/auth/refresh")) {
+      refreshCalled = true;
+      return new Response(JSON.stringify({ user: mockUser }), { status: 200 });
+    }
+    if (urlStr.includes("/auth/logout-all")) {
+      calledUrl = urlStr;
+      return new Response(JSON.stringify({ message: "All sessions revoked." }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      });
+    }
+    return new Response(null, { status: 404 });
+  }) as typeof fetch;
+
+  const result = await logoutAll();
+  assert.equal(result.message, "All sessions revoked.");
+  assert.ok(calledUrl.includes("/auth/logout-all"));
+  assert.equal(refreshCalled, false);
 });

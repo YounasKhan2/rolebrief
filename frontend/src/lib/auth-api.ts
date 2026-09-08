@@ -46,8 +46,9 @@ function csrfToken() {
 
 export async function fetchCsrfToken(): Promise<string> {
   try {
-    const data = await authRequest<{ csrf: string }>("/auth/csrf");
-    inMemoryCsrfToken = data.csrf;
+    const data = await authRequest<string | { csrf: string }>("/auth/csrf");
+    const token = typeof data === "string" ? data : data?.csrf;
+    inMemoryCsrfToken = token || "";
     return inMemoryCsrfToken;
   } catch {
     return "";
@@ -115,7 +116,8 @@ export async function authRequest<T>(
       !retried &&
       path !== "/auth/refresh" &&
       path !== "/auth/login" &&
-      path !== "/auth/logout"
+      path !== "/auth/logout" &&
+      path !== "/auth/logout-all"
     ) {
       try {
         await refresh();
@@ -160,6 +162,10 @@ export function me() {
   return authRequest<{ user: AuthUser }>("/auth/me");
 }
 
+export function resetCsrfToken() {
+  inMemoryCsrfToken = null;
+}
+
 export async function logout() {
   try {
     return await authRequest<{ message: string }>("/auth/logout", { method: "POST", csrf: true });
@@ -196,8 +202,12 @@ export function revokeSession(sessionId: string) {
   return authRequest<{ message: string }>(`/auth/sessions/${encodeURIComponent(sessionId)}`, { method: "DELETE", csrf: true });
 }
 
-export function logoutAll() {
-  return authRequest<{ message: string }>("/auth/logout-all", { method: "POST", csrf: true });
+export async function logoutAll() {
+  try {
+    return await authRequest<{ message: string }>("/auth/logout-all", { method: "POST", csrf: true });
+  } finally {
+    inMemoryCsrfToken = null;
+  }
 }
 
 export interface AdminUser {

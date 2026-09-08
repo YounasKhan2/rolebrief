@@ -14,8 +14,12 @@ import { ShieldAlert, ArrowLeft } from "lucide-react";
  * - authenticated admin → render children
  */
 export function RequireAdmin({ children }: { children: ReactNode }) {
-  const { isAuthenticated, isAdmin, status, reload, error } = useAuth();
+  const { isAuthenticated, isAdmin, status, reload, error, isLoggingOut } = useAuth();
   const location = useLocation();
+
+  if (isLoggingOut) {
+    return <Navigate to="/" replace />;
+  }
 
   if (status === "loading") {
     return (

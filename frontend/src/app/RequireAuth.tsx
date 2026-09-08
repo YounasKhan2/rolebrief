@@ -11,8 +11,12 @@ import { buildReturnToQuery } from "../lib/routing";
  * - authenticated → render children
  */
 export function RequireAuth({ children }: { children: ReactNode }) {
-  const { isAuthenticated, status, reload, error } = useAuth();
+  const { isAuthenticated, status, reload, error, isLoggingOut } = useAuth();
   const location = useLocation();
+
+  if (isLoggingOut) {
+    return <Navigate to="/" replace />;
+  }
 
   if (status === "loading") {
     return (

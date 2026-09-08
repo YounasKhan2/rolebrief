@@ -10,6 +10,7 @@ interface Toast {
   kind: ToastKind;
   message: string;
   undo?: () => void;
+  actionLabel?: string;
 }
 
 const ToastContext = createContext<(t: Omit<Toast, "id">) => void>(() => {});
@@ -61,7 +62,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                   }}
                   className="text-indigo font-medium shrink-0"
                 >
-                  Undo
+                  {t.actionLabel ?? "Undo"}
                 </button>
               )}
             </div>

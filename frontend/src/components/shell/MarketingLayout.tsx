@@ -2,8 +2,8 @@ import { useEffect } from "react";
 import { Outlet, Link, NavLink, ScrollRestoration, useLocation } from "react-router";
 import { Wordmark } from "../rolebrief/Wordmark";
 import { LinkButton } from "../ui/primitives";
-import { classNames } from "../../lib/format";
 import { useAuth } from "../../lib/auth";
+import { UserMenu } from "./AppShell";
 
 const links = [
   { to: "/#radar", label: "Radar" },
@@ -87,13 +87,7 @@ export default function MarketingLayout() {
                     Open Radar
                   </LinkButton>
                 )}
-                <Link
-                  to="/app/profile"
-                  aria-label="Profile"
-                  className="inline-flex items-center justify-center size-9 rounded-full bg-navy text-white text-[13px] font-semibold ml-1 shadow-sm"
-                >
-                  {user?.initials ?? (isAdmin ? "AD" : "RB")}
-                </Link>
+                <UserMenu />
               </>
             ) : (
               <>
@@ -174,7 +168,7 @@ function Footer() {
             </div>
           ))}
         </div>
-        <div className={classNames("mt-12 pt-6 border-t border-line/70 flex flex-wrap items-center justify-between gap-3 text-[13px] text-slate")}>
+        <div className={("mt-12 pt-6 border-t border-line/70 flex flex-wrap items-center justify-between gap-3 text-[13px] text-slate")}>
           <span>© 2026 RoleBrief. Coverage: Pakistan · UAE · worldwide remote.</span>
           <span className="font-data">Every listing is source-linked and freshness-stamped.</span>
         </div>

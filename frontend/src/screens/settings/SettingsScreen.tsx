@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router";
 import { Download, Trash2, Bell, Mail, Shield, Accessibility, Ban } from "lucide-react";
 import { PageContainer, PageHeader } from "../../components/shell/AppShell";
 import { Button, SectionRule } from "../../components/ui/primitives";
@@ -34,8 +35,11 @@ function SettingsCard({ icon, title, children }: { icon: React.ReactNode; title:
 }
 
 export function Component() {
+  const navigate = useNavigate();
   const toast = useToast();
-  const { user, logout } = useAuth();
+  const { user, logout, logoutAll } = useAuth();
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [isLoggingOutAll, setIsLoggingOutAll] = useState(false);
   const [sessions, setSessions] = useState<AuthSession[]>([]);
   const [jobAlerts, setJobAlerts] = useState(true);
   const [marketing, setMarketing] = useState(false);
@@ -46,6 +50,40 @@ export function Component() {
   const [highContrast, setHighContrast] = useState(false);
   const [privateProfile, setPrivateProfile] = useState(true);
   const [confirmDelete, setConfirmDelete] = useState(false);
+
+  async function handleLogout() {
+    setIsLoggingOut(true);
+    try {
+      await logout();
+      navigate("/", { replace: true });
+    } catch {
+      toast({
+        kind: "error",
+        message: "Couldn’t sign out. Check your connection and try again.",
+        actionLabel: "Retry",
+        undo: () => void handleLogout(),
+      });
+    } finally {
+      setIsLoggingOut(false);
+    }
+  }
+
+  async function handleLogoutAll() {
+    setIsLoggingOutAll(true);
+    try {
+      await logoutAll();
+      navigate("/", { replace: true });
+    } catch {
+      toast({
+        kind: "error",
+        message: "Couldn’t sign out of all devices. Check your connection and try again.",
+        actionLabel: "Retry",
+        undo: () => void handleLogoutAll(),
+      });
+    } finally {
+      setIsLoggingOutAll(false);
+    }
+  }
 
   useEffect(() => {
     void authApi.sessions().then((result) => setSessions(result.sessions)).catch(() => setSessions([]));
@@ -68,8 +106,34 @@ export function Component() {
         </SettingsCard>
 
         <SettingsCard icon={<Shield size={18} />} title="Privacy">
-          <Row title="Signed in as" description={user?.email ?? "Current account"} control={<Button variant="secondary" size="sm" onClick={() => void logout()}>Log out</Button>} />
-          <Row title="Active sessions" description={`${sessions.length} active ${sessions.length === 1 ? "session" : "sessions"}`} control={<Button variant="tertiary" size="sm" onClick={() => void authApi.logoutAll().then(() => logout())}>Log out all devices</Button>} />
+          <Row
+            title="Signed in as"
+            description={user?.email ?? "Current account"}
+            control={
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={isLoggingOut || isLoggingOutAll}
+                onClick={handleLogout}
+              >
+                {isLoggingOut ? "Logging out..." : "Log out"}
+              </Button>
+            }
+          />
+          <Row
+            title="Active sessions"
+            description={`${sessions.length} active ${sessions.length === 1 ? "session" : "sessions"}`}
+            control={
+              <Button
+                variant="tertiary"
+                size="sm"
+                disabled={isLoggingOut || isLoggingOutAll}
+                onClick={handleLogoutAll}
+              >
+                {isLoggingOutAll ? "Logging out..." : "Log out all devices"}
+              </Button>
+            }
+          />
           <Switch label="Private profile" description="Your profile powers matching only. It's private in the MVP." checked={privateProfile} onChange={setPrivateProfile} />
           <Row title="Search & activity history" description="Used to improve your Match Briefs." control={<Button variant="tertiary" size="sm" onClick={() => toast({ kind: "success", message: "Activity history cleared." })}>Clear history</Button>} />
         </SettingsCard>

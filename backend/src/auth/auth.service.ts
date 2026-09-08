@@ -129,26 +129,44 @@ export class AuthService {
     return { user: this.publicUser({ ...existing.user, sessionId: created.id }), csrf };
   }
 
-  async logout(user: AuthenticatedUser | undefined, res: Response) {
-    if (user) {
-      await this.prisma.session.updateMany({
-        where: { id: user.sessionId, revokedAt: null },
-        data: { revokedAt: new Date(), revokedReason: "logout" }
+  async logout(req: Request, res: Response) {
+    const accessToken = req.cookies?.[ACCESS_COOKIE];
+    const refreshToken = req.cookies?.[REFRESH_COOKIE];
+
+    let session: { tokenFamilyId: string; userId: string } | null = null;
+    if (accessToken) {
+      session = await this.prisma.session.findUnique({
+        where: { accessTokenHash: hashToken(accessToken) },
+        select: { tokenFamilyId: true, userId: true },
       });
     }
+
+    if (!session && refreshToken) {
+      session = await this.prisma.session.findUnique({
+        where: { refreshTokenHash: hashToken(refreshToken) },
+        select: { tokenFamilyId: true, userId: true },
+      });
+    }
+
+    if (session) {
+      const now = new Date();
+      await this.prisma.session.updateMany({
+        where: { tokenFamilyId: session.tokenFamilyId, revokedAt: null },
+        data: { revokedAt: now, revokedReason: "logout" },
+      });
+      if (session.userId) {
+        await this.audit("logout", true, { actorUserId: session.userId, targetUserId: session.userId });
+      }
+    }
+
     this.clearAuthCookies(res);
     return { message: "Logged out." };
   }
 
   setCsrfCookie(res: Response) {
     const csrf = randomToken(16);
-    res.cookie(CSRF_COOKIE, csrf, {
-      httpOnly: false,
-      secure: this.config.auth.cookieSecure,
-      sameSite: this.config.auth.cookieSameSite as "lax" | "strict" | "none",
-      path: "/api/v1"
-    });
-    return { csrf };
+    res.cookie(CSRF_COOKIE, csrf, this.getCookieOptions("csrf"));
+    return csrf;
   }
 
   async verifyEmail(token: string, req?: Request) {
@@ -349,28 +367,35 @@ export class AuthService {
     });
   }
 
-  private setAuthCookies(res: Response, accessToken: string, refreshToken: string): string {
-    const cookieBase = {
-      httpOnly: true,
+  private getCookieOptions(type: "access" | "refresh" | "csrf") {
+    const isCsrf = type === "csrf";
+    const path = type === "refresh" ? "/api/v1/auth" : "/api/v1";
+    return {
+      path,
+      httpOnly: !isCsrf,
       secure: this.config.auth.cookieSecure,
       sameSite: this.config.auth.cookieSameSite as "lax" | "strict" | "none",
     };
-    res.cookie(ACCESS_COOKIE, accessToken, { ...cookieBase, path: "/api/v1", maxAge: this.config.auth.accessTokenTtlSeconds * 1000 });
-    res.cookie(REFRESH_COOKIE, refreshToken, { ...cookieBase, path: "/api/v1/auth", maxAge: this.config.auth.refreshSessionTtlSeconds * 1000 });
-    const csrf = randomToken(16);
-    res.cookie(CSRF_COOKIE, csrf, {
-      httpOnly: false,
-      secure: this.config.auth.cookieSecure,
-      sameSite: this.config.auth.cookieSameSite as "lax" | "strict" | "none",
-      path: "/api/v1"
+  }
+
+  private setAuthCookies(res: Response, accessToken: string, refreshToken: string): string {
+    res.cookie(ACCESS_COOKIE, accessToken, {
+      ...this.getCookieOptions("access"),
+      maxAge: this.config.auth.accessTokenTtlSeconds * 1000,
     });
+    res.cookie(REFRESH_COOKIE, refreshToken, {
+      ...this.getCookieOptions("refresh"),
+      maxAge: this.config.auth.refreshSessionTtlSeconds * 1000,
+    });
+    const csrf = randomToken(16);
+    res.cookie(CSRF_COOKIE, csrf, this.getCookieOptions("csrf"));
     return csrf;
   }
 
   clearAuthCookies(res: Response) {
-    res.clearCookie(ACCESS_COOKIE, { path: "/api/v1" });
-    res.clearCookie(REFRESH_COOKIE, { path: "/api/v1/auth" });
-    res.clearCookie(CSRF_COOKIE, { path: "/api/v1" });
+    res.clearCookie(ACCESS_COOKIE, this.getCookieOptions("access"));
+    res.clearCookie(REFRESH_COOKIE, this.getCookieOptions("refresh"));
+    res.clearCookie(CSRF_COOKIE, this.getCookieOptions("csrf"));
   }
 
   private publicUser(
