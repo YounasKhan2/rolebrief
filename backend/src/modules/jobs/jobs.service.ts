@@ -180,6 +180,7 @@ export class JobsService {
       id: job.id,
       slug: job.slug,
       title: job.canonicalTitle,
+      status: job.status,
       company: job.company
         ? {
             slug: job.company.slug,

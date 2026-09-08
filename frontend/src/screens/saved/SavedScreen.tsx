@@ -14,26 +14,49 @@ type Tab = "jobs" | "searches" | "companies";
 
 export function Component() {
   const [tab, setTab] = useState<Tab>("jobs");
-  const { savedSlugs, unsave, save } = useSaved();
+  const { unsave, save } = useSaved();
   const toast = useToast();
 
   const [savedJobs, setSavedJobs] = useState<Job[]>([]);
+  const [totalCount, setTotalCount] = useState<number>(0);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [hasNextPage, setHasNextPage] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const loadJobs = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
-      const res = await fetchSavedJobs();
+      const res = await fetchSavedJobs({ limit: 20 });
       const mapped = (res.data || []).map(mapApiJob);
       setSavedJobs(mapped);
+      setNextCursor(res.pageInfo?.nextCursor ?? null);
+      setHasNextPage(Boolean(res.pageInfo?.hasNextPage));
+      setTotalCount(res.totalCount ?? mapped.length);
     } catch (err: any) {
       setError(err?.message || "Could not load saved jobs.");
     } finally {
       setLoading(false);
     }
   }, []);
+
+  const loadMore = async () => {
+    if (!nextCursor || loadingMore) return;
+    try {
+      setLoadingMore(true);
+      const res = await fetchSavedJobs({ cursor: nextCursor, limit: 20 });
+      const mapped = (res.data || []).map(mapApiJob);
+      setSavedJobs((prev) => [...prev, ...mapped]);
+      setNextCursor(res.pageInfo?.nextCursor ?? null);
+      setHasNextPage(Boolean(res.pageInfo?.hasNextPage));
+    } catch (err: any) {
+      toast({ kind: "error", message: err?.message || "Could not load more saved jobs." });
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   useEffect(() => {
     void loadJobs();
@@ -43,6 +66,7 @@ export function Component() {
     const success = await unsave(job.slug);
     if (success) {
       setSavedJobs((prev) => prev.filter((j) => j.slug !== job.slug));
+      setTotalCount((prev) => Math.max(0, prev - 1));
       toast({
         kind: "info",
         message: `Removed "${job.title}" from saved briefs.`,
@@ -50,6 +74,7 @@ export function Component() {
           const restored = await save(job.slug);
           if (restored) {
             setSavedJobs((prev) => [job, ...prev]);
+            setTotalCount((prev) => prev + 1);
           }
         },
       });
@@ -69,7 +94,7 @@ export function Component() {
           value={tab}
           onChange={setTab}
           tabs={[
-            { value: "jobs", label: "Jobs", count: savedJobs.length },
+            { value: "jobs", label: "Jobs", count: totalCount },
             { value: "searches", label: "Searches", count: 0 },
             { value: "companies", label: "Companies", count: 0 },
           ]}
@@ -119,6 +144,18 @@ export function Component() {
                   onSave={() => handleUnsave(job)}
                 />
               ))}
+
+              {hasNextPage && (
+                <div className="pt-4 flex justify-center">
+                  <Button
+                    variant="secondary"
+                    onClick={loadMore}
+                    loading={loadingMore}
+                  >
+                    Load more saved briefs
+                  </Button>
+                </div>
+              )}
             </div>
           )}
         </>

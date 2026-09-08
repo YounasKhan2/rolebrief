@@ -96,10 +96,19 @@ export function JobCard({
   const authGate = useAuthGate();
 
   const isJobSaved = saved !== undefined ? saved : savedContext.isSaved(job.slug);
+  const isJobPending = savedContext.isPending(job.slug);
   const handleSave = onSave ?? (() => {
+    try {
+      sessionStorage.setItem("rb_intent_save_slug", job.slug);
+    } catch {
+      // Storage unavailable
+    }
     authGate.gate({
       action: "save this role",
       onAuthenticated: () => {
+        try {
+          sessionStorage.removeItem("rb_intent_save_slug");
+        } catch {}
         void savedContext.toggleSave(job.slug);
       }
     });
@@ -136,7 +145,11 @@ export function JobCard({
               <IconButton
                 label={isJobSaved ? "Saved" : "Save job"}
                 onClick={handleSave}
-                className="relative z-10 size-9 shrink-0"
+                disabled={isJobPending}
+                className={classNames(
+                  "relative z-10 size-9 shrink-0",
+                  isJobPending && "opacity-50 cursor-not-allowed"
+                )}
               >
                 {isJobSaved ? <BookmarkCheck size={18} className="text-indigo" /> : <Bookmark size={18} />}
               </IconButton>

@@ -33,11 +33,18 @@ export function Component() {
   const similar = useSimilarJobs(job, 6);
 
   const isSaved = job ? savedContext.isSaved(job.slug) : false;
+  const isPending = job ? savedContext.isPending(job.slug) : false;
   const handleToggleSave = () => {
     if (!job) return;
+    try {
+      sessionStorage.setItem("rb_intent_save_slug", job.slug);
+    } catch {}
     authGate.gate({
       action: "save this role",
       onAuthenticated: () => {
+        try {
+          sessionStorage.removeItem("rb_intent_save_slug");
+        } catch {}
         void savedContext.toggleSave(job.slug);
       }
     });
@@ -95,6 +102,7 @@ export function Component() {
       <Button
         variant="secondary"
         onClick={handleToggleSave}
+        disabled={isPending}
         icon={isSaved ? <BookmarkCheck size={16} className="text-indigo" /> : <Bookmark size={16} />}
       >
         {isSaved ? "Saved" : "Save"}

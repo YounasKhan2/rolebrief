@@ -34,7 +34,7 @@ test("fetchSavedJobSlugs: sends GET /saved/jobs/slugs and returns slugs array", 
   assert.deepEqual(slugs, ["job-alpha", "job-beta"]);
 });
 
-test("fetchSavedJobs: sends GET /saved/jobs and returns serialized list", async () => {
+test("fetchSavedJobs: sends GET /saved/jobs with cursor query parameters and returns paginated response", async () => {
   let capturedUrl = "";
   let capturedMethod = "";
 
@@ -44,7 +44,8 @@ test("fetchSavedJobs: sends GET /saved/jobs and returns serialized list", async 
     return new Response(
       JSON.stringify({
         data: [{ id: "j1", slug: "job-alpha", title: "Job Alpha" }],
-        totalCount: 1
+        pageInfo: { nextCursor: "cur_next", hasNextPage: true },
+        totalCount: 5
       }),
       {
         status: 200,
@@ -53,10 +54,12 @@ test("fetchSavedJobs: sends GET /saved/jobs and returns serialized list", async 
     );
   }) as any;
 
-  const result = await fetchSavedJobs();
+  const result = await fetchSavedJobs({ cursor: "cur_123", limit: 10 });
   assert.equal(capturedMethod, "GET");
-  assert.match(capturedUrl, /\/saved\/jobs$/);
-  assert.equal(result.totalCount, 1);
+  assert.match(capturedUrl, /\/saved\/jobs\?cursor=cur_123&limit=10$/);
+  assert.equal(result.totalCount, 5);
+  assert.equal(result.pageInfo?.hasNextPage, true);
+  assert.equal(result.pageInfo?.nextCursor, "cur_next");
   assert.equal(result.data[0].slug, "job-alpha");
 });
 
