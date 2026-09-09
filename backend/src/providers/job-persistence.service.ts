@@ -154,6 +154,16 @@ export class JobPersistenceService {
         await tx.jobLocation.create({ data: { jobId: savedJob.id, locationId: savedLocation.id } });
       }
 
+      if (outcome === "created") {
+        await tx.jobOutboxEvent.create({
+          data: {
+            jobId: savedJob.id,
+            eventType: "JOB_CREATED",
+            status: "PENDING"
+          }
+        });
+      }
+
       return outcome;
     });
   }

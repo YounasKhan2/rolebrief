@@ -26,6 +26,10 @@ export class AppConfigService {
       .filter(Boolean);
   }
 
+  get publicAppUrl() {
+    return this.config.get("PUBLIC_APP_URL", { infer: true }) || this.frontendOrigins[0] || "http://localhost:3000";
+  }
+
   get databaseUrl() {
     return this.config.get("DATABASE_URL", { infer: true });
   }

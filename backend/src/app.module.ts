@@ -9,6 +9,7 @@ import { CompaniesModule } from "./modules/companies/companies.module";
 import { MatchingModule } from "./modules/matching/matching.module";
 import { EligibilityModule } from "./modules/eligibility/eligibility.module";
 import { AlertsModule } from "./modules/alerts/alerts.module";
+import { NotificationsModule } from "./modules/notifications/notifications.module";
 import { TrackerModule } from "./modules/tracker/tracker.module";
 import { ProfileModule } from "./modules/profile/profile.module";
 import { OnboardingModule } from "./modules/onboarding/onboarding.module";
@@ -32,6 +33,7 @@ import { RadarModule } from "./modules/radar/radar.module";
     MatchingModule,
     EligibilityModule,
     AlertsModule,
+    NotificationsModule,
     TrackerModule,
     ProfileModule,
     OnboardingModule,

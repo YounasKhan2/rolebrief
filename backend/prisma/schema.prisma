@@ -55,6 +55,56 @@ enum ApplicationLifecycle {
   ARCHIVED
 }
 
+enum AlertCadence {
+  IMMEDIATE
+  DAILY
+  WEEKLY
+}
+
+enum AlertChannel {
+  IN_APP
+  EMAIL
+  BOTH
+}
+
+enum AlertStatus {
+  ACTIVE
+  PAUSED
+  DISABLED
+}
+
+enum AlertEligibilityPolicy {
+  INCLUDE_ALL
+  NO_KNOWN_CONFLICTS
+}
+
+enum OutboxStatus {
+  PENDING
+  PROCESSING
+  PROCESSED
+  FAILED
+}
+
+enum AlertMatchNotificationState {
+  PENDING
+  CREATED
+  SUPPRESSED
+}
+
+enum AlertMatchEmailState {
+  PENDING
+  QUEUED
+  SENT
+  SUPPRESSED
+  FAILED
+}
+
+enum NotificationType {
+  JOB_ALERT
+  APPLICATION_REMINDER
+  SYSTEM
+}
+
 model User {
   id                  String      @id @default(cuid())
   name                String
@@ -76,6 +126,7 @@ model User {
   savedItems   SavedItem[]
   applications Application[]
   alerts       Alert[]
+  notifications Notification[]
   sessions     Session[]
   emailVerificationTokens EmailVerificationToken[]
   passwordResetTokens PasswordResetToken[]
@@ -251,6 +302,8 @@ model Job {
   salaries    Salary[]
   savedItems  SavedItem[]
   applications Application[]
+  alertMatches AlertMatch[]
+  outboxEvents JobOutboxEvent[]
 
   @@index([status, publishedAt, discoveredAt, id])
   @@index([status, updatedAt, id])
@@ -435,32 +488,106 @@ model ApplicationHistory {
   @@index([applicationId, occurredAt])
 }
 
-model Alert {
-  id        String   @id @default(cuid())
-  userId    String
-  name      String
-  filters   Json
-  cadence   String   @default("daily")
-  channels  String[] @default([])
-  status    String   @default("active")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+model JobOutboxEvent {
+  id         String       @id @default(cuid())
+  jobId      String
+  eventType  String       @default("JOB_CREATED") // "JOB_CREATED", "JOB_EXPIRED"
+  status     OutboxStatus @default(PENDING)
+  attempts   Int          @default(0)
+  lastError  String?
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  deliveries AlertDelivery[]
+  job        Job          @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+  @@index([jobId])
 }
 
-model AlertDelivery {
-  id        String   @id @default(cuid())
-  alertId   String
-  itemType  String
-  itemId    String
-  dedupeKey String   @unique
-  status    String
-  sentAt    DateTime?
-  createdAt DateTime @default(now())
+model Alert {
+  id                String                 @id @default(cuid())
+  userId            String
+  name              String
+  status            AlertStatus            @default(ACTIVE)
+  channel           AlertChannel           @default(BOTH)
+  cadence           AlertCadence           @default(DAILY)
+  deliveryHourUtc   Int                    @default(9) // 0-23 UTC
+  deliveryDayOfWeek Int?                   // 0-6 (Sun-Sat) for WEEKLY
 
-  alert Alert @relation(fields: [alertId], references: [id], onDelete: Cascade)
+  // Indexed Envelope Columns for Sub-5ms Prefiltering
+  workModes         WorkMode[]             @default([])
+  employmentTypes   String[]               @default([])
+  countryCodes      String[]               @default([])
+  providers         String[]               @default([])
+  salaryDisclosed   Boolean?
+  eligibilityPolicy AlertEligibilityPolicy @default(NO_KNOWN_CONFLICTS)
+
+  // Versioned Structured Criteria
+  criteriaVersion   Int                    @default(1)
+  criteriaJson      Json
+
+  // State Machine & Concurrency Watermarks
+  revision          Int                    @default(0)
+  lastEvaluatedAt   DateTime?
+  lastDeliveredAt   DateTime?
+  nextDeliveryDueAt DateTime?
+
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+
+  user              User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  matches           AlertMatch[]
+
+  @@index([userId, status])
+  @@index([status, cadence, nextDeliveryDueAt])
+  @@index([status, salaryDisclosed])
+}
+
+model AlertMatch {
+  id                 String                      @id @default(cuid())
+  alertId            String
+  jobId              String
+  userId             String                      // Denormalized for rapid candidate queries
+  criteriaVersion    Int                         // Recorded for auditing
+
+  matchScore         Int?
+  eligibilityStatus  String?
+  reasonsSummary     String[]                    @default([])
+
+  notificationState  AlertMatchNotificationState @default(PENDING)
+  notificationId     String?
+
+  emailState         AlertMatchEmailState        @default(PENDING)
+  emailDeliveryId    String?
+
+  suppressionReason  String?
+  createdAt          DateTime                    @default(now())
+
+  alert              Alert                       @relation(fields: [alertId], references: [id], onDelete: Cascade)
+  job                Job                         @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@unique([alertId, jobId])
+  @@index([userId, createdAt])
+  @@index([alertId, createdAt])
+  @@index([emailState, createdAt])
+}
+
+model Notification {
+  id         String           @id @default(cuid())
+  userId     String
+  type       NotificationType @default(JOB_ALERT)
+  title      String
+  body       String
+  linkUrl    String
+  metadata   Json?
+  readAt     DateTime?
+  dedupeKey  String           @unique
+  createdAt  DateTime         @default(now())
+
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt, createdAt])
+  @@index([userId, createdAt])
 }
 
 model IngestionRun {

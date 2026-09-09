@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { ConflictException, ForbiddenException, BadRequestException } from "@nestjs/common";
 import { Role, SeniorityLevel, SkillSource } from "@prisma/client";
+import { SeniorityLevelEnum } from "./dto/profile.dto";
 import { ProfileService } from "./profile.service";
 import { UserRoleGuard } from "../../auth/user-role.guard";
 import {
@@ -80,7 +81,7 @@ test("ProfileService: saveCandidateData increments revision and updates candidat
       headline: "Staff Engineer",
       bio: "Experienced backend engineer building distributed systems.",
       experienceYears: 10,
-      seniorityLevel: SeniorityLevel.SENIOR,
+      seniorityLevel: SeniorityLevelEnum.SENIOR,
       currentCountry: "gb",
       currentCity: "London",
       timezone: "Europe/London",

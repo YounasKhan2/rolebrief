@@ -211,7 +211,7 @@ test("TrackerService.update: enforces optimistic concurrency with expectedRevisi
     },
     (err: any) => {
       assert.ok(err instanceof ConflictException);
-      assert.equal(err.getResponse().currentRevision, 2);
+      assert.equal((err.getResponse() as any).currentRevision, 2);
       return true;
     }
   );

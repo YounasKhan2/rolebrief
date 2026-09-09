@@ -20,6 +20,7 @@ import { classNames } from "../../lib/format";
 import { CommandPalette } from "./CommandPalette";
 import { useAuth } from "../../lib/auth";
 import { useToast } from "../ui/toast";
+import { getUnreadCount } from "../../lib/notifications-api";
 
 const primaryNav = [
   { to: "/app/radar", label: "Radar", icon: Radar },
@@ -211,8 +212,27 @@ export function UserMenu() {
 
 export default function AppShell() {
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState<number>(0);
   const { user, isAdmin } = useAuth();
   const navItems = isAdmin ? [...primaryNav, { to: "/admin", label: "Admin", icon: Shield }] : primaryNav;
+
+  useEffect(() => {
+    let active = true;
+    async function fetchUnread() {
+      try {
+        const res = await getUnreadCount();
+        if (active) setUnreadCount(res.unreadCount);
+      } catch {
+        // silent fallback
+      }
+    }
+    fetchUnread();
+    const timer = setInterval(fetchUnread, 45000);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, []);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -267,8 +287,18 @@ export default function AppShell() {
             >
               <Search size={18} />
             </button>
-            <NavLink to="/app/notifications" aria-label="Notifications" className="inline-flex items-center justify-center size-10 rounded-[var(--radius-control)] text-slate hover:bg-soft hover:text-ink">
+            <NavLink
+              to="/app/notifications"
+              aria-label={unreadCount > 0 ? `Notifications (${unreadCount} unread)` : "Notifications"}
+              className="relative inline-flex items-center justify-center size-10 rounded-[var(--radius-control)] text-slate hover:bg-soft hover:text-ink"
+            >
               <Bell size={18} />
+              {unreadCount > 0 && (
+                <span className="absolute top-2 right-2 flex size-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo opacity-75"></span>
+                  <span className="relative inline-flex rounded-full size-2 bg-indigo"></span>
+                </span>
+              )}
             </NavLink>
             <NavLink to="/app/settings" aria-label="Settings" className="hidden sm:inline-flex items-center justify-center size-10 rounded-[var(--radius-control)] text-slate hover:bg-soft hover:text-ink">
               <Settings size={18} />
@@ -298,10 +328,23 @@ export default function AppShell() {
         aria-label="Primary"
       >
         <div className="grid grid-cols-5">
-          {bottomNav.map((item) => (
+          {[
+            { to: "/app/radar", label: "Radar", icon: Radar },
+            { to: "/app/jobs", label: "Jobs", icon: Search },
+            { to: "/app/tracker", label: "Tracker", icon: ListChecks },
+            {
+              to: "/app/notifications",
+              label: "Alerts",
+              icon: Bell,
+              badgeCount: unreadCount,
+              ariaLabel: unreadCount > 0 ? `Notifications, ${unreadCount} unread` : "Notifications"
+            },
+            { to: "/app/saved", label: "Saved", icon: Bookmark },
+          ].map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
+              aria-label={(item as any).ariaLabel || item.label}
               className={({ isActive }) =>
                 classNames(
                   "flex flex-col items-center justify-center gap-1 h-16 text-[11px] font-medium relative",
@@ -312,7 +355,17 @@ export default function AppShell() {
               {({ isActive }) => (
                 <>
                   {isActive && <span className="absolute top-0 h-0.5 w-8 bg-indigo rounded-full" />}
-                  <item.icon size={20} />
+                  <span className="relative inline-flex items-center justify-center">
+                    <item.icon size={20} />
+                    {"badgeCount" in item && Boolean(item.badgeCount && item.badgeCount > 0) && (
+                      <span className="absolute -top-1.5 -right-2 flex size-3 items-center justify-center">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo opacity-75"></span>
+                        <span className="relative inline-flex items-center justify-center size-3 rounded-full bg-indigo text-[8px] font-bold text-white leading-none">
+                          {item.badgeCount > 9 ? "9+" : item.badgeCount}
+                        </span>
+                      </span>
+                    )}
+                  </span>
                   {item.label}
                 </>
               )}

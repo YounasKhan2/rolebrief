@@ -143,3 +143,105 @@ export function buildAuthEmail(input: {
     }),
   };
 }
+
+export interface AlertRoleItem {
+  title: string;
+  companyName: string;
+  workMode: string;
+  locationsText?: string;
+  salaryText?: string;
+  eligibilityStatus?: string;
+  viewUrl: string;
+}
+
+export function buildAlertMatchEmail(input: {
+  to: string;
+  alertName: string;
+  role: AlertRoleItem;
+  unsubscribeUrl: string;
+  replyTo?: string;
+}): EmailMessage {
+  const title = `New role matched: ${input.alertName}`;
+  const securityNotice = `You received this notification because of your active alert "${input.alertName}". You can manage alerts or pause anytime.`;
+
+  const detailsHtml = `
+    <div style="padding:16px;background-color:#f8fafc;border-radius:8px;border:1px solid #e2e8f0;margin:16px 0;">
+      <h2 style="margin:0 0 6px 0;font-size:17px;font-weight:700;color:#0f172a;">${escapeHtml(input.role.title)}</h2>
+      <p style="margin:0 0 8px 0;font-size:14px;color:#475569;font-weight:600;">${escapeHtml(input.role.companyName)}</p>
+      <div style="font-size:13px;color:#64748b;line-height:1.6;">
+        <div><strong>Mode:</strong> ${escapeHtml(input.role.workMode)}</div>
+        ${input.role.locationsText ? `<div><strong>Location:</strong> ${escapeHtml(input.role.locationsText)}</div>` : ""}
+        ${input.role.salaryText ? `<div><strong>Salary:</strong> ${escapeHtml(input.role.salaryText)}</div>` : ""}
+        ${input.role.eligibilityStatus ? `<div><strong>Eligibility:</strong> ${escapeHtml(input.role.eligibilityStatus)}</div>` : ""}
+      </div>
+    </div>
+    <div style="margin-top:16px;font-size:12px;color:#94a3b8;">
+      <a href="${input.unsubscribeUrl}" style="color:#64748b;text-decoration:underline;">Pause this alert with 1-click</a>
+    </div>
+  `;
+
+  return {
+    to: input.to,
+    subject: `Matched Role: ${input.role.title} at ${input.role.companyName}`,
+    replyTo: input.replyTo,
+    text: `New role matched for "${input.alertName}":\n\n${input.role.title} at ${input.role.companyName}\nWork Mode: ${input.role.workMode}\n${input.role.salaryText ? `Salary: ${input.role.salaryText}\n` : ""}View role: ${input.role.viewUrl}\n\nPause alert: ${input.unsubscribeUrl}`,
+    html: emailShell({
+      title,
+      body: detailsHtml,
+      cta: { label: "View Role Brief", href: input.role.viewUrl },
+      securityNotice
+    })
+  };
+}
+
+export function buildAlertDigestEmail(input: {
+  to: string;
+  alertName: string;
+  roles: AlertRoleItem[];
+  unsubscribeUrl: string;
+  replyTo?: string;
+}): EmailMessage {
+  const count = input.roles.length;
+  const title = `${count} new ${count === 1 ? "role" : "roles"} for ${input.alertName}`;
+  const securityNotice = `You received this daily digest because of your active alert "${input.alertName}". You can manage your delivery cadence or pause anytime.`;
+
+  const rolesHtml = input.roles.map((role) => `
+    <div style="padding:14px 16px;background-color:#ffffff;border-radius:8px;border:1px solid #e2e8f0;margin-bottom:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;">
+        <h3 style="margin:0 0 4px 0;font-size:15px;font-weight:700;color:#0f172a;">
+          <a href="${role.viewUrl}" style="color:#4f46e5;text-decoration:none;">${escapeHtml(role.title)}</a>
+        </h3>
+      </div>
+      <p style="margin:0 0 6px 0;font-size:13px;color:#475569;font-weight:600;">${escapeHtml(role.companyName)}</p>
+      <div style="font-size:12px;color:#64748b;">
+        <span>${escapeHtml(role.workMode)}</span>
+        ${role.locationsText ? ` &middot; <span>${escapeHtml(role.locationsText)}</span>` : ""}
+        ${role.salaryText ? ` &middot; <strong>${escapeHtml(role.salaryText)}</strong>` : ""}
+      </div>
+    </div>
+  `).join("");
+
+  const bodyHtml = `
+    <p style="margin:0 0 16px 0;font-size:14px;color:#475569;">
+      Here is your curated alert digest with fresh matching opportunities:
+    </p>
+    <div>${rolesHtml}</div>
+    <div style="margin-top:20px;font-size:12px;color:#94a3b8;">
+      <a href="${input.unsubscribeUrl}" style="color:#64748b;text-decoration:underline;">Pause this alert with 1-click</a>
+    </div>
+  `;
+
+  return {
+    to: input.to,
+    subject: `Digest: ${count} new roles for ${input.alertName}`,
+    replyTo: input.replyTo,
+    text: `${count} new roles matched for "${input.alertName}":\n\n` +
+      input.roles.map((r) => `* ${r.title} at ${r.companyName} (${r.viewUrl})`).join("\n") +
+      `\n\nPause alert: ${input.unsubscribeUrl}`,
+    html: emailShell({
+      title,
+      body: bodyHtml,
+      securityNotice
+    })
+  };
+}

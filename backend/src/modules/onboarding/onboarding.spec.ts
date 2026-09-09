@@ -11,7 +11,8 @@ import {
   RelocationPreference,
   RemotePreference,
   SalaryPeriod,
-  SeniorityLevel
+  SeniorityLevel,
+  SkillSource
 } from "@prisma/client";
 import {
   calculateOnboardingBriefCompleteness,
@@ -41,6 +42,7 @@ test("calculateProfileCompleteness and calculateOnboardingBriefCompleteness calc
     workAuthorizations: ["US"],
     requiresVisaSponsorship: false,
     searchStatus: CandidateSearchStatus.ACTIVELY_LOOKING,
+    revision: 1,
     createdAt: new Date(),
     updatedAt: new Date(),
     preferences: {
@@ -68,6 +70,7 @@ test("calculateProfileCompleteness and calculateOnboardingBriefCompleteness calc
         normalizedName: "kubernetes",
         yearsExperience: 5,
         isTopSkill: true,
+        source: SkillSource.USER_DECLARED,
         createdAt: new Date(),
         updatedAt: new Date()
       },
@@ -78,6 +81,7 @@ test("calculateProfileCompleteness and calculateOnboardingBriefCompleteness calc
         normalizedName: "go",
         yearsExperience: 6,
         isTopSkill: true,
+        source: SkillSource.USER_DECLARED,
         createdAt: new Date(),
         updatedAt: new Date()
       },
@@ -88,6 +92,7 @@ test("calculateProfileCompleteness and calculateOnboardingBriefCompleteness calc
         normalizedName: "postgresql",
         yearsExperience: 8,
         isTopSkill: false,
+        source: SkillSource.USER_DECLARED,
         createdAt: new Date(),
         updatedAt: new Date()
       }
@@ -358,6 +363,7 @@ test("Opportunity brief completeness is 100% when salary is undisclosed", () => 
     workAuthorizations: ["GB"],
     requiresVisaSponsorship: false,
     searchStatus: CandidateSearchStatus.ACTIVELY_LOOKING,
+    revision: 1,
     createdAt: new Date(),
     updatedAt: new Date(),
     preferences: {
@@ -378,9 +384,9 @@ test("Opportunity brief completeness is 100% when salary is undisclosed", () => 
       updatedAt: new Date()
     },
     skills: [
-      { id: "s1", profileId: "prof_undisclosed", displayName: "TypeScript", normalizedName: "typescript", yearsExperience: 6, isTopSkill: true, createdAt: new Date(), updatedAt: new Date() },
-      { id: "s2", profileId: "prof_undisclosed", displayName: "React", normalizedName: "react", yearsExperience: 6, isTopSkill: true, createdAt: new Date(), updatedAt: new Date() },
-      { id: "s3", profileId: "prof_undisclosed", displayName: "Node.js", normalizedName: "nodejs", yearsExperience: 6, isTopSkill: false, createdAt: new Date(), updatedAt: new Date() }
+      { id: "s1", profileId: "prof_undisclosed", displayName: "TypeScript", normalizedName: "typescript", yearsExperience: 6, isTopSkill: true, source: SkillSource.USER_DECLARED, createdAt: new Date(), updatedAt: new Date() },
+      { id: "s2", profileId: "prof_undisclosed", displayName: "React", normalizedName: "react", yearsExperience: 6, isTopSkill: true, source: SkillSource.USER_DECLARED, createdAt: new Date(), updatedAt: new Date() },
+      { id: "s3", profileId: "prof_undisclosed", displayName: "Node.js", normalizedName: "nodejs", yearsExperience: 6, isTopSkill: false, source: SkillSource.USER_DECLARED, createdAt: new Date(), updatedAt: new Date() }
     ]
   };
 
@@ -397,7 +403,7 @@ test("OnboardingService: skip and complete transition statuses and increment rev
     }
   };
 
-  const mockTx = {
+  const mockTx: any = {
     onboardingProgress: {
       findUnique: async () => ({ status: OnboardingStatus.NOT_STARTED, revision: 3 }),
       updateMany: async () => ({ count: 1 })
@@ -490,7 +496,7 @@ test("OnboardingService: stale skip/complete requests with expectedRevision mism
     () => onboardingService.complete("user_test_1", { expectedRevision: 3 }),
     (err: any) => {
       assert.ok(err instanceof ConflictException);
-      const resp = err.getResponse();
+      const resp = err.getResponse() as any;
       assert.equal(resp.expectedRevision, 3);
       assert.equal(resp.currentRevision, 5);
       assert.ok(resp.currentState);
