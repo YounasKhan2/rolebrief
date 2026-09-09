@@ -197,9 +197,9 @@ export function JobCard({
       )}
 
       {(onDismiss || onHideCompany || onReport) && !compact && (
-        <div className="relative z-10 mt-4 pt-3 border-t border-line flex items-center gap-1 text-slate">
+        <div className="relative z-10 mt-4 pt-3 border-t border-line flex flex-wrap items-center gap-1 gap-y-2 text-slate">
           <SourceBadge source={job.source} domain={domainFromUrl(job.applyUrl)} />
-          <div className="grow" />
+          <div className="grow basis-full sm:basis-auto" />
           {onDismiss && (
             <button onClick={onDismiss} className="inline-flex items-center gap-1 text-[12px] hover:text-ink px-2 py-1 rounded">
               <X size={13} /> Dismiss

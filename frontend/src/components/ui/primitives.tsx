@@ -200,10 +200,10 @@ export function CompanyLogo({ name, size = 40 }: { name: string; size?: number }
 
 export function SourceBadge({ source, domain }: { source: string; domain?: string }) {
   return (
-    <span className="inline-flex items-center gap-1.5 text-[12px] text-slate font-data">
+    <span className="inline-flex min-w-0 items-center gap-1.5 text-[12px] text-slate font-data">
       <span className="size-1.5 rounded-full bg-slate/60" aria-hidden />
-      {source}
-      {domain ? <span className="text-slate/70">· {domain}</span> : null}
+      <span className="shrink-0">{source}</span>
+      {domain ? <span className="min-w-0 truncate text-slate/70">· {domain}</span> : null}
     </span>
   );
 }
