@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router";
 import { RefreshCw, AlertTriangle, CheckCircle2, Sliders, ArrowRight, CalendarClock } from "lucide-react";
 import { PageContainer } from "../../components/shell/AppShell";
@@ -9,20 +9,25 @@ import { useJobs } from "../../lib/jobs";
 import { useToast } from "../../components/ui/toast";
 import { useSaved } from "../../lib/saved-context";
 import { useTracker } from "../../lib/tracker-context";
+import { useAuth } from "../../lib/auth";
+import { useBatchMatchBriefs } from "../../lib/match-briefs";
 
-type Lens = "Best match" | "Freshest" | "Eligible only";
+type Lens = "Relevance" | "Freshest" | "Eligible only";
 
 export function Component() {
   const toast = useToast();
   const { savedCount } = useSaved();
   const { stageCounts } = useTracker();
   const totalTracked = Object.values(stageCounts).reduce((a, b) => a + b, 0);
-  const [lens, setLens] = useState<Lens>("Best match");
+  const [lens, setLens] = useState<Lens>("Relevance");
   const [refreshing, setRefreshing] = useState(false);
   const { data: jobs, loading, error, retry } = useJobs({ limit: 20 });
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
 
   const activeJobs = jobs.filter((j) => !dismissed.has(j.slug));
+  const auth = useAuth();
+  const visibleSlugs = useMemo(() => activeJobs.map((j) => j.slug), [activeJobs]);
+  const { summaries: matchSummaries } = useBatchMatchBriefs(visibleSlugs, auth.user, auth.isAuthenticated && !auth.isAdmin);
   const lensJobs =
     lens === "Eligible only" ? activeJobs.filter((j) => j.eligibility.state === "eligible") : activeJobs;
   const companyNames = Array.from(new Set(activeJobs.map((job) => job.companyName))).slice(0, 3);
@@ -94,7 +99,7 @@ export function Component() {
               onChange={setLens}
               size="sm"
               options={[
-                { value: "Best match", label: "Best match" },
+                { value: "Relevance", label: "Relevance" },
                 { value: "Freshest", label: "Freshest" },
                 {
                   value: "Eligible only",
@@ -133,18 +138,18 @@ export function Component() {
               icon={<CheckCircle2 size={40} className="text-emerald" />}
               title="You're all caught up"
               body="No new roles match this lens right now. Widen your lens or check back after the next sync."
-              action={<Button variant="secondary" onClick={() => setLens("Best match")}>Reset lens</Button>}
+              action={<Button variant="secondary" onClick={() => setLens("Relevance")}>Reset lens</Button>}
             />
           ) : (
             <div className="space-y-8">
               {/* Top opportunities (80% jobs) with an interleaved news signal (20%) */}
               <div>
-                <SectionLabel>Top opportunities for you</SectionLabel>
+                <SectionLabel>Recent opportunities</SectionLabel>
                 <div className="space-y-4">
                   {lensJobs.slice(0, 2).map((j) => (
                     <JobCard
                       key={j.slug}
-                      job={j}
+                      job={{ ...j, match: { ...j.match, summary: matchSummaries.get(j.slug) } }}
                       onDismiss={() => dismiss(j.slug)}
                       onHideCompany={() => toast({ kind: "info", message: `Hidden ${j.companyName} from Radar.` })}
                       onReport={() => toast({ kind: "warning", message: "Thanks — we'll review this listing." })}
@@ -164,7 +169,7 @@ export function Component() {
                   {lensJobs.slice(2).map((j) => (
                     <JobCard
                       key={j.slug}
-                      job={j}
+                      job={{ ...j, match: { ...j.match, summary: matchSummaries.get(j.slug) } }}
                       onDismiss={() => dismiss(j.slug)}
                       onHideCompany={() => toast({ kind: "info", message: `Hidden ${j.companyName} from Radar.` })}
                     />
@@ -172,14 +177,6 @@ export function Component() {
                 </div>
               </div>
 
-              <div>
-                <SectionLabel>Worth exploring · a small stretch</SectionLabel>
-                {lensJobs[0] ? (
-                  <JobCard job={lensJobs[0]} variant="compact" />
-                ) : (
-                  <EmptyState title="Nothing to explore yet" body="No stored provider job is available for this section." />
-                )}
-              </div>
             </div>
           )}
         </div>

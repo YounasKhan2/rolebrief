@@ -151,7 +151,7 @@ function Hero({ jobsCount, loading }: { jobsCount: number; loading: boolean }) {
           className="animate-fade-in-up mt-6 text-[17px] sm:text-lg text-slate leading-relaxed reading-measure mx-auto"
           style={{ animationDelay: "0.16s" }}
         >
-          RoleBrief scans thousands of fresh roles, checks your eligibility, scores
+          RoleBrief scans thousands of fresh roles, checks your eligibility, explains
           your fit, and delivers a concise ranked brief source-linked, freshness-stamped,
           uncertainty labelled. Every single day.
         </p>

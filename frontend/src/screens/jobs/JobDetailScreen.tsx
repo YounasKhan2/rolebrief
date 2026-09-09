@@ -25,6 +25,8 @@ import { useSaved } from "../../lib/saved-context";
 import { useTracker } from "../../lib/tracker-context";
 import { useAuth } from "../../lib/auth";
 import { useJobEligibility } from "../../lib/eligibility";
+import { fetchMatchBriefDetail, type MatchBriefDetail } from "../../lib/match-briefs";
+import { useEffect, useState } from "react";
 
 export function Component() {
   const { slug } = useParams();
@@ -34,10 +36,30 @@ export function Component() {
   const authGate = useAuthGate();
   const savedContext = useSaved();
   const trackerContext = useTracker();
-  const { isAuthenticated, isAdmin } = useAuth();
+  const auth = useAuth();
+  const { isAuthenticated, isAdmin } = auth;
   const { result: eligibilityResult } = useJobEligibility(slug, isAuthenticated && !isAdmin);
   const { data: job, loading, error, notFound, retry } = useJob(slug);
   const similar = useSimilarJobs(job, 6);
+  const [matchDetail, setMatchDetail] = useState<MatchBriefDetail | null>(null);
+  const [matchError, setMatchError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!slug || !isAuthenticated || isAdmin) {
+      setMatchDetail(null);
+      setMatchError(null);
+      return;
+    }
+    const controller = new AbortController();
+    setMatchError(null);
+    fetchMatchBriefDetail(slug, controller.signal)
+      .then(setMatchDetail)
+      .catch((err) => {
+        if (controller.signal.aborted) return;
+        setMatchError(err instanceof Error ? err.message : "Could not load Match Brief.");
+      });
+    return () => controller.abort();
+  }, [slug, isAuthenticated, isAdmin]);
 
   const isSaved = job ? savedContext.isSaved(job.slug) : false;
   const isPending = job ? savedContext.isPending(job.slug) : false;
@@ -115,6 +137,7 @@ export function Component() {
     Boolean(eligibilityResult?.isJobExpired);
   const canApply = availability ? availability.canApply : (!expired && Boolean(job.applyUrl));
   const domain = job.applyDomain || domainFromUrl(job.applyUrl);
+  const suspicious = Boolean(job.applyUrl && domain === "unknown");
   const isProviderDomain = domain.toLowerCase().includes("himalayas.app");
   const ctaLabel = expired
     ? "Listing expired"
@@ -241,7 +264,15 @@ export function Component() {
 
             {/* Full Match Brief */}
             <div className="rounded-[var(--radius-feature)] border border-line bg-soft/60 p-6">
-              <MatchBrief data={job.match} variant="full" />
+              <MatchBrief
+                data={{
+                  ...job.match,
+                  summary: matchDetail ?? undefined,
+                  detail: matchDetail
+                }}
+                variant="full"
+              />
+              {matchError && <p className="mt-3 text-[13px] text-amber">{matchError}</p>}
             </div>
 
             {/* Source disclosure */}

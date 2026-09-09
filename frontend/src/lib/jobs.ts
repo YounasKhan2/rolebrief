@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, getJob as getApiJob, getRelatedJobs, listJobs, type ApiJob, type ListJobsParams } from "./api";
 import { domainFromUrl } from "./format";
+import type { MatchBriefDetail, MatchBriefSummary } from "./match-briefs";
 
 export type EligibilityState = "eligible" | "check" | "conflict" | "unknown";
 export type RemoteEligibility =
@@ -25,6 +26,8 @@ export interface MatchBriefData {
   missing: string[];
   ambiguous: string[];
   suggestions: string[];
+  summary?: MatchBriefSummary;
+  detail?: MatchBriefDetail | null;
 }
 
 export interface FreshnessEvent {
@@ -124,8 +127,8 @@ const notCalculated: MatchBriefData = {
   dimensions: [],
   evidence: [],
   missing: [],
-  ambiguous: ["Not calculated. Profile-based matching is not connected to the backend yet."],
-  suggestions: ["Profile required to calculate a RoleBrief match score."],
+    ambiguous: ["Not calculated. Sign in and complete comparable profile facts to calculate a Match Brief."],
+    suggestions: ["Profile required to calculate a RoleBrief alignment label."],
 };
 
 export function normalizeFilterList(val: Set<string> | string[] | undefined): string[] {
@@ -492,7 +495,7 @@ export function mapApiJob(job: ApiJob): Job {
     match: notCalculated,
     reasons: [
       `Source-linked: ${sourceDomain}`,
-      "Profile required for match score",
+      "Profile required for Match Brief",
       "Company momentum unavailable",
     ],
     description: {

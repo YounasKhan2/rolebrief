@@ -2,6 +2,7 @@ import { API_BASE_URL, ApiError } from "./api";
 import { serializeRequestBody } from "./request-body";
 import { clearCachedThemePreferences } from "./accessibility";
 import { clearEligibilityCache } from "./eligibility";
+import { clearMatchBriefCache } from "./match-briefs";
 
 export { serializeRequestBody };
 
@@ -195,6 +196,7 @@ export async function logout() {
     inMemoryCsrfToken = null;
     clearCachedThemePreferences();
     clearEligibilityCache();
+    clearMatchBriefCache();
   }
 }
 
@@ -243,6 +245,7 @@ export async function logoutAll() {
     inMemoryCsrfToken = null;
     clearCachedThemePreferences();
     clearEligibilityCache();
+    clearMatchBriefCache();
   }
 }
 

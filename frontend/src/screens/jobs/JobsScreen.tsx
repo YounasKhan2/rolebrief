@@ -12,6 +12,7 @@ import { classNames } from "../../lib/format";
 import { useAuthGate } from "../../components/auth/AuthGateDialog";
 import { useAuth } from "../../lib/auth";
 import { useBatchEligibility } from "../../lib/eligibility";
+import { useBatchMatchBriefs } from "../../lib/match-briefs";
 
 const remoteFilters = [
   { key: "worldwide", label: "Worldwide remote" },
@@ -93,9 +94,15 @@ export function Component() {
   } = useJobs(jobsOptions);
 
   const { isAuthenticated, isAdmin } = useAuth();
+  const auth = useAuth();
   const visibleSlugs = useMemo(() => jobs.map((j) => j.slug), [jobs]);
   const { summaries: eligibilitySummaries } = useBatchEligibility(
     visibleSlugs,
+    isAuthenticated && !isAdmin
+  );
+  const { summaries: matchSummaries } = useBatchMatchBriefs(
+    visibleSlugs,
+    auth.user,
     isAuthenticated && !isAdmin
   );
 
@@ -203,7 +210,7 @@ export function Component() {
               value={sort === "relevance" ? "best" : sort}
               onChange={(v) => update({ sort: v })}
               size="sm"
-              options={[{ value: "best", label: "Best match" }, { value: "newest", label: "Newest" }]}
+              options={[{ value: "best", label: "Relevance" }, { value: "newest", label: "Newest" }]}
             />
             <SegmentedControl
               value={density}
@@ -275,7 +282,7 @@ export function Component() {
                 {jobs.map((j) => (
                   <JobCard
                     key={j.slug}
-                    job={j}
+                    job={{ ...j, match: { ...j.match, summary: matchSummaries.get(j.slug) } }}
                     eligibilitySummary={eligibilitySummaries.get(j.slug)}
                     variant={density === "compact" ? "compact" : "comfortable"}
                   />
@@ -339,7 +346,7 @@ export function Component() {
             value={sort === "relevance" ? "best" : sort}
             onChange={(v) => update({ sort: v })}
             size="sm"
-            options={[{ value: "best", label: "Best match" }, { value: "newest", label: "Newest" }]}
+            options={[{ value: "best", label: "Relevance" }, { value: "newest", label: "Newest" }]}
           />
         </div>
         {filterRail}
