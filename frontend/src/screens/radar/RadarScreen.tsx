@@ -89,7 +89,21 @@ export function Component() {
             <div className="inline-flex items-center gap-2 text-sm text-slate">
               <Sliders size={15} /> Preference lens
             </div>
-            <SegmentedControl value={lens} onChange={setLens} size="sm" options={(["Best match", "Freshest", "Eligible only"] as Lens[]).map((l) => ({ value: l, label: l }))} />
+            <SegmentedControl
+              value={lens}
+              onChange={setLens}
+              size="sm"
+              options={[
+                { value: "Best match", label: "Best match" },
+                { value: "Freshest", label: "Freshest" },
+                {
+                  value: "Eligible only",
+                  label: "Eligible only",
+                  disabled: true,
+                  title: "Catalog-wide eligibility filtering will be enabled with the radar matching feed."
+                }
+              ]}
+            />
           </div>
 
           {loading || refreshing ? (

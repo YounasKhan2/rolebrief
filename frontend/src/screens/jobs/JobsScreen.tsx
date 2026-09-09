@@ -10,6 +10,8 @@ import { useJobs, disciplines } from "../../lib/jobs";
 import { useToast } from "../../components/ui/toast";
 import { classNames } from "../../lib/format";
 import { useAuthGate } from "../../components/auth/AuthGateDialog";
+import { useAuth } from "../../lib/auth";
+import { useBatchEligibility } from "../../lib/eligibility";
 
 const remoteFilters = [
   { key: "worldwide", label: "Worldwide remote" },
@@ -89,6 +91,13 @@ export function Component() {
     loadMore,
     retry
   } = useJobs(jobsOptions);
+
+  const { isAuthenticated, isAdmin } = useAuth();
+  const visibleSlugs = useMemo(() => jobs.map((j) => j.slug), [jobs]);
+  const { summaries: eligibilitySummaries } = useBatchEligibility(
+    visibleSlugs,
+    isAuthenticated && !isAdmin
+  );
 
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
@@ -267,6 +276,7 @@ export function Component() {
                   <JobCard
                     key={j.slug}
                     job={j}
+                    eligibilitySummary={eligibilitySummaries.get(j.slug)}
                     variant={density === "compact" ? "compact" : "comfortable"}
                   />
                 ))}

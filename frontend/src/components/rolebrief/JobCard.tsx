@@ -11,6 +11,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import type { Job } from "../../lib/jobs";
+import type { EligibilitySummary } from "../../lib/eligibility";
 import { classNames } from "../../lib/format";
 import { CompanyLogo, SourceBadge, IconButton, Badge } from "../ui/primitives";
 import { EligibilityShield } from "./EligibilityShield";
@@ -76,6 +77,7 @@ export function JobCard({
   onHideCompany,
   onReport,
   interactive = true,
+  eligibilitySummary,
 }: {
   job: Job;
   variant?: Variant;
@@ -86,8 +88,10 @@ export function JobCard({
   onHideCompany?: () => void;
   onReport?: () => void;
   interactive?: boolean;
+  eligibilitySummary?: EligibilitySummary;
 }) {
   const expired = job.flags?.includes("expired");
+  const activeSummary = eligibilitySummary ?? (job as any).eligibilitySummary;
   const compact = variant === "compact";
   const location = useLocation();
   const detailPath = location.pathname.startsWith("/app") ? `/app/jobs/${job.slug}` : `/jobs/${job.slug}`;
@@ -165,7 +169,12 @@ export function JobCard({
       {!compact && (
         <div className="mt-4 grid gap-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <EligibilityShield state={job.eligibility.state} reasons={job.eligibility.reasons} />
+            <EligibilityShield
+              summary={activeSummary}
+              state={job.eligibility.state}
+              reasons={job.eligibility.reasons}
+              isJobExpired={expired}
+            />
             <FreshnessTimeline events={job.freshness} />
           </div>
           <div className="rounded-[10px] bg-soft/70 p-3">
@@ -177,7 +186,12 @@ export function JobCard({
 
       {compact && (
         <div className="mt-3 flex items-center justify-between gap-3">
-          <EligibilityShield state={job.eligibility.state} reasons={job.eligibility.reasons} />
+          <EligibilityShield
+            summary={activeSummary}
+            state={job.eligibility.state}
+            reasons={job.eligibility.reasons}
+            isJobExpired={expired}
+          />
           <MatchBrief data={job.match} variant="compact" />
         </div>
       )}

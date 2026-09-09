@@ -56,12 +56,17 @@ export async function runBackfill(options: {
 
     while (true) {
       const jobs = await prisma.job.findMany({
-        where: cursorId ? { id: { gt: cursorId } } : undefined,
+        where: {
+          ...(cursorId ? { id: { gt: cursorId } } : {}),
+          providerRecords: {
+            some: { providerId: "himalayas.guid" }
+          }
+        },
         orderBy: { id: "asc" },
         take: batchSize,
         include: {
           providerRecords: {
-            where: { providerId: "himalayas" },
+            where: { providerId: "himalayas.guid" },
             take: 1
           }
         }

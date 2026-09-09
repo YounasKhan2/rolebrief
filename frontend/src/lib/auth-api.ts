@@ -1,6 +1,7 @@
 import { API_BASE_URL, ApiError } from "./api";
 import { serializeRequestBody } from "./request-body";
 import { clearCachedThemePreferences } from "./accessibility";
+import { clearEligibilityCache } from "./eligibility";
 
 export { serializeRequestBody };
 
@@ -100,10 +101,17 @@ export function refresh(): Promise<{ user: AuthUser }> {
 
 export async function authRequest<T>(
   path: string,
-  options: { method?: string; body?: unknown; csrf?: boolean; headers?: Record<string, string> } = {},
+  options: { method?: string; body?: unknown; csrf?: boolean; headers?: Record<string, string>; signal?: AbortSignal } = {},
   retried = false
 ): Promise<T> {
   const controller = new AbortController();
+  if (options.signal) {
+    if (options.signal.aborted) {
+      controller.abort(options.signal.reason);
+    } else {
+      options.signal.addEventListener("abort", () => controller.abort(options.signal!.reason), { once: true });
+    }
+  }
   const timeout = setTimeout(() => controller.abort("timeout"), DEFAULT_TIMEOUT_MS);
   const initialHeaders: Record<string, string> = { Accept: "application/json", ...options.headers };
   const { body: serializedBody, headers } = serializeRequestBody(options.body, initialHeaders);
@@ -186,6 +194,7 @@ export async function logout() {
   } finally {
     inMemoryCsrfToken = null;
     clearCachedThemePreferences();
+    clearEligibilityCache();
   }
 }
 
@@ -233,6 +242,7 @@ export async function logoutAll() {
   } finally {
     inMemoryCsrfToken = null;
     clearCachedThemePreferences();
+    clearEligibilityCache();
   }
 }
 

@@ -183,7 +183,7 @@ export function SegmentedControl<T extends string>({
   onChange,
   size = "md",
 }: {
-  options: (T | { value: T; label: string })[];
+  options: (T | { value: T; label: string; disabled?: boolean; title?: string })[];
   value: T;
   onChange: (v: T) => void;
   size?: "sm" | "md";
@@ -198,11 +198,14 @@ export function SegmentedControl<T extends string>({
           key={o.value}
           type="button"
           aria-pressed={value === o.value}
-          onClick={() => onChange(o.value)}
+          disabled={o.disabled}
+          title={o.title}
+          onClick={() => !o.disabled && onChange(o.value)}
           className={classNames(
             "rounded-[7px] font-medium transition-colors duration-150",
             size === "sm" ? "h-8 px-3" : "h-9 px-3.5",
             value === o.value ? "bg-white text-ink shadow-sm" : "text-slate hover:text-ink",
+            o.disabled && "opacity-50 cursor-not-allowed hover:text-slate"
           )}
         >
           {o.label}

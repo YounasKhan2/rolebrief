@@ -23,6 +23,8 @@ import { useToast } from "../../components/ui/toast";
 import { useAuthGate } from "../../components/auth/AuthGateDialog";
 import { useSaved } from "../../lib/saved-context";
 import { useTracker } from "../../lib/tracker-context";
+import { useAuth } from "../../lib/auth";
+import { useJobEligibility } from "../../lib/eligibility";
 
 export function Component() {
   const { slug } = useParams();
@@ -31,11 +33,17 @@ export function Component() {
   const toast = useToast();
   const authGate = useAuthGate();
   const savedContext = useSaved();
+  const trackerContext = useTracker();
+  const { isAuthenticated, isAdmin } = useAuth();
+  const { result: eligibilityResult } = useJobEligibility(slug, isAuthenticated && !isAdmin);
   const { data: job, loading, error, notFound, retry } = useJob(slug);
   const similar = useSimilarJobs(job, 6);
 
   const isSaved = job ? savedContext.isSaved(job.slug) : false;
   const isPending = job ? savedContext.isPending(job.slug) : false;
+  const isJobTracked = job ? trackerContext.isTracked(job.slug) : false;
+  const isTrackerPending = job ? trackerContext.isPending(job.slug) : false;
+
   const handleToggleSave = () => {
     if (!job) return;
     try {
@@ -48,6 +56,16 @@ export function Component() {
           sessionStorage.removeItem("rb_intent_save_slug");
         } catch {}
         void savedContext.toggleSave(job.slug);
+      }
+    });
+  };
+
+  const handleTrack = () => {
+    if (!job) return;
+    authGate.gate({
+      action: "track this role",
+      onAuthenticated: () => {
+        void trackerContext.trackJob(job.slug);
       }
     });
   };
@@ -89,29 +107,22 @@ export function Component() {
     );
   }
 
-  const expired = job.flags?.includes("expired");
-  const suspicious = job.flags?.includes("suspicious");
+  const availability = eligibilityResult?.jobAvailability;
+  const expired =
+    job.flags?.includes("expired") ||
+    availability?.status === "EXPIRED" ||
+    availability?.status === "DELISTED" ||
+    Boolean(eligibilityResult?.isJobExpired);
+  const canApply = availability ? availability.canApply : (!expired && Boolean(job.applyUrl));
   const domain = job.applyDomain || domainFromUrl(job.applyUrl);
   const isProviderDomain = domain.toLowerCase().includes("himalayas.app");
   const ctaLabel = expired
     ? "Listing expired"
-    : isProviderDomain
-      ? "Apply on Himalayas"
-      : "Apply on company site";
-
-  const trackerContext = useTracker();
-  const isJobTracked = job ? trackerContext.isTracked(job.slug) : false;
-  const isTrackerPending = job ? trackerContext.isPending(job.slug) : false;
-
-  const handleTrack = () => {
-    if (!job) return;
-    authGate.gate({
-      action: "track this role",
-      onAuthenticated: () => {
-        void trackerContext.trackJob(job.slug);
-      }
-    });
-  };
+    : !canApply
+      ? (availability?.reason || "Application unavailable")
+      : isProviderDomain
+        ? "Apply on Himalayas"
+        : "Apply on company site";
 
   const applyBar = (
     <>
@@ -141,9 +152,9 @@ export function Component() {
           Track
         </Button>
       )}
-      {expired ? (
-        <span className="grow inline-flex items-center justify-center gap-2 h-11 px-4 rounded-[var(--radius-control)] bg-slate/20 text-slate font-medium cursor-not-allowed">
-          <AlertTriangle size={16} /> Listing expired
+      {!canApply ? (
+        <span className="grow inline-flex items-center justify-center gap-2 h-11 px-4 rounded-[var(--radius-control)] bg-slate/20 text-slate font-medium cursor-not-allowed text-sm">
+          <AlertTriangle size={16} /> {ctaLabel}
         </span>
       ) : (
         <a
@@ -267,7 +278,13 @@ export function Component() {
             </div>
             <div className="rounded-[var(--radius-card)] border border-line p-5">
               <Kicker className="mb-3">Eligibility Shield</Kicker>
-              <EligibilityShield state={job.eligibility.state} reasons={job.eligibility.reasons} variant="detail" />
+              <EligibilityShield
+                detail={eligibilityResult}
+                state={job.eligibility.state}
+                reasons={job.eligibility.reasons}
+                isJobExpired={expired}
+                variant="detail"
+              />
             </div>
             <div className="rounded-[var(--radius-card)] border border-line p-5">
               <Kicker className="mb-3">Freshness</Kicker>

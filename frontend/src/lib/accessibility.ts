@@ -32,6 +32,7 @@ export function applyThemePreferences(
   contrast: ContrastPreference,
   broadcast = true
 ) {
+  if (typeof document === "undefined") return;
   const root = document.documentElement;
 
   // Persist valid preferences to localStorage
