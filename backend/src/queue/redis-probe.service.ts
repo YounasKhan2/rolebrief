@@ -15,12 +15,16 @@ export class RedisProbeService implements OnModuleInit {
       retryStrategy: null
     });
 
+    let connected = false;
     try {
       redis.on("error", () => undefined);
       await redis.connect();
+      connected = true;
       await redis.ping();
     } finally {
-      redis.disconnect();
+      if (connected) {
+        redis.disconnect();
+      }
     }
   }
 }

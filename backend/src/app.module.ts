@@ -16,6 +16,7 @@ import { SavedModule } from "./modules/saved/saved.module";
 import { PreferencesModule } from "./modules/preferences/preferences.module";
 import { AuthModule } from "./auth/auth.module";
 import { AdminModule } from "./admin/admin.module";
+import { RadarModule } from "./modules/radar/radar.module";
 
 @Module({
   imports: [
@@ -35,8 +36,8 @@ import { AdminModule } from "./admin/admin.module";
     ProfileModule,
     OnboardingModule,
     SavedModule,
-    PreferencesModule
+    PreferencesModule,
+    RadarModule
   ]
 })
 export class AppModule {}
-

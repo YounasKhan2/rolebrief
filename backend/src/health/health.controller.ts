@@ -41,9 +41,11 @@ export class HealthController {
           retryStrategy: null
         });
 
+        let connected = false;
         try {
           redis.on("error", () => undefined);
           await redis.connect();
+          connected = true;
           await redis.ping();
           return this.indicator.check("redis").up();
         } catch (error) {
@@ -52,7 +54,9 @@ export class HealthController {
           });
           throw new HealthCheckError("Redis health check failed", result);
         } finally {
-          redis.disconnect();
+          if (connected) {
+            redis.disconnect();
+          }
         }
       }
     ]);
