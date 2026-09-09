@@ -4,7 +4,7 @@ import * as crypto from "node:crypto";
 import { AppConfigService } from "../../common/config/app-config.service";
 import { PrismaService } from "../../prisma/prisma.service";
 import { EligibilityEvaluatorService } from "./eligibility-evaluator.service";
-import { CandidateEligibilityFacts, JobEligibilityFacts } from "./factual-facts.interface";
+import { CandidateEligibilityFacts, CanonicalRemoteScope, JobEligibilityFacts } from "./factual-facts.interface";
 import { DetailedEligibilityResult, EligibilitySummary } from "./reason-codes";
 
 export const CACHE_TTL_SECONDS = 3600;
