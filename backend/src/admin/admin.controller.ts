@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Param, Patch, UseGuards } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
 import { Role, UserStatus } from "@prisma/client";
 import { Roles, CurrentUser, AuthenticatedUser } from "../auth/auth.decorators";
@@ -6,12 +6,49 @@ import { CsrfGuard } from "../auth/csrf.guard";
 import { UpdateUserRoleDto, UpdateUserStatusDto } from "../auth/dto/auth.dto";
 import { AuthService } from "../auth/auth.service";
 import { PrismaService } from "../prisma/prisma.service";
+import { AdminOperationsService } from "./admin-operations.service";
+import { AdminModerationActionDto, AdminModerationQueueQueryDto } from "./dto/admin-operations.dto";
 
 @ApiTags("admin")
 @Controller("admin")
 @Roles(Role.ADMIN)
 export class AdminController {
-  constructor(private readonly prisma: PrismaService, private readonly auth: AuthService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auth: AuthService,
+    private readonly operations: AdminOperationsService
+  ) {}
+
+  @Get("metrics")
+  async metrics() {
+    return this.operations.getMetrics();
+  }
+
+  @Get("sources")
+  async sources() {
+    return this.operations.getSources();
+  }
+
+  @Post("sources/:providerId/sync")
+  @UseGuards(CsrfGuard)
+  async syncSource(@CurrentUser() actor: AuthenticatedUser, @Param("providerId") providerId: string) {
+    return this.operations.triggerSync(providerId, actor.id);
+  }
+
+  @Get("moderation/queue")
+  async moderationQueue(@Query() query: AdminModerationQueueQueryDto) {
+    return this.operations.getModerationQueue(query);
+  }
+
+  @Post("moderation/:jobId/action")
+  @UseGuards(CsrfGuard)
+  async moderationAction(
+    @CurrentUser() actor: AuthenticatedUser,
+    @Param("jobId") jobId: string,
+    @Body() body: AdminModerationActionDto
+  ) {
+    return this.operations.executeModerationAction(actor.id, jobId, body);
+  }
 
   @Get("users")
   async users() {
@@ -91,3 +128,4 @@ export class AdminController {
     };
   }
 }
+

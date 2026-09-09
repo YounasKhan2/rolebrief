@@ -312,6 +312,7 @@ model Job {
   @@index([status, remoteScope])
   @@index([status, seniority])
   @@index([status, employmentType])
+  @@index([moderationState, status, discoveredAt])
   @@index([companyId])
   @@index([sourceId])
   @@index([canonicalFingerprint])
@@ -616,6 +617,7 @@ model IngestionRun {
   metadata    Json?
 
   @@index([providerId, startedAt])
+  @@index([status, startedAt])
 }
 
 model IngestionCheckpoint {
