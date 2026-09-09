@@ -233,11 +233,11 @@ export function Component() {
         )}
       </div>
 
-      <div className="mt-6 grid lg:grid-cols-[260px_1fr] gap-8 items-start">
+      <div className="mt-6 grid min-w-0 lg:grid-cols-[260px_1fr] gap-8 items-start">
         {/* Left filter rail (desktop) */}
         <aside className="hidden lg:block lg:sticky lg:top-36">{filterRail}</aside>
 
-        <div>
+        <div className="min-w-0">
           <div className="flex items-center justify-between mb-4">
             <p className="text-sm text-slate" role="status" aria-live="polite">
               {loading ? (
