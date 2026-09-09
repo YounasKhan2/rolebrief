@@ -9,6 +9,8 @@ import { useToast } from "../../components/ui/toast";
 import { useAuth } from "../../lib/auth";
 import * as authApi from "../../lib/auth-api";
 import type { AdminUser, AuthRole, AuthStatus } from "../../lib/auth-api";
+import { getAdminMetrics, getAdminSources } from "../../lib/admin-api";
+import type { AdminMetrics, AdminSourceItem } from "../../lib/admin-api";
 
 const providers = [
   { name: "Himalayas provider", status: "healthy" as const, lastSync: new Date().toISOString(), ingested: 0, failed: 0 },
@@ -34,43 +36,51 @@ export function Component() {
   const { user } = useAuth();
   const toast = useToast();
   const [users, setUsers] = useState<AdminUser[]>([]);
-  const [loadingUsers, setLoadingUsers] = useState(true);
-  const [userError, setUserError] = useState("");
+  const [metrics, setMetrics] = useState<AdminMetrics | null>(null);
+  const [sources, setSources] = useState<AdminSourceItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  async function loadUsers(showSuccessToast = false) {
-    setLoadingUsers(true);
-    setUserError("");
+  async function loadAdminData(showSuccessToast = false) {
+    setLoading(true);
+    setError("");
     try {
-      const result = await authApi.listAdminUsers();
-      setUsers(result.users);
+      const [usersRes, metricsRes, sourcesRes] = await Promise.all([
+        authApi.listAdminUsers(),
+        getAdminMetrics(),
+        getAdminSources()
+      ]);
+      setUsers(usersRes.users);
+      setMetrics(metricsRes);
+      setSources(sourcesRes.sources);
       if (showSuccessToast) {
         toast({ kind: "info", message: "Admin data refreshed." });
       }
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : "Could not load users.";
-      setUserError(msg);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Could not load admin data.";
+      setError(msg);
       if (showSuccessToast) {
         toast({ kind: "error", message: msg });
       }
     } finally {
-      setLoadingUsers(false);
+      setLoading(false);
     }
   }
 
   useEffect(() => {
-    void loadUsers();
+    void loadAdminData();
   }, []);
 
   async function updateRole(target: AdminUser, role: AuthRole) {
     if (!window.confirm(`Change ${target.email} to ${role}?`)) return;
     await authApi.updateAdminUserRole(target.id, role);
-    await loadUsers();
+    await loadAdminData();
   }
 
   async function updateStatus(target: AdminUser, status: AuthStatus) {
     if (!window.confirm(`Change ${target.email} status to ${status}?`)) return;
     await authApi.updateAdminUserStatus(target.id, status);
-    await loadUsers();
+    await loadAdminData();
   }
 
   return (
@@ -82,20 +92,38 @@ export function Component() {
         actions={
           <Button
             variant="secondary"
-            disabled={loadingUsers}
-            onClick={() => void loadUsers(true)}
-            icon={<RefreshCw size={16} className={loadingUsers ? "animate-spin" : ""} />}
+            disabled={loading}
+            onClick={() => void loadAdminData(true)}
+            icon={<RefreshCw size={16} className={loading ? "animate-spin" : ""} />}
           >
-            {loadingUsers ? "Refreshing..." : "Refresh now"}
+            {loading ? "Refreshing..." : "Refresh now"}
           </Button>
         }
       />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <Stat label="Active roles indexed" value="Unavailable" hint="Admin metrics API not connected" tone="text-slate" />
-        <Stat label="Ingested (24h)" value="Unavailable" hint="No live admin metric yet" />
-        <Stat label="Failed records (24h)" value="Unavailable" hint="No live admin metric yet" tone="text-slate" />
-        <Stat label="Duplicate rate" value="Unavailable" hint="No live admin metric yet" tone="text-slate" />
+        <Stat
+          label="Active roles indexed"
+          value={metrics ? metrics.jobs.active.toLocaleString() : loading ? "..." : "0"}
+          hint={metrics ? `${metrics.jobs.total.toLocaleString()} total roles ingested` : "Live catalog status"}
+        />
+        <Stat
+          label="Ingested (24h)"
+          value={metrics ? metrics.ingestion.recordsCreatedLast24h.toLocaleString() : loading ? "..." : "0"}
+          hint={metrics ? `${metrics.ingestion.runsLast24h} runs (${metrics.ingestion.failedRunsLast24h} failed)` : "Last 24h ingestion"}
+        />
+        <Stat
+          label="Failed records (24h)"
+          value={metrics ? metrics.ingestion.failedRunsLast24h.toLocaleString() : loading ? "..." : "0"}
+          hint={metrics ? `${metrics.pipelines.outboxFailed} outbox failures` : "Zero failures desired"}
+          tone={metrics && metrics.ingestion.failedRunsLast24h > 0 ? "text-red" : "text-slate"}
+        />
+        <Stat
+          label="Users active"
+          value={metrics ? `${metrics.users.active} / ${metrics.users.total}` : loading ? "..." : "0"}
+          hint={metrics ? `${metrics.pipelines.alertsActive} active alerts` : "Registered accounts"}
+          tone="text-ink"
+        />
       </div>
 
       <div className="grid lg:grid-cols-[1fr_320px] gap-8 items-start">
@@ -108,15 +136,17 @@ export function Component() {
             <div className="hidden md:grid grid-cols-[1.6fr_0.9fr_1fr_0.7fr_0.7fr] gap-4 px-5 py-3 bg-soft text-[12px] font-semibold text-slate uppercase tracking-wide">
               <span>Source</span><span>Status</span><span>Last sync</span><span>Ingested</span><span>Failed</span>
             </div>
-            {providers.map((p) => {
+            {loading && sources.length === 0 ? (
+              <div className="px-5 py-5 text-sm text-slate">Loading providers...</div>
+            ) : sources.map((p) => {
               const m = statusMeta[p.status];
               return (
-                <div key={p.name} className="grid md:grid-cols-[1.6fr_0.9fr_1fr_0.7fr_0.7fr] gap-2 md:gap-4 px-5 py-4 border-t border-line items-center">
+                <div key={p.id} className="grid md:grid-cols-[1.6fr_0.9fr_1fr_0.7fr_0.7fr] gap-2 md:gap-4 px-5 py-4 border-t border-line items-center">
                   <span className="font-medium text-ink inline-flex items-center gap-2"><Database size={15} className="text-slate" /> {p.name}</span>
                   <span><Badge tone={m.tone}>{m.icon} {m.label}</Badge></span>
-                  <span className="font-data text-[13px] text-slate">{relativeTime(p.lastSync)}</span>
-                  <span className="font-data text-[13px] text-ink">{p.ingested.toLocaleString()}</span>
-                  <span className={`font-data text-[13px] ${p.failed > 20 ? "text-red" : "text-slate"}`}>{p.failed}</span>
+                  <span className="font-data text-[13px] text-slate">{p.lastRun ? relativeTime(p.lastRun.startedAt) : "No syncs yet"}</span>
+                  <span className="font-data text-[13px] text-ink">{p.stats24h.recordsCreated.toLocaleString()}</span>
+                  <span className={`font-data text-[13px] ${p.stats24h.failures > 0 ? "text-red" : "text-slate"}`}>{p.stats24h.failures}</span>
                 </div>
               );
             })}
@@ -128,10 +158,10 @@ export function Component() {
             <div className="hidden md:grid grid-cols-[1.7fr_0.7fr_1fr_1.1fr_1fr] gap-4 px-5 py-3 bg-soft text-[12px] font-semibold text-slate uppercase tracking-wide">
               <span>Email</span><span>Role</span><span>Status</span><span>Verified</span><span>Created</span>
             </div>
-            {loadingUsers ? (
+            {loading && users.length === 0 ? (
               <div className="px-5 py-5 text-sm text-slate">Loading users...</div>
-            ) : userError ? (
-              <div className="px-5 py-5 text-sm text-red">{userError}</div>
+            ) : error ? (
+              <div className="px-5 py-5 text-sm text-red">{error}</div>
             ) : users.length === 0 ? (
               <div className="px-5 py-5 text-sm text-slate">No users found.</div>
             ) : users.map((u) => (
@@ -158,16 +188,35 @@ export function Component() {
           <div className="rounded-[var(--radius-card)] border border-amber/30 bg-amber-tint/50 p-4">
             <div className="flex items-center gap-2 text-ink font-semibold text-sm"><AlertTriangle size={16} className="text-amber" /> Needs attention</div>
             <ul className="mt-2 space-y-2 text-[13px] text-ink/90">
-              <li>No live admin incident feed is connected yet.</li>
+              {metrics && (metrics.jobs.suspicious > 0 || metrics.jobs.flagged > 0 || metrics.pipelines.outboxFailed > 0) ? (
+                <>
+                  {metrics.jobs.suspicious > 0 && (
+                    <li><b>{metrics.jobs.suspicious}</b> suspicious listings detected.</li>
+                  )}
+                  {metrics.jobs.flagged > 0 && (
+                    <li><b>{metrics.jobs.flagged}</b> flagged jobs need review.</li>
+                  )}
+                  {metrics.pipelines.outboxFailed > 0 && (
+                    <li><b>{metrics.pipelines.outboxFailed}</b> failed outbox events.</li>
+                  )}
+                </>
+              ) : (
+                <li>All ingestion and moderation pipelines healthy.</li>
+              )}
             </ul>
-            <Button variant="secondary" size="sm" className="mt-3" disabled>View incident log</Button>
-            <p className="text-[12px] text-slate mt-1.5">Available after the incident logging service is connected.</p>
+            <Button variant="secondary" size="sm" className="mt-3" asChild>
+              <Link to="/admin/moderation">View moderation queue</Link>
+            </Button>
           </div>
 
           <div className="rounded-[var(--radius-card)] border border-line p-4">
             <Kicker className="mb-2">Moderation queue</Kicker>
-            <p className="font-data text-2xl text-ink">0</p>
-            <p className="text-[12px] text-slate">Moderation API not connected</p>
+            <p className="font-data text-2xl text-ink">
+              {metrics ? (metrics.jobs.suspicious + metrics.jobs.flagged + metrics.jobs.stale + metrics.jobs.expired).toLocaleString() : "0"}
+            </p>
+            <p className="text-[12px] text-slate">
+              {metrics ? `${metrics.jobs.suspicious} suspicious, ${metrics.jobs.stale} stale` : "Live queue count"}
+            </p>
             <SectionRule className="my-3" />
             <Link to="/admin/moderation" className="text-[13px] text-indigo font-medium inline-flex items-center gap-1">Open moderation <ArrowRight size={14} /></Link>
           </div>
