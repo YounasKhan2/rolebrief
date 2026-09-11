@@ -1,6 +1,7 @@
 import { createBrowserRouter, Navigate, Outlet, useLocation, useParams } from "react-router";
 import MarketingLayout from "../components/shell/MarketingLayout";
 import AppShell from "../components/shell/AppShell";
+import CandidateAppShell from "../components/candidate/CandidateAppShell";
 import { RouteFallback } from "./RouteFallback";
 import { RequireAuth } from "./RequireAuth";
 import { RequireAdmin } from "./RequireAdmin";
@@ -106,7 +107,7 @@ export const router = createBrowserRouter([
     element: (
       <RequireAuth>
         <OnboardingGate>
-          <AppShell />
+          <CandidateAppShell />
         </OnboardingGate>
       </RequireAuth>
     ),

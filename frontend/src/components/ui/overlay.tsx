@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
@@ -72,6 +72,8 @@ export function Sheet({
   side = "bottom",
   children,
   footer,
+  className,
+  manageFocus = false,
 }: {
   open: boolean;
   onClose: () => void;
@@ -79,15 +81,35 @@ export function Sheet({
   side?: "bottom" | "right";
   children: ReactNode;
   footer?: ReactNode;
+  className?: string;
+  manageFocus?: boolean;
 }) {
   useLockScroll(open);
   useEscape(open, onClose);
+  const panelRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open || !manageFocus) return;
+    const previous = document.activeElement as HTMLElement | null;
+    const panel = panelRef.current;
+    const focusable = () => Array.from(panel?.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), select:not([disabled]), a[href], [tabindex="0"]') ?? []).filter(el => el.getClientRects().length > 0);
+    focusable()[0]?.focus();
+    function trap(event: KeyboardEvent) {
+      if (event.key !== "Tab") return;
+      const items = focusable();
+      const first = items[0], last = items[items.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+      if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    }
+    panel?.addEventListener("keydown", trap);
+    return () => { panel?.removeEventListener("keydown", trap); previous?.focus(); };
+  }, [open, manageFocus]);
   if (!open) return null;
   return createPortal(
-    <div className="fixed inset-0 z-50">
+    <div className={classNames("fixed inset-0 z-50", className)}>
       <div className="absolute inset-0 bg-ink/40" onClick={onClose} aria-hidden />
       <div
         role="dialog"
+        ref={panelRef}
         aria-modal="true"
         aria-label={title}
         className={classNames(

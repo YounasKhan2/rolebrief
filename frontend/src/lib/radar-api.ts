@@ -121,6 +121,7 @@ export function useRadarFeed(params: Omit<RadarFeedParams, "cursor" | "signal"> 
   const consumedCursors = useRef<Set<string>>(new Set());
   const loadMoreControllerRef = useRef<AbortController | null>(null);
   const requestIdRef = useRef(0);
+  const snapshotNoticeRef = useRef<string | null>(null);
 
   useEffect(() => {
     activeKeyRef.current = queryKey;
@@ -136,7 +137,8 @@ export function useRadarFeed(params: Omit<RadarFeedParams, "cursor" | "signal"> 
     setHasNextPage(false);
     setLoading(true);
     setError(null);
-    setNotice(null);
+    setNotice(snapshotNoticeRef.current);
+    snapshotNoticeRef.current = null;
     setAppendedAnnouncement("");
 
     const requestId = ++requestIdRef.current;
@@ -206,7 +208,7 @@ export function useRadarFeed(params: Omit<RadarFeedParams, "cursor" | "signal"> 
         if (controller.signal.aborted) return;
         const apiError = err instanceof ApiError ? err : new ApiError("Could not load more Radar jobs.", "network");
         if (isFeedSnapshotExpired(apiError)) {
-          setNotice("Radar refreshed because the previous feed snapshot expired.");
+          snapshotNoticeRef.current = "Radar refreshed because the previous feed snapshot expired.";
           setVersion((v) => v + 1);
           return;
         }

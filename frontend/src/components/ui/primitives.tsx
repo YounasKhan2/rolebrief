@@ -219,16 +219,20 @@ export function EmptyState({
   title,
   body,
   action,
+  className,
+  headingLevel: Heading = "h3",
 }: {
   icon?: ReactNode;
   title: string;
   body: string;
   action?: ReactNode;
+  className?: string;
+  headingLevel?: "h2" | "h3";
 }) {
   return (
-    <div className="flex flex-col items-center text-center gap-3 py-16 px-6">
+    <div className={classNames("flex flex-col items-center text-center gap-3 py-16 px-6", className)}>
       {icon && <div className="text-slate">{icon}</div>}
-      <h3 className="text-lg font-semibold text-ink">{title}</h3>
+      <Heading className="text-lg font-semibold text-ink">{title}</Heading>
       <p className="text-slate max-w-sm">{body}</p>
       {action && <div className="mt-2">{action}</div>}
     </div>
