@@ -15,6 +15,7 @@ import {
   ExternalLink
 } from "lucide-react";
 import { PageContainer, PageHeader } from "../../components/shell/AppShell";
+import "../../components/candidate/candidate-account.css";
 import { Badge, Button, EmptyState } from "../../components/ui/primitives";
 import { Tabs } from "../../components/ui/form";
 import { useToast } from "../../components/ui/toast";
@@ -96,11 +97,10 @@ export function Component() {
   });
 
   return (
-    <PageContainer className="max-w-[860px]">
+    <PageContainer className="candidate-account candidate-notifications">
       <PageHeader
-        kicker="Notification centre"
-        title="What changed while you were away."
-        description="Matches, alert discoveries, and key updates — labelled with reason facts and direct links."
+        title="Notifications"
+        description="Updates from alerts, saved roles, tracker activity, and account events."
         actions={
           <div className="flex items-center gap-2">
             <Button
@@ -162,7 +162,7 @@ export function Component() {
             const link = n.linkUrl || "#";
 
             return (
-              <li key={n.id}>
+              <li key={n.id} className={isUnread ? "candidate-notification is-unread" : "candidate-notification"}>
                 <Link
                   to={link}
                   onClick={() => handleNotificationClick(n)}

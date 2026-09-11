@@ -37,14 +37,14 @@ export const STAGE_LABELS: Record<ApplicationStage, string> = {
 
 export const STAGE_TONES: Record<
   ApplicationStage,
-  "neutral" | "brand" | "amber" | "green" | "red"
+  "slate" | "indigo" | "amber" | "emerald" | "red"
 > = {
-  SAVED: "neutral",
-  APPLIED: "brand",
+  SAVED: "slate",
+  APPLIED: "indigo",
   INTERVIEWING: "amber",
-  OFFER: "green",
+  OFFER: "emerald",
   REJECTED: "red",
-  WITHDRAWN: "neutral"
+  WITHDRAWN: "slate"
 };
 
 interface ApplicationDetailDialogProps {
@@ -196,6 +196,8 @@ export function ApplicationDetailDialog({
   return (
     <>
     <Dialog
+      className="pipeline-dialog"
+      manageFocus
       open={open}
       onClose={onClose}
       title="Application Details"
@@ -272,7 +274,7 @@ export function ApplicationDetailDialog({
             <div className="flex flex-col items-end gap-1.5">
               <div className="flex items-center gap-1.5">
                 {application.lifecycle === "ARCHIVED" && (
-                  <Badge tone="neutral">
+                  <Badge tone="slate">
                     Archived
                   </Badge>
                 )}

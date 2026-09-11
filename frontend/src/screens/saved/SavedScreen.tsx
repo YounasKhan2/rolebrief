@@ -4,7 +4,9 @@ import { Bookmark, Bell, Building2, RefreshCw } from "lucide-react";
 import { PageContainer, PageHeader } from "../../components/shell/AppShell";
 import { EmptyState, Button } from "../../components/ui/primitives";
 import { Tabs } from "../../components/ui/form";
-import { JobCard } from "../../components/rolebrief/JobCard";
+import CandidateJobCard from "../../components/candidate/CandidateJobCard";
+import CandidateJobSkeleton from "../../components/candidate/CandidateJobSkeleton";
+import "../../components/candidate/candidate-pipeline.css";
 import { useSaved } from "../../lib/saved-context";
 import { fetchSavedJobs } from "../../lib/saved-api";
 import { mapApiJob, type Job } from "../../lib/jobs";
@@ -82,11 +84,11 @@ export function Component() {
   };
 
   return (
-    <PageContainer>
+    <PageContainer className="candidate-pipeline candidate-saved">
       <PageHeader
-        kicker="Saved Briefs"
-        title="Everything you kept for action."
-        description="Review, organize, and act on roles you've bookmarked."
+        title="Saved"
+        description="Roles you kept for review, comparison, or later action."
+        actions={<Link className="candidate-control" to="/app/tracker">Open tracker</Link>}
       />
 
       <div className="mb-6">
@@ -104,19 +106,7 @@ export function Component() {
       {tab === "jobs" && (
         <>
           {loading ? (
-            <div className="space-y-4">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <div key={i} className="rounded-[var(--radius-card)] border border-line bg-white p-5 animate-pulse">
-                  <div className="flex gap-3.5">
-                    <div className="size-11 rounded-[10px] bg-soft" />
-                    <div className="grow space-y-2">
-                      <div className="h-5 w-1/3 rounded bg-soft" />
-                      <div className="h-4 w-1/2 rounded bg-soft" />
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <CandidateJobSkeleton />
           ) : error ? (
             <EmptyState
               title="Could not load saved jobs"
@@ -137,11 +127,10 @@ export function Component() {
           ) : (
             <div className="space-y-4">
               {savedJobs.map((job) => (
-                <JobCard
+                <CandidateJobCard
                   key={job.slug}
-                  job={job}
-                  saved={true}
-                  onSave={() => handleUnsave(job)}
+                  job={{ ...job, saved: true }}
+                  onUnsave={() => handleUnsave(job)}
                 />
               ))}
 

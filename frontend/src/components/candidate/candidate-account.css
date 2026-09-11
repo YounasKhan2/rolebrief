@@ -1,0 +1,41 @@
+.candidate-account { width: 100%; max-width: none; min-width: 0; margin: 0; padding: 24px 30px 48px; color: #24303b; }
+.candidate-account > div:first-child { padding-bottom: 20px; border-bottom: 1px solid #e0e5e8; align-items: center; }
+.candidate-account h1 { font-size: 23px; line-height: 1.35; letter-spacing: 0; }
+.candidate-account h1 + p { font-size: 12px; line-height: 1.65; color: #697480; }
+.candidate-account h2 { font-size: 15px; letter-spacing: 0; }
+.candidate-account h3 { font-size: 14px; }
+.candidate-account :is(button,input,select,textarea) { font-size: 12px; }
+.candidate-account :is(p,dd,li,h3) { overflow-wrap: anywhere; }
+.candidate-account :focus-visible,.candidate-account-sheet :focus-visible { outline: 2px solid #5749ca; outline-offset: 3px; }
+.candidate-alert-row { border-bottom: 1px solid #dfe5e9; border-left: 3px solid #d5d0eb; background: #f5f4fa; padding: 18px 20px; }
+.candidate-alert-row > div > div { min-width: 0; }
+.candidate-alert-row > div:first-child > div:first-child > div:first-child { flex-wrap: wrap; }
+.candidate-alert-row:nth-child(even) { background: #f0f5f7; border-left-color: #cbdbe5; }
+.candidate-alert-row .font-data { font-family: Inter,sans-serif; font-size: 11px; }
+.candidate-notifications > ul { border-top: 1px solid #e0e5e8; }
+.candidate-notification { margin-top: 0 !important; }
+.candidate-notification > a { border: 0; border-bottom: 1px solid #e0e5e8; border-radius: 0; box-shadow: none; background: #f7f9f9; padding: 18px; }
+.candidate-notification.is-unread > a { background: #f0f2fa; border-left: 3px solid #8d82ce; padding-left: 15px; }
+.candidate-notification p { font-size: 13px; line-height: 1.65; }
+.candidate-notification .kicker { font-size: 10px; letter-spacing: 0; }
+.candidate-settings-section { padding: 24px 0; border-bottom: 1px solid #e0e5e8; scroll-margin-top: 80px; }
+.candidate-settings-section > div:first-child { margin-bottom: 12px; }
+.candidate-settings-section > div:first-child > span { display: inline-flex; padding: 7px; border-radius: 5px; background: #eeebf8; }
+.candidate-settings-section:nth-child(2) > div:first-child > span { background: #e9f3ed; color: #307454; }
+.candidate-settings-section:nth-child(3) > div:first-child > span { background: #eaf1f8; color: #406888; }
+.candidate-settings-section .text-sm { font-size: 13px; }
+.candidate-settings-section .bg-canvas { background: #f2f5f5; }
+.candidate-settings-section .shrink-0 { max-width: 100%; }
+.candidate-profile > .grid > .bg-white { border-radius: 0; border: 0; border-left: 3px solid #d2cbea; background: #f1eef8; box-shadow: none; }
+.candidate-profile > .grid > .bg-white:nth-child(2) { background: #edf5f1; border-color: #c4dbcc; }
+.candidate-profile .rounded-\[var\(--radius-card\)\] { border-radius: 6px; box-shadow: none; }
+.candidate-profile .font-mono { font-family: Inter,sans-serif; letter-spacing: 0; }
+.candidate-profile .grid > div { min-width: 0; }
+.candidate-account-sheet [role=dialog] { background: #fafbf9; color: #24303b; }
+.candidate-account-sheet :is(input,select,textarea) { font-size: 13px; min-width: 0; max-width: 100%; }
+.candidate-account-sheet h2 { font-size: 18px; }
+.candidate-account-sheet label { font-size: 12px; }
+.candidate-account-sheet .rounded-full { border-radius: 5px; }
+@media (min-width: 1200px) { .candidate-settings-section { display: grid; grid-template-columns: 230px minmax(0,1fr); gap: 28px; align-items: start; } }
+@media (max-width: 760px) { .candidate-account { padding: 18px 14px 32px; } .candidate-account > div:first-child > div { min-width: 0; max-width: 100%; flex-wrap: wrap; } .candidate-account > div:first-child > div > div { flex-wrap: wrap; } .candidate-account :is(input,select,textarea) { max-width: 100%; min-width: 0; } .candidate-account button:not([role=switch]) { min-height: 40px; } .candidate-alert-row { padding: 14px; } .candidate-settings-section { padding: 18px 0; } .candidate-account-sheet [role=dialog] { width: 100%; max-width: 100%; } }
+@media (prefers-reduced-motion: reduce) { .candidate-account *,.candidate-account-sheet * { animation: none !important; transition: none !important; } }

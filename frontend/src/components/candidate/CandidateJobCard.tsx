@@ -71,12 +71,14 @@ export default function CandidateJobCard({
   density = "comfortable",
   matchLoading = false,
   eligibilityLoading = false,
+  onUnsave,
 }: {
   job: CandidateJob;
   timezone?: string;
   density?: "comfortable" | "compact";
   matchLoading?: boolean;
   eligibilityLoading?: boolean;
+  onUnsave?: () => Promise<void>;
 }) {
   const saved = useSaved();
   const tracker = useTracker();
@@ -103,6 +105,7 @@ export default function CandidateJobCard({
   const deadline = job.freshness.find((item) => item.kind === "deadline");
   const rolePath = `/app/jobs/${encodeURIComponent(job.slug)}`;
   async function toggleSaved() {
+    if (savedState && onUnsave) { await onUnsave(); return; }
     const target = !savedState;
     const success = await (target
       ? saved.save(job.slug)

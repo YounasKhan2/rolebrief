@@ -31,24 +31,46 @@ export function Dialog({
   title,
   children,
   footer,
+  className,
+  manageFocus = false,
 }: {
   open: boolean;
   onClose: () => void;
   title: string;
   children: ReactNode;
   footer?: ReactNode;
+  className?: string;
+  manageFocus?: boolean;
 }) {
   useLockScroll(open);
   useEscape(open, onClose);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open || !manageFocus) return;
+    const previous = document.activeElement as HTMLElement | null;
+    const panel = dialogRef.current;
+    const controls = () => Array.from(panel?.querySelectorAll<HTMLElement>('button:not([disabled]),input:not([disabled]),textarea:not([disabled]),select:not([disabled]),a[href],[tabindex="0"]') ?? []).filter(el => el.getClientRects().length > 0);
+    controls()[0]?.focus();
+    const trap = (event: KeyboardEvent) => {
+      if (event.key !== "Tab") return;
+      const items = controls();
+      const first = items[0], last = items[items.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    };
+    panel?.addEventListener("keydown", trap);
+    return () => { panel?.removeEventListener("keydown", trap); previous?.focus(); };
+  }, [open, manageFocus]);
   if (!open) return null;
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-ink/40 animate-[fade_.2s_ease]" onClick={onClose} aria-hidden />
       <div
         role="dialog"
+        ref={dialogRef}
         aria-modal="true"
         aria-label={title}
-        className="relative w-full max-w-lg rounded-[var(--radius-feature)] bg-white shadow-[var(--shadow-raised)] p-6 animate-[pop_.2s_var(--ease-enter)]"
+        className={classNames("relative w-full max-w-lg rounded-[var(--radius-feature)] bg-white shadow-[var(--shadow-raised)] p-6 animate-[pop_.2s_var(--ease-enter)]", className)}
       >
         <div className="flex items-start justify-between gap-4 mb-4">
           <h2 className="text-xl font-semibold text-ink">{title}</h2>

@@ -14,6 +14,7 @@ import {
   RefreshCw
 } from "lucide-react";
 import { PageContainer, PageHeader } from "../../components/shell/AppShell";
+import "../../components/candidate/candidate-account.css";
 import { Badge, Button, FilterChip, EmptyState } from "../../components/ui/primitives";
 import { Input, SegmentedControl, Checkbox } from "../../components/ui/form";
 import { Sheet } from "../../components/ui/overlay";
@@ -101,11 +102,10 @@ export function Component() {
   }
 
   return (
-    <PageContainer>
+    <PageContainer className="candidate-account candidate-alerts">
       <PageHeader
-        kicker="Smart Alerts"
-        title="Roles that find you."
-        description="Live alert rules evaluate fresh job postings in real-time, delivering high-alignment and eligible opportunities directly to your inbox and in-app centre."
+        title="Alerts"
+        description="Monitor new roles that match your opportunity brief."
         actions={
           <div className="flex items-center gap-2">
             <Button
@@ -142,7 +142,7 @@ export function Component() {
             const isActing = actionLoadingId === a.id;
             const criteria = a.criteria;
             return (
-              <div key={a.id} className="rounded-[var(--radius-card)] border border-line p-5 bg-white shadow-xs">
+              <div key={a.id} className="candidate-alert-row">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <div className="flex items-center gap-2">
@@ -324,6 +324,8 @@ function AlertBuilder({ open, onClose, onCreated }: AlertBuilderProps) {
 
   return (
     <Sheet
+      className="candidate-account-sheet"
+      manageFocus
       open={open}
       onClose={onClose}
       title="Create Smart Alert"

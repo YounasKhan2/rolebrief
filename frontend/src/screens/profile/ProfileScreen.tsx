@@ -13,6 +13,7 @@ import {
   AlertTriangle
 } from "lucide-react";
 import { PageContainer, PageHeader } from "../../components/shell/AppShell";
+import "../../components/candidate/candidate-account.css";
 import { Kicker, Badge, Button, SectionRule, FilterChip } from "../../components/ui/primitives";
 import { Input } from "../../components/ui/form";
 import { useAuth } from "../../lib/auth";
@@ -313,7 +314,7 @@ export function Component() {
 
   if (loading && !profileData) {
     return (
-      <PageContainer className="max-w-[980px]">
+      <PageContainer className="candidate-account candidate-profile">
         <div className="py-24 flex flex-col items-center justify-center gap-3">
           <Loader2 size={24} className="animate-spin text-indigo" />
           <span className="text-xs font-mono uppercase tracking-widest text-slate">
@@ -421,11 +422,10 @@ export function Component() {
   ];
 
   return (
-    <PageContainer className="max-w-[980px]">
+    <PageContainer className="candidate-account candidate-profile">
       <PageHeader
-        kicker="Candidate Profile"
-        title="What powers your matches"
-        description="Your canonical candidate brief. Match Briefs, Radar ranking, and eligibility filters are continuously computed from these preferences."
+        title="Profile"
+        description="The facts RoleBrief uses to personalize your search."
         actions={
           <Button
             variant="secondary"

@@ -94,6 +94,8 @@ export function AddApplicationDialog({
 
   return (
     <Dialog
+      className="pipeline-dialog"
+      manageFocus
       open={open}
       onClose={handleClose}
       title="Track New Application"

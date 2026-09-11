@@ -17,6 +17,9 @@ import { Badge, Button, EmptyState } from "../../components/ui/primitives";
 import { SegmentedControl } from "../../components/ui/form";
 import { relativeTime } from "../../lib/format";
 import { useTracker } from "../../lib/tracker-context";
+import { useSaved } from "../../lib/saved-context";
+import CandidateJobSkeleton from "../../components/candidate/CandidateJobSkeleton";
+import "../../components/candidate/candidate-pipeline.css";
 import {
   ApplicationStage,
   TrackedApplication
@@ -39,6 +42,7 @@ const STAGES: ApplicationStage[] = [
 ];
 
 export function Component() {
+  const saved = useSaved();
   const {
     applications,
     stageCounts,
@@ -91,11 +95,10 @@ export function Component() {
   const totalTracked = Object.values(stageCounts).reduce((a, b) => a + b, 0);
 
   return (
-    <PageContainer>
+    <PageContainer className="candidate-pipeline candidate-tracker">
       <PageHeader
-        kicker="Application tracker"
-        title="Every application, one clear view."
-        description="Status, next action and history with accessible keyboard navigation and drag-and-drop."
+        title="Tracker"
+        description="Follow applications, next actions, and role progress."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <SegmentedControl
@@ -127,7 +130,14 @@ export function Component() {
         }
       />
 
-      {lifecycleFilter === "ARCHIVED" && applications.length === 0 && !isLoading ? (
+      <div className="pipeline-summary" aria-label="Application overview">
+        <div><span>{lifecycleFilter === "ACTIVE" ? "Active applications" : "Archived applications"}</span><strong>{isLoading ? "—" : totalCount}</strong></div>
+        <div><span>Interviewing</span><strong>{isLoading ? "—" : stageCounts.INTERVIEWING || 0}</strong></div>
+        <div><span>Offers</span><strong>{isLoading ? "—" : stageCounts.OFFER || 0}</strong></div>
+        <div><span>Upcoming actions · loaded roles</span><strong>{isLoading ? "—" : applications.filter(a => a.lifecycle === "ACTIVE" && a.nextActionAt && Date.parse(a.nextActionAt) >= Date.now()).length}</strong></div>
+      </div>
+      <div className="pipeline-connection"><Link to="/app/saved">Review saved roles <ChevronRight size={13} /></Link></div>
+      {isLoading ? <CandidateJobSkeleton count={3} /> : lifecycleFilter === "ARCHIVED" && applications.length === 0 && !isLoading ? (
         <EmptyState
           icon={<LayoutList size={40} />}
           title="No archived applications"
@@ -304,7 +314,7 @@ export function Component() {
             </div>
           ) : (
             // Board View (Kanban with Drag-and-Drop AND Accessible Select Dropdown on Every Card)
-            <div className="grid grid-flow-col auto-cols-[minmax(270px,1fr)] gap-4 overflow-x-auto scrollbar-thin pb-4 pt-1">
+            <div className="pipeline-board" role="region" aria-label="Application stages" tabIndex={0}>
               {STAGES.map((st) => {
                 const columnItems = applications.filter((a) => a.stage === st);
                 return (
@@ -312,7 +322,7 @@ export function Component() {
                     key={st}
                     onDragOver={(e) => e.preventDefault()}
                     onDrop={(e) => handleDrop(e, st)}
-                    className="rounded-[var(--radius-card)] bg-soft/80 border border-line/70 p-3 min-h-[500px] flex flex-col"
+                    className="pipeline-column"
                   >
                     {/* Stage Header */}
                     <div className="flex items-center justify-between px-1 mb-3">
@@ -328,7 +338,7 @@ export function Component() {
                     <div className="space-y-2.5 flex-1">
                       {columnItems.length === 0 ? (
                         <div className="h-28 border-2 border-dashed border-line/80 rounded-xl flex items-center justify-center text-xs text-slate/60 text-center px-4">
-                          Drop here or use card stage selector
+                          No applications
                         </div>
                       ) : (
                         columnItems.map((app) => {
@@ -338,7 +348,7 @@ export function Component() {
                               key={app.id}
                               draggable={true}
                               onDragStart={(e) => e.dataTransfer.setData("text/plain", app.id)}
-                              className="rounded-xl border border-line bg-white p-3.5 shadow-sm hover:shadow transition-all cursor-grab active:cursor-grabbing space-y-2.5"
+                              className="pipeline-application space-y-2.5"
                             >
                               {/* Title & Company */}
                               <div>
@@ -354,6 +364,7 @@ export function Component() {
                                 <div className="text-xs text-slate truncate mt-0.5">
                                   {app.companyName || "Direct / Unspecified"}
                                 </div>
+                                <p className="pipeline-source">{app.jobSlug ? (saved.isSaved(app.jobSlug) ? "Saved role" : app.sourceLabel || app.providerName || "RoleBrief") : "Manual application"}</p>
                               </div>
 
                               {/* Badges / Expired Warning */}
@@ -427,6 +438,7 @@ export function Component() {
       )}
 
       {/* Manual Application Dialog */}
+      {view === "board" && hasNextPage && <div className="flex justify-center mt-4"><Button variant="secondary" onClick={() => void loadMore()} loading={isLoadingMore}>Load more applications</Button></div>}
       <AddApplicationDialog
         open={isAddOpen}
         onClose={() => setIsAddOpen(false)}

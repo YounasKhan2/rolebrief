@@ -15,6 +15,7 @@ import {
   ExternalLink
 } from "lucide-react";
 import { PageContainer, PageHeader } from "../../components/shell/AppShell";
+import "../../components/candidate/candidate-account.css";
 import { Badge, Button, SectionRule } from "../../components/ui/primitives";
 import { Switch, SegmentedControl, Input } from "../../components/ui/form";
 import { useToast } from "../../components/ui/toast";
@@ -64,7 +65,7 @@ function SettingsCard({
   children: React.ReactNode;
 }) {
   return (
-    <section id={id} className="rounded-[var(--radius-card)] border border-line p-5">
+    <section id={id} className="candidate-settings-section">
       <div className="flex items-center gap-2 mb-1">
         <span className="text-indigo">{icon}</span>
         <h2 tabIndex={-1} className="text-base font-semibold text-ink outline-none">
@@ -321,10 +322,10 @@ export function SettingsScreen() {
   };
 
   return (
-    <PageContainer>
+    <PageContainer className="candidate-account candidate-settings">
       <PageHeader
         title="Settings"
-        subtitle="Manage your notifications, accessibility, security, and account preferences."
+        description="Manage preferences, sessions, security, and accessibility."
       />
 
       <div className="space-y-6">
