@@ -27,10 +27,14 @@ import { useAuth } from "../../lib/auth";
 import { useJobEligibility } from "../../lib/eligibility";
 import { fetchMatchBriefDetail, type MatchBriefDetail } from "../../lib/match-briefs";
 import { useEffect, useState } from "react";
+import CandidateJobCard from "../../components/candidate/CandidateJobCard";
+import { evidenceItems } from "../../components/candidate/radar-presentation";
+import "./candidate-job-detail.css";
 
 export function Component() {
   const { slug } = useParams();
   const location = useLocation();
+  const candidate = location.pathname.startsWith("/app/");
   const jobsPath = location.pathname.startsWith("/app") ? "/app/jobs" : "/jobs";
   const toast = useToast();
   const authGate = useAuthGate();
@@ -43,6 +47,7 @@ export function Component() {
   const similar = useSimilarJobs(job, 6);
   const [matchDetail, setMatchDetail] = useState<MatchBriefDetail | null>(null);
   const [matchError, setMatchError] = useState<string | null>(null);
+  const [matchAttempt, setMatchAttempt] = useState(0);
 
   useEffect(() => {
     if (!slug || !isAuthenticated || isAdmin) {
@@ -51,6 +56,7 @@ export function Component() {
       return;
     }
     const controller = new AbortController();
+    setMatchDetail(null);
     setMatchError(null);
     fetchMatchBriefDetail(slug, controller.signal)
       .then(setMatchDetail)
@@ -59,7 +65,7 @@ export function Component() {
         setMatchError(err instanceof Error ? err.message : "Could not load Match Brief.");
       });
     return () => controller.abort();
-  }, [slug, isAuthenticated, isAdmin]);
+  }, [slug, isAuthenticated, isAdmin, matchAttempt]);
 
   const isSaved = job ? savedContext.isSaved(job.slug) : false;
   const isPending = job ? savedContext.isPending(job.slug) : false;
@@ -94,7 +100,7 @@ export function Component() {
 
   if (loading) {
     return (
-      <PageContainer>
+      <PageContainer className={candidate ? "candidate-detail detail-loading" : undefined}>
         <div className="grid lg:grid-cols-[1fr_336px] gap-8 lg:gap-12">
           <div className="space-y-5">
             <Skeleton className="h-5 w-80" />
@@ -115,7 +121,7 @@ export function Component() {
 
   if (!job && notFound) {
     return (
-      <PageContainer>
+      <PageContainer className={candidate ? "candidate-detail" : undefined}>
         <EmptyState title="Role not found" body="This listing may have expired or moved." action={<Link to={jobsPath} className="text-indigo font-medium">Back to jobs</Link>} />
       </PageContainer>
     );
@@ -123,7 +129,7 @@ export function Component() {
 
   if (!job || error) {
     return (
-      <PageContainer>
+      <PageContainer className={candidate ? "candidate-detail" : undefined}>
         <EmptyState title="Could not load this role" body={error?.message ?? "The jobs API did not return a role."} action={<Button variant="secondary" onClick={retry}>Retry</Button>} />
       </PageContainer>
     );
@@ -191,6 +197,69 @@ export function Component() {
       )}
     </>
   );
+
+  if (candidate) {
+    const timestamp = (kind: string) => {
+      const event = job.freshness.find((item) => item.kind === kind);
+      if (!event || !Number.isFinite(Date.parse(event.at))) return "Not listed";
+      return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(new Date(event.at));
+    };
+    const facts = [
+      ["Company", job.companyName],
+      ["Work mode", job.workModel],
+      ["Location", job.locations.join(" · ")],
+      ["Employment", job.employmentType],
+      ["Seniority", job.seniority],
+      ["Salary", job.salary?.provided ? job.salary.text : "Not disclosed"],
+      ["Posted", timestamp("published")],
+      ["First seen", timestamp("discovered")],
+      ["Employer deadline", timestamp("deadline")],
+      ["Source", job.source],
+      ["Status", expired ? "Expired or delisted" : job.flags?.includes("suspicious") ? "Check required" : "Active"],
+    ];
+    return (
+      <div className="candidate-detail">
+        <nav className="detail-breadcrumb" aria-label="Breadcrumb">
+          <Link to={jobsPath}><span className="detail-mobile-back">← Back to </span>Jobs</Link>
+          <ChevronRight size={12} /><span>{job.companyName}</span>
+          <ChevronRight size={12} /><span aria-current="page">{job.title}</span>
+        </nav>
+        <header className="detail-header">
+          <CompanyLogo name={job.companyName} size={44} />
+          <div><p className="detail-eyebrow">{job.companyName}</p><h1>{job.title}</h1>
+            <JobMetaRow job={job} />
+          </div>
+        </header>
+        {(expired || suspicious || job.flags?.includes("suspicious")) && <p className="detail-warning" role="status"><ShieldAlert size={17} />{expired ? "This role is expired or delisted. Applications are unavailable." : "Review this listing and its destination before sharing personal information."}</p>}
+        <div className="detail-workspace">
+          <article className="detail-reading">
+            <section className="detail-evidence" aria-label="Role evidence">
+              <div className="detail-match"><h2>Match Brief</h2>
+                <MatchBrief data={{ ...job.match, summary: matchDetail ?? undefined, detail: matchDetail }} variant="full" />
+                {matchError && <div role="status"><p>{matchError}</p><Button variant="secondary" onClick={() => setMatchAttempt((value) => value + 1)}>Retry Match Brief</Button></div>}
+              </div>
+              <div className="detail-eligibility"><h2>Eligibility Shield</h2>
+                <EligibilityShield detail={eligibilityResult} state={job.eligibility.state} reasons={job.eligibility.reasons} isJobExpired={expired} variant="detail" />
+              </div>
+            </section>
+            <section className="detail-description"><h2>About the role</h2>
+              {job.description.html ? <div className="job-description" dangerouslySetInnerHTML={{ __html: job.description.html }} /> : <p>{job.description.overview || "A description was not provided by the source."}</p>}
+            </section>
+            <section className="detail-restrictions"><h2>Work authorization & location requirements</h2><p>{job.remoteRestrictionsText || job.description.workAuthorization || "Not provided. Confirm requirements with the employer."}</p></section>
+            <section className="detail-disclosure"><h2>Source & disclosure</h2><p>Indexed from {job.source}. {canApply ? `Applications open on ${domain}.` : "Applications are currently unavailable."} RoleBrief does not determine hiring outcomes.</p>{job.sourceUrl && <a href={job.sourceUrl} target="_blank" rel="noreferrer">View original listing <ExternalLink size={12} /></a>}</section>
+            <div className="mt-10"><h2 className="text-lg font-semibold text-ink mb-4">Related company news</h2><EmptyState title="Company news unavailable" body="News ingestion is still demo-only and is not mixed into real provider jobs." /></div>
+            {similar.data.length > 0 && <section className="detail-related"><h2>Similar stored roles</h2>{similar.data.map((item) => <CandidateJobCard key={item.slug} job={item} />)}</section>}
+          </article>
+          <aside className="detail-rail" aria-label="Role decision and job facts">
+            <section className="detail-actions"><h2>Your next step</h2><div className="detail-action-controls">{applyBar}</div><p>{canApply ? <>Opens <strong>{domain}</strong> in a new tab.</> : availability?.reason || "No active application link is available."}</p></section>
+            <section className="detail-rail-match"><h2>Match Brief</h2><strong>{matchDetail?.label || "Not calculated"}</strong><ul>{evidenceItems(matchDetail ?? undefined).map((item, index) => <li key={index}>{item.label}</li>)}</ul><p>Evidence-based alignment, not hiring probability.</p></section>
+            <section className="detail-rail-eligibility"><h2>Eligibility Shield</h2><strong>{eligibilityResult?.badgeText || "Check required"}</strong><p>{eligibilityResult?.headline || "Eligibility evidence is unavailable. Confirm requirements with the employer."}</p></section>
+            <section className="detail-facts"><h2>Job facts</h2><dl>{facts.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value || "Not listed"}</dd></div>)}</dl></section>
+          </aside>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
