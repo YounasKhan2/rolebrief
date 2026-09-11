@@ -105,4 +105,26 @@ export class AppConfigService {
       liveSmokePersist: this.config.get("HIMALAYAS_LIVE_SMOKE_PERSIST", { infer: true })
     };
   }
+
+  get resumes() {
+    return {
+      storage: {
+        endpoint: this.config.get("RESUME_STORAGE_ENDPOINT", { infer: true }),
+        publicEndpoint: this.config.get("RESUME_STORAGE_PUBLIC_ENDPOINT", { infer: true }) || this.config.get("RESUME_STORAGE_ENDPOINT", { infer: true }),
+        region: this.config.get("RESUME_STORAGE_REGION", { infer: true }),
+        bucket: this.config.get("RESUME_STORAGE_BUCKET", { infer: true }),
+        accessKeyId: this.config.get("RESUME_STORAGE_ACCESS_KEY_ID", { infer: true }),
+        secretAccessKey: this.config.get("RESUME_STORAGE_SECRET_ACCESS_KEY", { infer: true }),
+        forcePathStyle: this.config.get("RESUME_STORAGE_FORCE_PATH_STYLE", { infer: true })
+      },
+      upload: {
+        maxBytes: this.config.get("RESUME_UPLOAD_MAX_BYTES", { infer: true }),
+        urlTtlSeconds: this.config.get("RESUME_UPLOAD_URL_TTL_SECONDS", { infer: true })
+      },
+      rateLimits: {
+        uploadSession: this.config.get("RESUME_RATE_LIMIT_UPLOAD_SESSION", { infer: true }),
+        confirmUpload: this.config.get("RESUME_RATE_LIMIT_CONFIRM_UPLOAD", { infer: true })
+      }
+    };
+  }
 }

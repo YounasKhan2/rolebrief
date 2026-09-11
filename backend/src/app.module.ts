@@ -18,6 +18,7 @@ import { PreferencesModule } from "./modules/preferences/preferences.module";
 import { AuthModule } from "./auth/auth.module";
 import { AdminModule } from "./admin/admin.module";
 import { RadarModule } from "./modules/radar/radar.module";
+import { ResumesModule } from "./modules/resumes/resumes.module";
 
 @Module({
   imports: [
@@ -39,7 +40,8 @@ import { RadarModule } from "./modules/radar/radar.module";
     OnboardingModule,
     SavedModule,
     PreferencesModule,
-    RadarModule
+    RadarModule,
+    ResumesModule
   ]
 })
 export class AppModule {}

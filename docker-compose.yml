@@ -28,6 +28,38 @@ services:
       timeout: 3s
       retries: 10
 
+  rustfs:
+    image: rustfs/rustfs:latest
+    command: server /data
+    environment:
+      RUSTFS_ACCESS_KEY: ${RESUME_STORAGE_ACCESS_KEY_ID:-rolebrief}
+      RUSTFS_SECRET_KEY: ${RESUME_STORAGE_SECRET_ACCESS_KEY:-rolebrief-local-secret}
+    ports:
+      - "9000:9000"
+    volumes:
+      - rolebrief_rustfs:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:9000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  rustfs-init:
+    image: quay.io/minio/mc:latest
+    environment:
+      RESUME_STORAGE_ACCESS_KEY_ID: ${RESUME_STORAGE_ACCESS_KEY_ID:-rolebrief}
+      RESUME_STORAGE_SECRET_ACCESS_KEY: ${RESUME_STORAGE_SECRET_ACCESS_KEY:-rolebrief-local-secret}
+      RESUME_STORAGE_BUCKET: ${RESUME_STORAGE_BUCKET:-rolebrief-resumes}
+    entrypoint:
+      [
+        "/bin/sh",
+        "-c",
+        "mc alias set rustfs http://rustfs:9000 $$RESUME_STORAGE_ACCESS_KEY_ID $$RESUME_STORAGE_SECRET_ACCESS_KEY && mc mb --ignore-existing rustfs/$$RESUME_STORAGE_BUCKET"
+      ]
+    depends_on:
+      rustfs:
+        condition: service_healthy
+
   api:
     image: rolebrief-backend:dev
     build:
@@ -39,6 +71,8 @@ services:
     environment:
       DATABASE_URL: postgresql://rolebrief:${POSTGRES_PASSWORD:-replace-with-local-postgres-password}@postgres:5432/rolebrief?schema=public
       REDIS_URL: redis://redis:6379
+      RESUME_STORAGE_ENDPOINT: http://rustfs:9000
+      RESUME_STORAGE_PUBLIC_ENDPOINT: http://localhost:9000
     ports:
       - "3000:3000"
     restart: unless-stopped
@@ -59,6 +93,10 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      rustfs:
+        condition: service_healthy
+      rustfs-init:
+        condition: service_completed_successfully
 
   worker:
     image: rolebrief-backend:dev
@@ -71,12 +109,18 @@ services:
     environment:
       DATABASE_URL: postgresql://rolebrief:${POSTGRES_PASSWORD:-replace-with-local-postgres-password}@postgres:5432/rolebrief?schema=public
       REDIS_URL: redis://redis:6379
+      RESUME_STORAGE_ENDPOINT: http://rustfs:9000
+      RESUME_STORAGE_PUBLIC_ENDPOINT: http://localhost:9000
     restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+      rustfs:
+        condition: service_healthy
+      rustfs-init:
+        condition: service_completed_successfully
 
   scheduler:
     image: rolebrief-backend:dev
@@ -89,11 +133,15 @@ services:
     environment:
       DATABASE_URL: postgresql://rolebrief:${POSTGRES_PASSWORD:-replace-with-local-postgres-password}@postgres:5432/rolebrief?schema=public
       REDIS_URL: redis://redis:6379
+      RESUME_STORAGE_ENDPOINT: http://rustfs:9000
+      RESUME_STORAGE_PUBLIC_ENDPOINT: http://localhost:9000
     restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      rustfs:
         condition: service_healthy
 
   migrate:
@@ -140,3 +188,4 @@ services:
 volumes:
   rolebrief_postgres:
   rolebrief_redis:
+  rolebrief_rustfs:

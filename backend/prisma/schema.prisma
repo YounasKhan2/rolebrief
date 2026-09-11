@@ -136,6 +136,7 @@ model User {
   onboarding      OnboardingProgress?
   profile         CandidateProfile?
   preference      UserPreference?
+  resumeDocuments ResumeDocument[]
 
   @@index([role, status])
   @@index([normalizedEmail])
@@ -751,6 +752,14 @@ model CandidateProfile {
   revision                Int                    @default(0)
   preferences             CandidatePreference?
   skills                  CandidateSkill[]
+  experiences             CandidateExperience[]
+  education               CandidateEducation[]
+  projects                CandidateProject[]
+  certifications          CandidateCertification[]
+  languages               CandidateLanguage[]
+  awards                  CandidateAward[]
+  publications            CandidatePublication[]
+  links                   CandidateLink[]
   createdAt               DateTime               @default(now())
   updatedAt               DateTime               @updatedAt
 }
@@ -797,6 +806,294 @@ model CandidateSkill {
   @@index([normalizedName])
 }
 
+enum ResumeDocumentStatus {
+  CREATED
+  UPLOADING
+  UPLOADED
+  VERIFYING
+  SCANNING
+  VERIFIED_CLEAN
+  EXTRACTING
+  MAPPING
+  READY_FOR_REVIEW
+  APPLYING
+  APPLIED
+  REJECTED
+  FAILED
+  DELETED
+}
+
+enum ResumeDraftStatus {
+  DRAFTING
+  READY_FOR_REVIEW
+  APPLIED
+  SUPERSEDED
+  DELETED
+}
+
+enum ResumeParseAttemptStatus {
+  QUEUED
+  RUNNING
+  SUCCEEDED
+  FAILED
+  CANCELED
+}
+
+enum ResumeFailureCode {
+  VALIDATION_FAILED
+  STORAGE_UNAVAILABLE
+  CHECKSUM_MISMATCH
+  MIME_MISMATCH
+  TYPE_UNSUPPORTED
+  CAPACITY_EXHAUSTED
+  SCAN_UNAVAILABLE
+  INFECTED
+  PARSER_TIMEOUT
+  PARSER_FAILED
+  MAPPER_FAILED
+}
+
+enum CandidateFactSource {
+  USER_DECLARED
+  RESUME_PARSED
+  IMPORTED
+}
+
+model ResumeDocument {
+  id                   String               @id @default(cuid())
+  userId               String
+  status               ResumeDocumentStatus @default(CREATED)
+  originalFilenameSafe String
+  mimeType             String
+  extension            String
+  byteSize             Int
+  sha256               String
+  objectKey            String               @unique
+  storageBucket        String
+  uploadIdempotencyKey String
+  uploadExpiresAt      DateTime
+  confirmedAt          DateTime?
+  verifiedAt           DateTime?
+  scannedAt            DateTime?
+  currentDraftId       String?
+  parserVersion        String?
+  mapperVersion        String?
+  failureCode          ResumeFailureCode?
+  failureMessageSafe   String?
+  retentionDeleteAt    DateTime?
+  deletedAt            DateTime?
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+
+  user                 User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parseAttempts        ResumeParseAttempt[]
+  drafts               ResumeExtractionDraft[]
+
+  @@unique([userId, uploadIdempotencyKey])
+  @@index([userId, status])
+  @@index([userId, sha256])
+  @@index([status, createdAt])
+  @@index([retentionDeleteAt])
+}
+
+model ResumeParseAttempt {
+  id                       String                   @id @default(cuid())
+  resumeDocumentId         String
+  status                   ResumeParseAttemptStatus @default(QUEUED)
+  queueJobId               String?                  @unique
+  attempt                  Int                      @default(1)
+  doclingArtifactObjectKey String?
+  metricsJson              Json?
+  failureCode              ResumeFailureCode?
+  failureMessageSafe       String?
+  startedAt                DateTime?
+  completedAt              DateTime?
+  failedAt                 DateTime?
+  createdAt                DateTime                 @default(now())
+  updatedAt                DateTime                 @updatedAt
+
+  resumeDocument           ResumeDocument           @relation(fields: [resumeDocumentId], references: [id], onDelete: Cascade)
+
+  @@index([resumeDocumentId, createdAt])
+  @@index([status, createdAt])
+}
+
+model ResumeExtractionDraft {
+  id                      String             @id @default(cuid())
+  resumeDocumentId        String
+  userId                  String
+  status                  ResumeDraftStatus  @default(DRAFTING)
+  schemaVersion           Int                @default(1)
+  parserVersion           String
+  mapperVersion           String
+  sourceChecksum          String
+  itemsJson               Json
+  summaryJson             Json?
+  reviewRevision          Int                @default(0)
+  targetProfileRevision   Int?
+  reviewedAt              DateTime?
+  appliedAt               DateTime?
+  createdAt               DateTime           @default(now())
+  updatedAt               DateTime           @updatedAt
+
+  resumeDocument          ResumeDocument     @relation(fields: [resumeDocumentId], references: [id], onDelete: Cascade)
+
+  @@unique([resumeDocumentId, sourceChecksum, mapperVersion])
+  @@index([userId, status])
+  @@index([resumeDocumentId, createdAt])
+}
+
+model CandidateExperience {
+  id               String              @id @default(cuid())
+  profileId        String
+  profile          CandidateProfile    @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  title            String
+  company          String
+  location         String?
+  startDate        DateTime?
+  endDate          DateTime?
+  isCurrent        Boolean             @default(false)
+  description      String?
+  source           CandidateFactSource @default(USER_DECLARED)
+  sourceDocumentId String?
+  sourceDraftItemId String?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  @@index([profileId, startDate])
+  @@index([sourceDocumentId])
+}
+
+model CandidateEducation {
+  id               String              @id @default(cuid())
+  profileId        String
+  profile          CandidateProfile    @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  institution      String
+  credential       String?
+  fieldOfStudy     String?
+  startDate        DateTime?
+  endDate          DateTime?
+  description      String?
+  source           CandidateFactSource @default(USER_DECLARED)
+  sourceDocumentId String?
+  sourceDraftItemId String?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  @@index([profileId, endDate])
+  @@index([sourceDocumentId])
+}
+
+model CandidateProject {
+  id               String              @id @default(cuid())
+  profileId        String
+  profile          CandidateProfile    @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  name             String
+  role             String?
+  url              String?
+  startDate        DateTime?
+  endDate          DateTime?
+  description      String?
+  source           CandidateFactSource @default(USER_DECLARED)
+  sourceDocumentId String?
+  sourceDraftItemId String?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  @@index([profileId, updatedAt])
+  @@index([sourceDocumentId])
+}
+
+model CandidateCertification {
+  id               String              @id @default(cuid())
+  profileId        String
+  profile          CandidateProfile    @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  name             String
+  issuer           String?
+  issuedAt         DateTime?
+  expiresAt        DateTime?
+  credentialId     String?
+  url              String?
+  source           CandidateFactSource @default(USER_DECLARED)
+  sourceDocumentId String?
+  sourceDraftItemId String?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  @@index([profileId, issuedAt])
+  @@index([sourceDocumentId])
+}
+
+model CandidateLanguage {
+  id               String              @id @default(cuid())
+  profileId        String
+  profile          CandidateProfile    @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  language         String
+  proficiency      String?
+  source           CandidateFactSource @default(USER_DECLARED)
+  sourceDocumentId String?
+  sourceDraftItemId String?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  @@unique([profileId, language])
+  @@index([sourceDocumentId])
+}
+
+model CandidateAward {
+  id               String              @id @default(cuid())
+  profileId        String
+  profile          CandidateProfile    @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  title            String
+  issuer           String?
+  awardedAt        DateTime?
+  description      String?
+  source           CandidateFactSource @default(USER_DECLARED)
+  sourceDocumentId String?
+  sourceDraftItemId String?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  @@index([profileId, awardedAt])
+  @@index([sourceDocumentId])
+}
+
+model CandidatePublication {
+  id               String              @id @default(cuid())
+  profileId        String
+  profile          CandidateProfile    @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  title            String
+  publisher        String?
+  publishedAt      DateTime?
+  url              String?
+  description      String?
+  source           CandidateFactSource @default(USER_DECLARED)
+  sourceDocumentId String?
+  sourceDraftItemId String?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  @@index([profileId, publishedAt])
+  @@index([sourceDocumentId])
+}
+
+model CandidateLink {
+  id               String              @id @default(cuid())
+  profileId        String
+  profile          CandidateProfile    @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  label            String
+  url              String
+  linkType         String?
+  source           CandidateFactSource @default(USER_DECLARED)
+  sourceDocumentId String?
+  sourceDraftItemId String?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  @@index([profileId, linkType])
+  @@index([sourceDocumentId])
+}
+
 enum MotionPreference {
   SYSTEM
   REDUCE
@@ -829,4 +1126,3 @@ model UserPreference {
 
   @@index([userId])
 }
-
