@@ -62,38 +62,9 @@ export interface Company {
   };
 }
 
-export interface Job {
-  slug: string;
-  title: string;
-  companySlug: string;
-  locations: string[];
-  workModel: WorkModel;
-  remoteEligibility: RemoteEligibility;
-  seniority: string;
-  employmentType: string;
-  discipline: string;
-  skills: string[];
-  salary: { text: string; provided: boolean } | null;
-  source: string;
-  sourceUrl: string;
-  applyUrl: string;
-  freshness: FreshnessEvent[];
-  eligibility: {
-    state: EligibilityState;
-    reasons: { label: string; kind: EligibilityState }[];
-  };
-  match: MatchBriefData;
-  reasons: string[];
-  description: {
-    overview: string;
-    responsibilities: string[];
-    required: string[];
-    preferred: string[];
-    benefits: string[];
-    workAuthorization: string;
-  };
-  flags?: ("expired" | "suspicious" | "missing-data")[];
-}
+// Legacy consumers share the canonical job contract; no fixture records are added.
+export type { Job } from "../jobs/jobs";
+import type { Job } from "../jobs/jobs";
 
 export interface NewsItem {
   slug: string;
