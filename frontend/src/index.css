@@ -1,9 +1,14 @@
-@import url('https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap');
 @import 'tailwindcss';
 
 @theme {
+  --color-canvas: #f7f2ea;
+  --color-peach: #ffe7d6;
+  --color-mist: #e8f2ff;
+  --color-lavender: #ece8ff;
+  --color-mint: #e7f5ef;
   /* Core palette (spec §4.1) */
   --color-ink: #151a23;
   --color-navy: #172554;
@@ -277,4 +282,3 @@ html.high-contrast .border-line,
 html[data-high-contrast="true"] .border-line {
   border-color: #64748b !important;
 }
-

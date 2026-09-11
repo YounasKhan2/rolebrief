@@ -45,7 +45,10 @@ export function useHashScroll() {
 
 export default function MarketingLayout() {
   useHashScroll();
+  const { pathname } = useLocation();
   const { user, isAuthenticated, isAdmin, status } = useAuth();
+
+  if (pathname === "/") return <><Outlet /><ScrollRestoration /></>;
 
   return (
     <div className="min-h-full paper-grain text-ink flex flex-col">
