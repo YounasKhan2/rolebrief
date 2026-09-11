@@ -1,5 +1,5 @@
 import { useLocation } from "react-router";
-import { Kicker } from "../../components/ui/primitives";
+import { Kicker } from "../../ui/primitives";
 import { Construction } from "lucide-react";
 
 const pageMeta: Record<string, { kicker: string; title: string; description: string }> = {

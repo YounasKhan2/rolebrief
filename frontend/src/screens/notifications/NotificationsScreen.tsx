@@ -14,18 +14,18 @@ import {
   RefreshCw,
   ExternalLink
 } from "lucide-react";
-import { PageContainer, PageHeader } from "../../components/shell/AppShell";
-import "../../components/candidate/candidate-account.css";
-import { Badge, Button, EmptyState } from "../../components/ui/primitives";
-import { Tabs } from "../../components/ui/form";
-import { useToast } from "../../components/ui/toast";
-import { relativeTime, classNames } from "../../lib/format";
+import { PageContainer, PageHeader } from "../../shared/shell/AppShell";
+import "../../shared/candidate/candidate-account.css";
+import { Badge, Button, EmptyState } from "../../ui/primitives";
+import { Tabs } from "../../ui/form";
+import { useToast } from "../../ui/toast";
+import { relativeTime, classNames } from "../../lib/core/format";
 import {
   getNotifications,
   markAsRead,
   markAllAsRead,
   type SerializedNotification
-} from "../../lib/notifications-api";
+} from "../../lib/features/notifications-api";
 
 type Filter = "all" | "unread" | "matches";
 

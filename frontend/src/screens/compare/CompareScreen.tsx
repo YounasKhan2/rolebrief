@@ -1,13 +1,13 @@
 import { useSearchParams, Link } from "react-router";
 import { X, Plus, GitCompareArrows, ExternalLink, Banknote, MapPin, Check, Minus } from "lucide-react";
-import { PageContainer, PageHeader } from "../../components/shell/AppShell";
-import { Kicker, Badge, Button, LinkButton, CompanyLogo, EmptyState, SourceBadge } from "../../components/ui/primitives";
-import { EligibilityShield } from "../../components/rolebrief/EligibilityShield";
-import { MatchBrief } from "../../components/rolebrief/MatchBrief";
-import { FreshnessTimeline } from "../../components/rolebrief/FreshnessTimeline";
-import { jobs, getJob, companyName, getCompany } from "../../lib/fixtures";
-import type { Job } from "../../lib/fixtures";
-import { domainFromUrl } from "../../lib/format";
+import { PageContainer, PageHeader } from "../../shared/shell/AppShell";
+import { Kicker, Badge, Button, LinkButton, CompanyLogo, EmptyState, SourceBadge } from "../../ui/primitives";
+import { EligibilityShield } from "../../shared/rolebrief/EligibilityShield";
+import { MatchBrief } from "../../shared/rolebrief/MatchBrief";
+import { FreshnessTimeline } from "../../shared/rolebrief/FreshnessTimeline";
+import { jobs, getJob, companyName, getCompany } from "../../lib/core/fixtures";
+import type { Job } from "../../lib/core/fixtures";
+import { domainFromUrl } from "../../lib/core/format";
 
 const DEFAULT = ["senior-frontend-engineer-meridian", "data-engineer-atlas", "backend-engineer-qamar"];
 

@@ -1,16 +1,16 @@
 import { useEffect, useState, useCallback } from "react";
 import { Link } from "react-router";
 import { Bookmark, Bell, Building2, RefreshCw } from "lucide-react";
-import { PageContainer, PageHeader } from "../../components/shell/AppShell";
-import { EmptyState, Button } from "../../components/ui/primitives";
-import { Tabs } from "../../components/ui/form";
-import CandidateJobCard from "../../components/candidate/CandidateJobCard";
-import CandidateJobSkeleton from "../../components/candidate/CandidateJobSkeleton";
-import "../../components/candidate/candidate-pipeline.css";
-import { useSaved } from "../../lib/saved-context";
-import { fetchSavedJobs } from "../../lib/saved-api";
-import { mapApiJob, type Job } from "../../lib/jobs";
-import { useToast } from "../../components/ui/toast";
+import { PageContainer, PageHeader } from "../../shared/shell/AppShell";
+import { EmptyState, Button } from "../../ui/primitives";
+import { Tabs } from "../../ui/form";
+import CandidateJobCard from "../../shared/candidate/CandidateJobCard";
+import CandidateJobSkeleton from "../../shared/candidate/CandidateJobSkeleton";
+import "../../shared/candidate/candidate-pipeline.css";
+import { useSaved } from "../../lib/features/saved-context";
+import { fetchSavedJobs } from "../../lib/features/saved-api";
+import { mapApiJob, type Job } from "../../lib/jobs/jobs";
+import { useToast } from "../../ui/toast";
 
 type Tab = "jobs" | "searches" | "companies";
 

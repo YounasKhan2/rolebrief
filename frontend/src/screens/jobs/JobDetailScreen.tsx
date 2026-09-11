@@ -10,25 +10,25 @@ import {
   ChevronRight,
   AlertTriangle,
 } from "lucide-react";
-import { PageContainer } from "../../components/shell/AppShell";
-import { Button, Kicker, Badge, CompanyLogo, SourceBadge, SectionRule, EmptyState, Skeleton } from "../../components/ui/primitives";
-import { EligibilityShield } from "../../components/rolebrief/EligibilityShield";
-import { MatchBrief } from "../../components/rolebrief/MatchBrief";
-import { FreshnessTimeline } from "../../components/rolebrief/FreshnessTimeline";
-import { JobMetaRow, ReasonChips } from "../../components/rolebrief/JobCard";
-import { JobCard } from "../../components/rolebrief/JobCard";
-import { useJob, useSimilarJobs } from "../../lib/jobs";
-import { domainFromUrl } from "../../lib/format";
-import { useToast } from "../../components/ui/toast";
-import { useAuthGate } from "../../components/auth/AuthGateDialog";
-import { useSaved } from "../../lib/saved-context";
-import { useTracker } from "../../lib/tracker-context";
-import { useAuth } from "../../lib/auth";
-import { useJobEligibility } from "../../lib/eligibility";
-import { fetchMatchBriefDetail, type MatchBriefDetail } from "../../lib/match-briefs";
+import { PageContainer } from "../../shared/shell/AppShell";
+import { Button, Kicker, Badge, CompanyLogo, SourceBadge, SectionRule, EmptyState, Skeleton } from "../../ui/primitives";
+import { EligibilityShield } from "../../shared/rolebrief/EligibilityShield";
+import { MatchBrief } from "../../shared/rolebrief/MatchBrief";
+import { FreshnessTimeline } from "../../shared/rolebrief/FreshnessTimeline";
+import { JobMetaRow, ReasonChips } from "../../shared/rolebrief/JobCard";
+import { JobCard } from "../../shared/rolebrief/JobCard";
+import { useJob, useSimilarJobs } from "../../lib/jobs/jobs";
+import { domainFromUrl } from "../../lib/core/format";
+import { useToast } from "../../ui/toast";
+import { useAuthGate } from "../auth/components/AuthGateDialog";
+import { useSaved } from "../../lib/features/saved-context";
+import { useTracker } from "../../lib/features/tracker-context";
+import { useAuth } from "../../lib/auth/auth";
+import { useJobEligibility } from "../../lib/jobs/eligibility";
+import { fetchMatchBriefDetail, type MatchBriefDetail } from "../../lib/jobs/match-briefs";
 import { useEffect, useState } from "react";
-import CandidateJobCard from "../../components/candidate/CandidateJobCard";
-import { evidenceItems } from "../../components/candidate/radar-presentation";
+import CandidateJobCard from "../../shared/candidate/CandidateJobCard";
+import { evidenceItems } from "../../shared/candidate/radar-presentation";
 import "./candidate-job-detail.css";
 
 export function Component() {

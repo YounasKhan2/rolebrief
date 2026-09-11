@@ -16,11 +16,11 @@ import {
   SlidersHorizontal,
   Sparkles,
 } from "lucide-react";
-import { useRadarFeed, type RadarSummary } from "../../lib/radar-api";
-import { getPreferences } from "../../lib/preferences-api";
-import CandidateJobCard from "../../components/candidate/CandidateJobCard";
-import RadarSkeleton from "../../components/candidate/CandidateJobSkeleton";
-import { displayDate } from "../../components/candidate/radar-presentation";
+import { useRadarFeed, type RadarSummary } from "../../lib/features/radar-api";
+import { getPreferences } from "../../lib/features/preferences-api";
+import CandidateJobCard from "../../shared/candidate/CandidateJobCard";
+import RadarSkeleton from "../../shared/candidate/CandidateJobSkeleton";
+import { displayDate } from "../../shared/candidate/radar-presentation";
 
 type Lens = "Relevance" | "Freshest" | "No known eligibility conflicts";
 

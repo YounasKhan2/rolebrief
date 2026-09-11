@@ -1,11 +1,11 @@
 import { useParams, Link } from "react-router";
 import { ExternalLink, ChevronRight, TrendingUp, TrendingDown, Minus, HelpCircle, Plus } from "lucide-react";
-import { PageContainer } from "../../components/shell/AppShell";
-import { Kicker, Badge, SectionRule, Button, EmptyState, CompanyLogo } from "../../components/ui/primitives";
-import { JobCard } from "../../components/rolebrief/JobCard";
-import { getNews, getJob, companyName } from "../../lib/fixtures";
-import { formatDate } from "../../lib/format";
-import { useToast } from "../../components/ui/toast";
+import { PageContainer } from "../../shared/shell/AppShell";
+import { Kicker, Badge, SectionRule, Button, EmptyState, CompanyLogo } from "../../ui/primitives";
+import { JobCard } from "../../shared/rolebrief/JobCard";
+import { getNews, getJob, companyName } from "../../lib/core/fixtures";
+import { formatDate } from "../../lib/core/format";
+import { useToast } from "../../ui/toast";
 
 const impactMeta = {
   "Likely more hiring": { icon: TrendingUp, klass: "text-emerald" },

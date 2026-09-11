@@ -9,26 +9,26 @@ import {
   FileX,
   Loader2,
 } from "lucide-react";
-import { PageContainer } from "../../components/shell/AppShell";
+import { PageContainer } from "../../shared/shell/AppShell";
 import {
   Button,
   FilterChip,
   Kicker,
   EmptyState,
   IconButton,
-} from "../../components/ui/primitives";
-import { Input, SegmentedControl } from "../../components/ui/form";
-import { Sheet } from "../../components/ui/overlay";
-import { JobCard } from "../../components/rolebrief/JobCard";
-import { useJobs, disciplines } from "../../lib/jobs";
-import { useToast } from "../../components/ui/toast";
-import { classNames } from "../../lib/format";
-import { useAuthGate } from "../../components/auth/AuthGateDialog";
-import { useAuth } from "../../lib/auth";
-import { useBatchEligibility } from "../../lib/eligibility";
-import { useBatchMatchBriefs } from "../../lib/match-briefs";
-import CandidateJobCard from "../../components/candidate/CandidateJobCard";
-import CandidateJobSkeleton from "../../components/candidate/CandidateJobSkeleton";
+} from "../../ui/primitives";
+import { Input, SegmentedControl } from "../../ui/form";
+import { Sheet } from "../../ui/overlay";
+import { JobCard } from "../../shared/rolebrief/JobCard";
+import { useJobs, disciplines } from "../../lib/jobs/jobs";
+import { useToast } from "../../ui/toast";
+import { classNames } from "../../lib/core/format";
+import { useAuthGate } from "../auth/components/AuthGateDialog";
+import { useAuth } from "../../lib/auth/auth";
+import { useBatchEligibility } from "../../lib/jobs/eligibility";
+import { useBatchMatchBriefs } from "../../lib/jobs/match-briefs";
+import CandidateJobCard from "../../shared/candidate/CandidateJobCard";
+import CandidateJobSkeleton from "../../shared/candidate/CandidateJobSkeleton";
 import "./candidate-jobs.css";
 
 const remoteFilters = [

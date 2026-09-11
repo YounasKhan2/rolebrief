@@ -12,12 +12,12 @@ import {
   Sparkles,
   X
 } from "lucide-react";
-import { Button, FilterChip, Kicker } from "../../components/ui/primitives";
-import { Input, SegmentedControl } from "../../components/ui/form";
-import { classNames } from "../../lib/format";
-import { useAuth } from "../../lib/auth";
-import { useOnboardingLayout } from "../../layouts/OnboardingLayout";
-import { sanitizeReturnTo } from "../../lib/routing";
+import { Button, FilterChip, Kicker } from "../../ui/primitives";
+import { Input, SegmentedControl } from "../../ui/form";
+import { classNames } from "../../lib/core/format";
+import { useAuth } from "../../lib/auth/auth";
+import { useOnboardingLayout } from "./OnboardingLayout";
+import { sanitizeReturnTo } from "../../lib/core/routing";
 import {
   autosaveOnboarding,
   completeOnboarding,
@@ -32,15 +32,15 @@ import {
   RemotePreference,
   SalaryPeriod,
   SeniorityLevel
-} from "../../lib/onboarding-api";
-import { ApiError } from "../../lib/api";
+} from "../../lib/features/onboarding-api";
+import { ApiError } from "../../lib/core/api";
 import {
   COMMON_COUNTRIES,
   CURATED_DISCIPLINES,
   CURATED_SKILLS,
   SENIORITY_OPTIONS,
   SPONSORSHIP_OPTIONS
-} from "../../lib/taxonomies";
+} from "../../lib/core/taxonomies";
 
 const STEP_ENUMS: OnboardingStep[] = ["GOAL", "REACH", "FIT", "REVIEW"];
 const stepDisplayNames = ["Goal", "Reach", "Fit", "Review"] as const;

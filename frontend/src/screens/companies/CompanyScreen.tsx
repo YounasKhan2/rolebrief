@@ -1,13 +1,13 @@
 import { useState } from "react";
 import { useParams, Link } from "react-router";
 import { Globe, MapPin, Plus, Check, ChevronRight, Briefcase } from "lucide-react";
-import { PageContainer } from "../../components/shell/AppShell";
-import { Kicker, Badge, Button, CompanyLogo, SectionRule, EmptyState } from "../../components/ui/primitives";
-import { CompanyMomentum } from "../../components/rolebrief/CompanyMomentum";
-import { JobCard } from "../../components/rolebrief/JobCard";
-import { NewsCard } from "../../components/rolebrief/NewsCard";
-import { getCompany, jobs, news, disciplines } from "../../lib/fixtures";
-import { domainFromUrl } from "../../lib/format";
+import { PageContainer } from "../../shared/shell/AppShell";
+import { Kicker, Badge, Button, CompanyLogo, SectionRule, EmptyState } from "../../ui/primitives";
+import { CompanyMomentum } from "../../shared/rolebrief/CompanyMomentum";
+import { JobCard } from "../../shared/rolebrief/JobCard";
+import { NewsCard } from "../../shared/rolebrief/NewsCard";
+import { getCompany, jobs, news, disciplines } from "../../lib/core/fixtures";
+import { domainFromUrl } from "../../lib/core/format";
 
 export function Component() {
   const { slug } = useParams();

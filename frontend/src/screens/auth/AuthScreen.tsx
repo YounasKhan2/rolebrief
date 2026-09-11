@@ -1,12 +1,12 @@
 import { useLocation, Link, useNavigate, Navigate, useSearchParams } from "react-router";
 import { useState, useEffect } from "react";
 import { Mail, Lock, ArrowRight, CheckCircle2, User } from "lucide-react";
-import { Wordmark } from "../../components/rolebrief/Wordmark";
-import { Button, Kicker } from "../../components/ui/primitives";
-import { Input } from "../../components/ui/form";
-import { useAuth } from "../../lib/auth";
-import * as authApi from "../../lib/auth-api";
-import { ApiError } from "../../lib/api";
+import { Wordmark } from "../../shared/rolebrief/Wordmark";
+import { Button, Kicker } from "../../ui/primitives";
+import { Input } from "../../ui/form";
+import { useAuth } from "../../lib/auth/auth";
+import * as authApi from "../../lib/auth/auth-api";
+import { ApiError } from "../../lib/core/api";
 
 type Mode = "login" | "signup" | "forgot-password" | "reset-password" | "verify-email";
 
@@ -18,7 +18,7 @@ const copy: Record<Mode, { kicker: string; title: string; sub: string; cta: stri
   "verify-email": { kicker: "One more step", title: "Verify your email", sub: "We sent a link to your inbox. Open it to activate alerts.", cta: "Resend email" },
 };
 
-import { sanitizeReturnTo } from "../../lib/routing";
+import { sanitizeReturnTo } from "../../lib/core/routing";
 
 export function Component() {
   const { pathname, state } = useLocation();

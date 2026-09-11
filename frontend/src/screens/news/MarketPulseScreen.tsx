@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { PageContainer, PageHeader } from "../../components/shell/AppShell";
-import { FilterChip, Kicker } from "../../components/ui/primitives";
-import { NewsCard } from "../../components/rolebrief/NewsCard";
-import { news } from "../../lib/fixtures";
+import { PageContainer, PageHeader } from "../../shared/shell/AppShell";
+import { FilterChip, Kicker } from "../../ui/primitives";
+import { NewsCard } from "../../shared/rolebrief/NewsCard";
+import { news } from "../../lib/core/fixtures";
 
 const categories = ["All", "Hiring", "Funding", "Layoffs", "New office", "Remote policy", "Visa & policy", "Graduate programs", "Labor trends"];
 const regions = ["All regions", "Pakistan", "UAE", "Worldwide remote"];

@@ -12,12 +12,12 @@ import {
   Check,
   AlertTriangle
 } from "lucide-react";
-import { PageContainer, PageHeader } from "../../components/shell/AppShell";
-import "../../components/candidate/candidate-account.css";
-import { Kicker, Badge, Button, SectionRule, FilterChip } from "../../components/ui/primitives";
-import { Input } from "../../components/ui/form";
-import { useAuth } from "../../lib/auth";
-import { ApiError } from "../../lib/api";
+import { PageContainer, PageHeader } from "../../shared/shell/AppShell";
+import "../../shared/candidate/candidate-account.css";
+import { Kicker, Badge, Button, SectionRule, FilterChip } from "../../ui/primitives";
+import { Input } from "../../ui/form";
+import { useAuth } from "../../lib/auth/auth";
+import { ApiError } from "../../lib/core/api";
 import {
   COMMON_COUNTRIES,
   CURATED_DISCIPLINES,
@@ -27,7 +27,7 @@ import {
   SEARCH_STATUS_OPTIONS,
   SENIORITY_OPTIONS,
   SPONSORSHIP_OPTIONS
-} from "../../lib/taxonomies";
+} from "../../lib/core/taxonomies";
 import {
   getProfile,
   updateProfile,
@@ -41,7 +41,7 @@ import {
   RemotePreference,
   SalaryPeriod,
   SeniorityLevel
-} from "../../lib/onboarding-api";
+} from "../../lib/features/onboarding-api";
 
 export function Component() {
   const navigate = useNavigate();

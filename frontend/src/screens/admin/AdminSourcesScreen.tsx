@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { ArrowLeft, Plus, RefreshCw, CheckCircle2, AlertTriangle, ShieldAlert, Settings2 } from "lucide-react";
-import { PageContainer, PageHeader } from "../../components/shell/AppShell";
-import { Badge, Button } from "../../components/ui/primitives";
-import { useToast } from "../../components/ui/toast";
-import { relativeTime } from "../../lib/format";
-import { getAdminSources, triggerSourceSync } from "../../lib/admin-api";
-import type { AdminSourceItem } from "../../lib/admin-api";
+import { PageContainer, PageHeader } from "../../shared/shell/AppShell";
+import { Badge, Button } from "../../ui/primitives";
+import { useToast } from "../../ui/toast";
+import { relativeTime } from "../../lib/core/format";
+import { getAdminSources, triggerSourceSync } from "../../lib/features/admin-api";
+import type { AdminSourceItem } from "../../lib/features/admin-api";
 
 const statusMeta = {
   healthy: { tone: "emerald" as const, icon: <CheckCircle2 size={13} />, label: "Healthy" },

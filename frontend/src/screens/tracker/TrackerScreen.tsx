@@ -12,25 +12,25 @@ import {
   ChevronRight,
   Building2
 } from "lucide-react";
-import { PageContainer, PageHeader } from "../../components/shell/AppShell";
-import { Badge, Button, EmptyState } from "../../components/ui/primitives";
-import { SegmentedControl } from "../../components/ui/form";
-import { relativeTime } from "../../lib/format";
-import { useTracker } from "../../lib/tracker-context";
-import { useSaved } from "../../lib/saved-context";
-import CandidateJobSkeleton from "../../components/candidate/CandidateJobSkeleton";
-import "../../components/candidate/candidate-pipeline.css";
+import { PageContainer, PageHeader } from "../../shared/shell/AppShell";
+import { Badge, Button, EmptyState } from "../../ui/primitives";
+import { SegmentedControl } from "../../ui/form";
+import { relativeTime } from "../../lib/core/format";
+import { useTracker } from "../../lib/features/tracker-context";
+import { useSaved } from "../../lib/features/saved-context";
+import CandidateJobSkeleton from "../../shared/candidate/CandidateJobSkeleton";
+import "../../shared/candidate/candidate-pipeline.css";
 import {
   ApplicationStage,
   TrackedApplication
-} from "../../lib/tracker-api";
-import { AddApplicationDialog } from "../../components/tracker/AddApplicationDialog";
+} from "../../lib/features/tracker-api";
+import { AddApplicationDialog } from "../tracker/components/AddApplicationDialog";
 import {
   ApplicationDetailDialog,
   ALLOWED_TRANSITIONS,
   STAGE_LABELS,
   STAGE_TONES
-} from "../../components/tracker/ApplicationDetailDialog";
+} from "../tracker/components/ApplicationDetailDialog";
 
 const STAGES: ApplicationStage[] = [
   "SAVED",

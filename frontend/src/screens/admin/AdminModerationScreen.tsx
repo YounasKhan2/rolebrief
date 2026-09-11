@@ -1,14 +1,14 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { ArrowLeft, Flag, ShieldAlert, Check, X, ExternalLink, MapPin, RefreshCw, AlertTriangle } from "lucide-react";
-import { PageContainer, PageHeader } from "../../components/shell/AppShell";
-import { Kicker, Badge, Button, CompanyLogo, EmptyState } from "../../components/ui/primitives";
-import { Tabs } from "../../components/ui/form";
-import { Dialog } from "../../components/ui/overlay";
-import { useToast } from "../../components/ui/toast";
-import { relativeTime } from "../../lib/format";
-import { getModerationQueue, executeModerationAction } from "../../lib/admin-api";
-import type { ModerationQueueItem } from "../../lib/admin-api";
+import { PageContainer, PageHeader } from "../../shared/shell/AppShell";
+import { Kicker, Badge, Button, CompanyLogo, EmptyState } from "../../ui/primitives";
+import { Tabs } from "../../ui/form";
+import { Dialog } from "../../ui/overlay";
+import { useToast } from "../../ui/toast";
+import { relativeTime } from "../../lib/core/format";
+import { getModerationQueue, executeModerationAction } from "../../lib/features/admin-api";
+import type { ModerationQueueItem } from "../../lib/features/admin-api";
 
 type Tab = "reports" | "suspicious" | "stale" | "expired";
 

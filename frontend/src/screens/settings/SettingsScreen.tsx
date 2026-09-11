@@ -14,24 +14,24 @@ import {
   Lock,
   ExternalLink
 } from "lucide-react";
-import { PageContainer, PageHeader } from "../../components/shell/AppShell";
-import "../../components/candidate/candidate-account.css";
-import { Badge, Button, SectionRule } from "../../components/ui/primitives";
-import { Switch, SegmentedControl, Input } from "../../components/ui/form";
-import { useToast } from "../../components/ui/toast";
-import { relativeTime } from "../../lib/format";
-import { useAuth } from "../../lib/auth";
-import * as authApi from "../../lib/auth-api";
-import type { AuthSession } from "../../lib/auth-api";
-import * as preferencesApi from "../../lib/preferences-api";
-import type { UserPreferences } from "../../lib/preferences-api";
+import { PageContainer, PageHeader } from "../../shared/shell/AppShell";
+import "../../shared/candidate/candidate-account.css";
+import { Badge, Button, SectionRule } from "../../ui/primitives";
+import { Switch, SegmentedControl, Input } from "../../ui/form";
+import { useToast } from "../../ui/toast";
+import { relativeTime } from "../../lib/core/format";
+import { useAuth } from "../../lib/auth/auth";
+import * as authApi from "../../lib/auth/auth-api";
+import type { AuthSession } from "../../lib/auth/auth-api";
+import * as preferencesApi from "../../lib/features/preferences-api";
+import type { UserPreferences } from "../../lib/features/preferences-api";
 import {
   applyThemePreferences,
   getCachedThemePreferences,
   subscribeToAccessibilityChanges,
   MotionPreference,
   ContrastPreference
-} from "../../lib/accessibility";
+} from "../../lib/accessibility/accessibility";
 
 function Row({
   title,

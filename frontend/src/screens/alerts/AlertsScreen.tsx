@@ -13,13 +13,13 @@ import {
   Sliders,
   RefreshCw
 } from "lucide-react";
-import { PageContainer, PageHeader } from "../../components/shell/AppShell";
-import "../../components/candidate/candidate-account.css";
-import { Badge, Button, FilterChip, EmptyState } from "../../components/ui/primitives";
-import { Input, SegmentedControl, Checkbox } from "../../components/ui/form";
-import { Sheet } from "../../components/ui/overlay";
-import { relativeTime } from "../../lib/format";
-import { useToast } from "../../components/ui/toast";
+import { PageContainer, PageHeader } from "../../shared/shell/AppShell";
+import "../../shared/candidate/candidate-account.css";
+import { Badge, Button, FilterChip, EmptyState } from "../../ui/primitives";
+import { Input, SegmentedControl, Checkbox } from "../../ui/form";
+import { Sheet } from "../../ui/overlay";
+import { relativeTime } from "../../lib/core/format";
+import { useToast } from "../../ui/toast";
 import {
   getAlerts,
   createAlert,
@@ -32,7 +32,7 @@ import {
   type AlertChannel,
   type AlertEligibilityPolicy,
   type AlertAlignmentTier
-} from "../../lib/alerts-api";
+} from "../../lib/features/alerts-api";
 
 export function Component() {
   const toast = useToast();
@@ -159,8 +159,10 @@ export function Component() {
                           : "Any Alignment"}
                       </Badge>
                       {criteria.eligibilityPolicy === "ELIGIBLE_ONLY" && (
-                        <Badge tone="emerald" className="inline-flex items-center gap-1">
-                          <ShieldCheck size={12} /> Eligible only
+                        <Badge tone="emerald">
+                          <span className="inline-flex items-center gap-1">
+                            <ShieldCheck size={12} /> Eligible only
+                          </span>
                         </Badge>
                       )}
                     </div>

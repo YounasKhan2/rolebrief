@@ -1,16 +1,16 @@
 import { Link } from "react-router";
 import { useEffect, useState } from "react";
 import { Activity, AlertTriangle, CheckCircle2, Database, RefreshCw, ShieldAlert, Layers, ArrowRight } from "lucide-react";
-import { PageContainer, PageHeader } from "../../components/shell/AppShell";
-import { Kicker, Badge, Button, SectionRule } from "../../components/ui/primitives";
-import { companies } from "../../lib/fixtures";
-import { relativeTime } from "../../lib/format";
-import { useToast } from "../../components/ui/toast";
-import { useAuth } from "../../lib/auth";
-import * as authApi from "../../lib/auth-api";
-import type { AdminUser, AuthRole, AuthStatus } from "../../lib/auth-api";
-import { getAdminMetrics, getAdminSources } from "../../lib/admin-api";
-import type { AdminMetrics, AdminSourceItem } from "../../lib/admin-api";
+import { PageContainer, PageHeader } from "../../shared/shell/AppShell";
+import { Kicker, Badge, Button, SectionRule } from "../../ui/primitives";
+import { companies } from "../../lib/core/fixtures";
+import { relativeTime } from "../../lib/core/format";
+import { useToast } from "../../ui/toast";
+import { useAuth } from "../../lib/auth/auth";
+import * as authApi from "../../lib/auth/auth-api";
+import type { AdminUser, AuthRole, AuthStatus } from "../../lib/auth/auth-api";
+import { getAdminMetrics, getAdminSources } from "../../lib/features/admin-api";
+import type { AdminMetrics, AdminSourceItem } from "../../lib/features/admin-api";
 
 const providers = [
   { name: "Himalayas provider", status: "healthy" as const, lastSync: new Date().toISOString(), ingested: 0, failed: 0 },
@@ -204,9 +204,12 @@ export function Component() {
                 <li>All ingestion and moderation pipelines healthy.</li>
               )}
             </ul>
-            <Button variant="secondary" size="sm" className="mt-3" asChild>
-              <Link to="/admin/moderation">View moderation queue</Link>
-            </Button>
+            <Link
+              to="/admin/moderation"
+              className="mt-3 inline-flex h-8 items-center justify-center rounded-[var(--radius-control)] border border-line bg-white px-3 text-sm font-medium text-ink hover:bg-soft"
+            >
+              View moderation queue
+            </Link>
           </div>
 
           <div className="rounded-[var(--radius-card)] border border-line p-4">
