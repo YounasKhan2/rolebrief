@@ -11,10 +11,10 @@ import { ResumeExtractionService } from "./processing/resume-extraction.service"
 import { ResumeMapperService } from "./mapping/resume-mapper.service";
 import { ResumeRateLimitService } from "./resume-rate-limit.service";
 import { ResumeUploadService } from "./resume-upload.service";
-import { DoclingModule } from "../../infrastructure/internal-services/docling/docling.module";
+import { DocumentParserModule } from "../../infrastructure/internal-services/document-parser/document-parser.module";
 
 @Module({
-  imports: [AppConfigModule, PrismaModule, StorageModule, MalwareModule, QueueModule, DoclingModule],
+  imports: [AppConfigModule, PrismaModule, StorageModule, MalwareModule, QueueModule, DocumentParserModule],
   controllers: [ResumesController],
   providers: [ResumeUploadService, ResumeRateLimitService, ResumeFileValidatorService, ResumeProcessingService, ResumeExtractionService, ResumeMapperService],
   exports: [ResumeUploadService, ResumeProcessingService, ResumeExtractionService]

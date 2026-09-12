@@ -272,7 +272,7 @@ flowchart LR
   Redis["Redis / BullMQ"]
   Worker["Node worker owns processing"]
   ClamAV["Private ClamAV service"]
-  Docling["Private Docling-compatible extraction service"]
+  Parser["Private document-parser-service"]
   Artifact["Immutable private extraction artifact"]
   DB["PostgreSQL"]
 
@@ -287,12 +287,12 @@ flowchart LR
   Worker --> DB
   Worker --> Storage
   Worker --> ClamAV
-  Worker --> Docling
+  Worker --> Parser
   Worker --> Artifact
   Worker --> DB
 ```
 
-RustFS remains the development object-storage server. RoleBrief business logic talks to the generic S3-compatible storage adapter. ClamAV and Docling are private to Docker networking and have no public application routes or host-bound ports.
+RustFS remains the development object-storage server. RoleBrief business logic talks to the generic S3-compatible storage adapter. ClamAV and the document parser are private to Docker networking and have no public application routes or host-bound ports.
 
 ### Upload And Verification Flow
 
@@ -305,7 +305,7 @@ sequenceDiagram
   participant S as Private RustFS/S3 storage
   participant W as Node worker
   participant C as Private ClamAV
-  participant X as Private Docling service
+  participant X as Private document parser
 
   B->>A: POST /api/v1/me/resumes/upload-session
   A->>R: Fail-closed admission limit
@@ -334,7 +334,7 @@ sequenceDiagram
   W->>D: Mark READY_FOR_REVIEW
 ```
 
-The browser cannot download, preview, parse, or otherwise access quarantined files. Only the Node worker may process `VERIFIED_CLEAN` documents through the private Docling-compatible service. The Python service is stateless, cannot access PostgreSQL, Redis, BullMQ, object-storage keys, signed URLs, or user profiles, and cannot mutate canonical career-history tables.
+The browser cannot download, preview, parse, or otherwise access quarantined files. Only the Node worker may process `VERIFIED_CLEAN` documents through the private document-parser-service. The Python service is stateless, cannot access PostgreSQL, Redis, BullMQ, object-storage keys, signed URLs, or user profiles, and cannot mutate canonical career-history tables.
 
 ### State Transitions
 
@@ -477,14 +477,14 @@ No production secret values belong in tracked files.
 Resume extraction:
 
 ```text
-DOCLING_SERVICE_URL=
-DOCLING_INTERNAL_TOKEN=
-DOCLING_REQUEST_TIMEOUT_MS=
-DOCLING_RESPONSE_MAX_BYTES=
+EXTRACTION_SERVICE_URL=
+EXTRACTION_INTERNAL_TOKEN=
+EXTRACTION_REQUEST_TIMEOUT_MS=
+EXTRACTION_RESPONSE_MAX_BYTES=
 RESUME_EXTRACTION_MAX_BLOCKS=
 RESUME_EXTRACTION_MAX_TEXT_BYTES=
 RESUME_EXTRACTION_MAX_BLOCK_TEXT_BYTES=
-RESUME_EXTRACTION_OCR_MIN_BLOCKS=
+RESUME_EXTRACTION_OCR_MIN_CHARS=
 RESUME_EXTRACTION_MAX_RECONCILE=
 ```
 
@@ -512,7 +512,7 @@ Verified local Docker behavior for this boundary:
 
 ### Boundary 3 Extraction And Mapping
 
-Only `VERIFIED_CLEAN` documents enter extraction. The existing Node worker owns BullMQ consumption, retries, leases, database transitions, object reads, artifact writes, and deterministic mapping. It streams bounded bytes to a private authenticated Docling-compatible HTTP service:
+Only `VERIFIED_CLEAN` documents enter extraction. The existing Node worker owns BullMQ consumption, retries, leases, database transitions, object reads, artifact writes, and deterministic mapping. It streams bounded bytes to a private authenticated document-parser-service:
 
 ```text
 POST /internal/v1/documents/extract
@@ -520,18 +520,34 @@ GET  /internal/v1/health/live
 GET  /internal/v1/health/ready
 ```
 
-The internal request includes a versioned contract, opaque server-owned document reference, safe media type, OCR policy, and deadline metadata. It never includes a user ID, original filename, storage key, storage URL, signed URL, profile data, or callback URL. The service returns a bounded versioned structure containing pages, blocks, warnings, and safe metrics. Node treats the response as untrusted, validates it with a strict TypeScript schema, and rejects malformed or oversized output.
+The internal request includes a versioned contract, opaque server-owned document reference, safe media type, OCR policy, and deadline metadata. It never includes a user ID, original filename, storage key, storage URL, signed URL, profile data, or callback URL. The service returns a bounded `DocumentExtractionResultV1` containing parser engine metadata, pages, blocks, warnings, and safe metrics. Node treats the response as untrusted, validates it with a strict TypeScript schema, and rejects malformed or oversized output.
+
+The parser service is intentionally lightweight and CPU-only:
+
+- `pdfplumber` / `pdfminer.six` extract native PDF text, words, page references and bounding boxes.
+- `pypdfium2` renders only sparse PDF pages that need OCR.
+- local Tesseract CLI performs OCR with argument arrays, timeouts and temporary-file cleanup.
+- `python-docx` extracts DOCX paragraphs, heading styles, lists and tables.
+
+DOCX does not provide stable page coordinates without a rendering engine, so DOCX blocks use `pageNumber: null` and `boundingBox: null`. The service does not use LibreOffice in this boundary.
+
+Dependency licence choices for the parser boundary:
+
+- `pdfplumber`, `pdfminer.six`, `pypdfium2`, `python-docx`, `FastAPI`, `Uvicorn`, `Pydantic`, `python-multipart`, and `httpx` are used as permissively licensed Python dependencies.
+- `Pillow` is used for transient image handling in the OCR path under its permissive HPND-style licence.
+- Tesseract is used as a local system OCR binary inside the private container; language data is limited to the configured allowlist.
+- PyMuPDF is intentionally not used because its AGPL/commercial licensing requires an explicit business decision before adoption.
 
 Lossless normalized extraction output is stored as compressed private JSON under an immutable server-generated key. Artifact identity includes the source SHA-256, extraction contract version, parser version, OCR policy/version, and deterministic normalization version. PostgreSQL stores artifact metadata, safe metrics, and the bounded review draft; it does not store original file bytes.
 
 The deterministic RoleBrief mapper runs without LLMs. It separates normalization, section detection, resume-item grouping, taxonomy normalization, and confidence/review classification. Every mapped or preserved item is source-backed with block IDs, page numbers, bounding boxes when available, a review state, reason codes, and `RESUME_PARSED` provenance. Unknown sections are preserved as additional information, ambiguous dates require confirmation, and sensitive data such as birth date, national ID, marital status, photographs, and similar fields are classified as excluded. Login email, canonical profile, career-history rows, preferences, Radar, Match Brief, and Eligibility are not mutated in this boundary.
 
-OCR policy is deterministic: local extraction first; OCR is allowed only by policy when usable extracted text falls below the configured threshold. The current local service reports OCR availability safely and does not claim successful extraction for empty/image-only content.
+OCR policy is deterministic: native extraction first; OCR is allowed only by policy when usable extracted text on a page falls below the configured threshold. Actual OCR pages are reported through `metrics.ocrPages` and block `extractionMethod: "OCR"`. Empty and image-only unsupported content does not produce a successful draft.
 
 Extraction failure behavior:
 
-- Docling unavailable, overload, timeout, transient RustFS/PostgreSQL/Redis failures, and worker interruption produce retryable `FAILED` states.
-- Malformed or oversized Docling output, no usable content, image-only unsupported DOCX, artifact write failure, mapper failure, and exhausted attempts use safe failure codes.
+- Parser unavailable, overload, timeout, transient RustFS/PostgreSQL/Redis failures, and worker interruption produce retryable `FAILED` states.
+- Malformed or oversized parser output, no usable content, image-only unsupported DOCX, artifact write failure, mapper failure, and exhausted attempts use safe failure codes.
 - Duplicate extraction jobs reuse the same logical artifact/draft identity.
 - Stale workers cannot overwrite a newer artifact, draft, deletion, or terminal state because final writes require the current lease token.
 
@@ -541,20 +557,25 @@ Resume extraction health appears in:
 curl http://127.0.0.1:3000/api/v1/health/resume-processing
 ```
 
-General API readiness may remain up when Docling is degraded; resume extraction admission and processing fail or defer safely.
+General API readiness may remain up when the document parser is degraded; resume extraction admission and processing fail or defer safely.
 
 ### Boundary 3 Closure Evidence
 
-Verified local Docker behavior for this boundary:
+Status: implementation has been corrected from the earlier model-heavy parser attempt to a lightweight private parser. Live Docker/resource verification is pending in this environment because Docker Desktop is not currently reachable from the shell.
 
-- Private Docling-compatible service has no public host port and reports healthy over Docker networking.
-- API resume-processing health reports ClamAV and Docling readiness without leaking configuration.
-- Clean synthetic PDF and DOCX extraction jobs reach `READY_FOR_REVIEW`.
-- Extraction artifacts are written to private object storage as immutable compressed JSON.
-- Deterministic review drafts are stored in PostgreSQL with source-backed items, stable IDs, summary counts, warnings, parser version, mapper version, and artifact metadata.
-- Malformed extraction output and invalid source documents fail safely without creating drafts.
-- Duplicate jobs and retry paths are idempotent through deterministic job IDs, artifact keys, draft upserts, and lease-guarded transitions.
-- No preview/download route or frontend review UI is exposed.
+Expected checks before locking:
+
+- private document-parser-service has no public host port and reports healthy over Docker networking;
+- API resume-processing health reports ClamAV and document-parser readiness without leaking configuration;
+- clean synthetic PDF, scanned PDF, and DOCX extraction jobs reach `READY_FOR_REVIEW`;
+- scanned PDF blocks prove actual Tesseract invocation through `extractionMethod: "OCR"` and `metrics.ocrPages`;
+- extraction artifacts are written to private object storage as immutable compressed JSON;
+- deterministic review drafts are stored in PostgreSQL with source-backed items, stable IDs, summary counts, warnings, parser version, mapper version, and artifact metadata;
+- malformed or oversized parser output and invalid source documents fail safely without creating drafts;
+- duplicate jobs and retry paths are idempotent through deterministic job IDs, artifact keys, draft upserts, and lease-guarded transitions;
+- no preview/download route or frontend review UI is exposed;
+- runtime works with outbound networking disabled;
+- dependency scan confirms the active parser runtime contains only the lightweight parser stack documented above.
 
 ### Migration Rollback Considerations
 
@@ -569,6 +590,29 @@ Rollback before production traffic:
 5. Delete orphaned development objects from the configured private bucket.
 
 Rollback after production traffic requires exporting or intentionally deleting user resume metadata and uploaded objects according to retention policy.
+
+## Known Local Environment Debt
+
+These items reflect local environment state only and do not indicate problems with the migration chain or application code.
+
+### Long-lived PostgreSQL volume failure
+
+The local development PostgreSQL container has a pre-existing data volume that prevents clean migration replay. This is a local environment issue caused by accumulated volume state, not a migration-chain defect.
+
+**Evidence of migration-chain integrity**: A fresh deployment against a clean PostgreSQL instance (empty volume) successfully applied all 20 migrations in order without errors. This proves the migration chain is correct and sequentially complete.
+
+**Resolution**: The existing local volume must be reset to replay migrations cleanly:
+
+```bash
+# WARNING: destroys all local development data.
+docker compose down -v
+docker compose up -d postgres
+docker compose run --rm migrate
+```
+
+This is intentional local environment debt. It does not block Boundary 3 or any future boundary.
+
+---
 
 ## Remaining Resume Import Boundaries
 

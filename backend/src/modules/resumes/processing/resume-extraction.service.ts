@@ -12,17 +12,18 @@ import { createHash, randomUUID } from "node:crypto";
 import { gzipSync } from "node:zlib";
 import { AppConfigService } from "../../../common/config/app-config.service";
 import {
-  DOCLING_EXTRACTION_VERSION,
-  DoclingExtraction
-} from "../../../infrastructure/internal-services/docling/docling-contract";
+  DOCUMENT_EXTRACTION_VERSION,
+  DocumentExtractionResultV1,
+  parserVersionFromExtraction
+} from "../../../infrastructure/internal-services/document-parser/document-parser-contract";
 import {
-  DoclingClientService,
-  DoclingOutputInvalidError,
-  DoclingOutputTooLargeError,
-  DoclingProtocolError,
-  DoclingTimeoutError,
-  DoclingUnavailableError
-} from "../../../infrastructure/internal-services/docling/docling-client.service";
+  DocumentParserClientService,
+  DocumentParserOutputInvalidError,
+  DocumentParserOutputTooLargeError,
+  DocumentParserProtocolError,
+  DocumentParserTimeoutError,
+  DocumentParserUnavailableError
+} from "../../../infrastructure/internal-services/document-parser/document-parser-client.service";
 import { S3StorageService } from "../../../infrastructure/storage/s3-storage.service";
 import { PrismaService } from "../../../prisma/prisma.service";
 import { EXTRACT_VERIFIED_RESUME_JOB, QUEUES } from "../../../queue/queue.constants";
@@ -51,15 +52,15 @@ export class ResumeExtractionService {
     private readonly prisma: PrismaService,
     private readonly config: AppConfigService,
     private readonly storage: S3StorageService,
-    private readonly docling: DoclingClientService,
+    private readonly parser: DocumentParserClientService,
     private readonly mapper: ResumeMapperService,
     @InjectQueue(QUEUES.verification) private readonly verificationQueue: Queue
-  ) {}
+  ) { }
 
   async enqueue(id: string, sourceSha256: string, suffix = "initial") {
     await this.verificationQueue.add(
       EXTRACT_VERIFIED_RESUME_JOB,
-      { version: 1, resumeDocumentId: id, sourceSha256, extractionVersion: DOCLING_EXTRACTION_VERSION, mapperVersion: RESUME_MAPPER_VERSION },
+      { version: 1, resumeDocumentId: id, sourceSha256, extractionVersion: DOCUMENT_EXTRACTION_VERSION, mapperVersion: RESUME_MAPPER_VERSION },
       {
         jobId: `${EXTRACT_VERIFIED_RESUME_JOB}__${id}__${sourceSha256}__${RESUME_MAPPER_VERSION}__${suffix}`,
         attempts: this.config.resumes.processing.maxAttempts,
@@ -100,7 +101,7 @@ export class ResumeExtractionService {
       },
       data: {
         status: ResumeDocumentStatus.FAILED,
-        failureCode: ResumeFailureCode.DOCLING_UNAVAILABLE,
+        failureCode: ResumeFailureCode.PARSER_FAILED,
         failureMessageSafe: "Extraction lease expired.",
         processingLeaseToken: null,
         processingLeaseExpiresAt: null
@@ -123,7 +124,7 @@ export class ResumeExtractionService {
       }
 
       const bytes = await this.storage.getObjectBuffer(document.objectKey, this.config.resumes.upload.maxBytes + 1);
-      const extraction = await this.docling.extract({
+      const extraction = await this.parser.extract({
         documentRef: `resume:${document.id}`,
         mediaType: document.mimeType,
         bytes,
@@ -131,10 +132,11 @@ export class ResumeExtractionService {
         deadlineMs: this.config.resumes.extraction.timeoutMs
       });
       this.validateExtraction(extraction);
+      const parserVersion = parserVersionFromExtraction(extraction);
       const artifact = await this.storeArtifact(document.id, document.sha256, extraction);
 
       await this.transition(document.id, leaseToken, ResumeDocumentStatus.EXTRACTING, ResumeDocumentStatus.MAPPING, {
-        parserVersion: extraction.parserVersion
+        parserVersion
       });
 
       const mapped = this.mapper.map(extraction, { artifactId: artifact.sha256, sourceChecksum: document.sha256 });
@@ -152,7 +154,7 @@ export class ResumeExtractionService {
         },
         update: {
           status: ResumeDraftStatus.READY_FOR_REVIEW,
-          parserVersion: extraction.parserVersion,
+          parserVersion,
           extractionVersion: job.extractionVersion,
           artifactObjectKey: artifact.key,
           artifactSha256: artifact.sha256,
@@ -168,7 +170,7 @@ export class ResumeExtractionService {
           userId: document.userId,
           status: ResumeDraftStatus.READY_FOR_REVIEW,
           schemaVersion: 1,
-          parserVersion: extraction.parserVersion,
+          parserVersion,
           extractionVersion: job.extractionVersion,
           mapperVersion: job.mapperVersion,
           sourceChecksum: document.sha256,
@@ -183,7 +185,7 @@ export class ResumeExtractionService {
           targetProfileRevision: null
         }
       });
-      await this.completeReady(document.id, leaseToken, draft.id, extraction.parserVersion, job.mapperVersion, artifact, extraction);
+      await this.completeReady(document.id, leaseToken, draft.id, parserVersion, job.mapperVersion, artifact, extraction);
       return { readyForReview: true };
     } catch (error) {
       await this.handleProcessingError(document.id, leaseToken, error);
@@ -243,27 +245,28 @@ export class ResumeExtractionService {
     return locked;
   }
 
-  private validateExtraction(extraction: DoclingExtraction) {
+  private validateExtraction(extraction: DocumentExtractionResultV1) {
     const cfg = this.config.resumes.extraction;
     const totalText = extraction.blocks.reduce((sum, block) => sum + Buffer.byteLength(block.text, "utf8"), 0);
     if (extraction.blocks.length === 0 || totalText === 0) throw new ResumePermanentValidationError(ResumeFailureCode.NO_USABLE_CONTENT);
     if (extraction.blocks.length > cfg.maxBlocks || totalText > cfg.maxTextBytes) {
-      throw new ResumePermanentValidationError(ResumeFailureCode.DOCLING_OUTPUT_TOO_LARGE);
+      throw new ResumePermanentValidationError(ResumeFailureCode.PARSER_FAILED);
     }
     if (extraction.blocks.some((block) => Buffer.byteLength(block.text, "utf8") > cfg.maxBlockTextBytes)) {
-      throw new ResumePermanentValidationError(ResumeFailureCode.DOCLING_OUTPUT_TOO_LARGE);
+      throw new ResumePermanentValidationError(ResumeFailureCode.PARSER_FAILED);
     }
   }
 
-  private async storeArtifact(id: string, sourceSha256: string, extraction: DoclingExtraction) {
+  private async storeArtifact(id: string, sourceSha256: string, extraction: DocumentExtractionResultV1) {
     const normalized = Buffer.from(JSON.stringify(extraction));
     const body = gzipSync(normalized);
-    const key = `resumes/artifacts/${id}/${sourceSha256}/${DOCLING_EXTRACTION_VERSION}/${extraction.parserVersion}.json.gz`;
+    const parserVersion = parserVersionFromExtraction(extraction);
+    const key = `resumes/artifacts/${id}/${sourceSha256}/${DOCUMENT_EXTRACTION_VERSION}/${createHash("sha256").update(parserVersion).digest("hex").slice(0, 16)}.json.gz`;
     const put = await this.storage.putObjectBuffer({
       key,
       body,
       contentType: "application/json",
-      metadata: { compression: "gzip", extractionVersion: DOCLING_EXTRACTION_VERSION, parserVersion: extraction.parserVersion }
+      metadata: { compression: "gzip", extractionVersion: DOCUMENT_EXTRACTION_VERSION, parserVersion }
     }).catch(() => {
       throw new ResumeRetryableProcessingError(ResumeFailureCode.EXTRACTION_ARTIFACT_WRITE_FAILED);
     });
@@ -281,10 +284,10 @@ export class ResumeExtractionService {
       where: { id, status: from, processingLeaseToken: leaseToken, deletedAt: null },
       data: { status: to, ...data }
     });
-    if (result.count !== 1) throw new ResumeRetryableProcessingError(ResumeFailureCode.DOCLING_UNAVAILABLE);
+    if (result.count !== 1) throw new ResumeRetryableProcessingError(ResumeFailureCode.PARSER_FAILED);
   }
 
-  private async completeReady(id: string, leaseToken: string, draftId: string, parserVersion: string, mapperVersion: string, artifact: StoredExtractionArtifact, extraction: DoclingExtraction) {
+  private async completeReady(id: string, leaseToken: string, draftId: string, parserVersion: string, mapperVersion: string, artifact: StoredExtractionArtifact, extraction: DocumentExtractionResultV1) {
     const now = new Date();
     const result = await this.prisma.resumeDocument.updateMany({
       where: { id, status: ResumeDocumentStatus.MAPPING, processingLeaseToken: leaseToken, deletedAt: null },
@@ -305,7 +308,7 @@ export class ResumeExtractionService {
       data: {
         status: ResumeParseAttemptStatus.SUCCEEDED,
         completedAt: now,
-        doclingArtifactObjectKey: artifact.key,
+        artifactObjectKey: artifact.key,
         artifactSha256: artifact.sha256,
         artifactByteSize: artifact.byteSize,
         artifactContentType: "application/json",
@@ -342,11 +345,11 @@ export class ResumeExtractionService {
   private classify(error: unknown): ResumeFailureCode {
     if (error instanceof ResumePermanentValidationError) return error.code;
     if (error instanceof ResumeRetryableProcessingError) return error.code;
-    if (error instanceof DoclingTimeoutError) return ResumeFailureCode.DOCLING_TIMEOUT;
-    if (error instanceof DoclingUnavailableError) return ResumeFailureCode.DOCLING_UNAVAILABLE;
-    if (error instanceof DoclingProtocolError) return ResumeFailureCode.DOCLING_PROTOCOL_ERROR;
-    if (error instanceof DoclingOutputTooLargeError) return ResumeFailureCode.DOCLING_OUTPUT_TOO_LARGE;
-    if (error instanceof DoclingOutputInvalidError) return ResumeFailureCode.DOCLING_OUTPUT_INVALID;
+    if (error instanceof DocumentParserTimeoutError) return ResumeFailureCode.PARSER_TIMEOUT;
+    if (error instanceof DocumentParserUnavailableError) return ResumeFailureCode.PARSER_FAILED;
+    if (error instanceof DocumentParserProtocolError) return ResumeFailureCode.PARSER_FAILED;
+    if (error instanceof DocumentParserOutputTooLargeError) return ResumeFailureCode.PARSER_FAILED;
+    if (error instanceof DocumentParserOutputInvalidError) return ResumeFailureCode.PARSER_FAILED;
     if (error instanceof ServiceUnavailableException) return ResumeFailureCode.STORAGE_UNAVAILABLE;
     return ResumeFailureCode.MAPPER_FAILED;
   }

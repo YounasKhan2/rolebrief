@@ -10,20 +10,20 @@ services:
     volumes:
       - rolebrief_postgres:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U rolebrief -d rolebrief"]
+      test: [ "CMD-SHELL", "pg_isready -U rolebrief -d rolebrief" ]
       interval: 5s
       timeout: 5s
       retries: 10
 
   redis:
     image: redis:7-alpine
-    command: ["redis-server", "--appendonly", "yes"]
+    command: [ "redis-server", "--appendonly", "yes" ]
     ports:
       - "6379:6379"
     volumes:
       - rolebrief_redis:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -39,7 +39,7 @@ services:
     volumes:
       - rolebrief_rustfs:/data
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:9000/health || exit 1"]
+      test: [ "CMD-SHELL", "wget -q --spider http://127.0.0.1:9000/health || exit 1" ]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -50,12 +50,7 @@ services:
       RESUME_STORAGE_ACCESS_KEY_ID: ${RESUME_STORAGE_ACCESS_KEY_ID:-rolebrief}
       RESUME_STORAGE_SECRET_ACCESS_KEY: ${RESUME_STORAGE_SECRET_ACCESS_KEY:-rolebrief-local-secret}
       RESUME_STORAGE_BUCKET: ${RESUME_STORAGE_BUCKET:-rolebrief-resumes}
-    entrypoint:
-      [
-        "/bin/sh",
-        "-c",
-        "mc alias set rustfs http://rustfs:9000 $$RESUME_STORAGE_ACCESS_KEY_ID $$RESUME_STORAGE_SECRET_ACCESS_KEY && mc mb --ignore-existing rustfs/$$RESUME_STORAGE_BUCKET"
-      ]
+    entrypoint: [ "/bin/sh", "-c", "mc alias set rustfs http://rustfs:9000 $$RESUME_STORAGE_ACCESS_KEY_ID $$RESUME_STORAGE_SECRET_ACCESS_KEY && mc mb --ignore-existing rustfs/$$RESUME_STORAGE_BUCKET" ]
     depends_on:
       rustfs:
         condition: service_healthy
@@ -66,28 +61,28 @@ services:
       - rolebrief_clamav:/var/lib/clamav
       - ./docker/clamav/local.ndb:/var/lib/clamav/local.ndb
     healthcheck:
-      test: ["CMD-SHELL", "clamdscan --version >/dev/null 2>&1 || exit 1"]
+      test: [ "CMD-SHELL", "clamdscan --version >/dev/null 2>&1 || exit 1" ]
       interval: 30s
       timeout: 10s
       retries: 20
       start_period: 60s
 
-  docling-service:
+  document-parser-service:
     build:
-      context: ./docling-service
+      context: ./document-parser-service
     environment:
-      DOCLING_INTERNAL_TOKEN: ${DOCLING_INTERNAL_TOKEN:-replace-with-docling-internal-token}
-      DOCLING_MAX_INPUT_BYTES: ${RESUME_UPLOAD_MAX_BYTES:-10485760}
-      DOCLING_MAX_BLOCKS: ${RESUME_EXTRACTION_MAX_BLOCKS:-1500}
+      DOCUMENT_PARSER_INTERNAL_TOKEN: ${EXTRACTION_INTERNAL_TOKEN:-replace-with-document-parser-internal-token}
+      DOCUMENT_PARSER_MAX_INPUT_BYTES: ${RESUME_UPLOAD_MAX_BYTES:-10485760}
+      DOCUMENT_PARSER_MAX_BLOCKS: ${RESUME_EXTRACTION_MAX_BLOCKS:-1500}
+      DOCUMENT_PARSER_MAX_CHARS: ${RESUME_EXTRACTION_MAX_TEXT_BYTES:-2097152}
+      DOCUMENT_PARSER_MAX_BLOCK_CHARS: ${RESUME_EXTRACTION_MAX_BLOCK_TEXT_BYTES:-8000}
+      DOCUMENT_PARSER_OCR_MIN_CHARS_PER_PAGE: ${RESUME_EXTRACTION_OCR_MIN_CHARS:-100}
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,noexec,nosuid,nodev
     restart: unless-stopped
     healthcheck:
-      test:
-        [
-          "CMD",
-          "python",
-          "-c",
-          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/internal/v1/health/ready', timeout=2)"
-        ]
+      test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/internal/v1/health/ready', timeout=2)" ]
       interval: 10s
       timeout: 5s
       retries: 12
@@ -108,18 +103,12 @@ services:
       RESUME_STORAGE_PUBLIC_ENDPOINT: http://localhost:9000
       CLAMAV_HOST: clamav
       CLAMAV_PORT: 3310
-      DOCLING_SERVICE_URL: http://docling-service:8080
+      EXTRACTION_SERVICE_URL: http://document-parser-service:8080
     ports:
       - "3000:3000"
     restart: unless-stopped
     healthcheck:
-      test:
-        [
-          "CMD",
-          "node",
-          "-e",
-          "fetch('http://127.0.0.1:3000/api/v1/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
-        ]
+      test: [ "CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/v1/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))" ]
       interval: 10s
       timeout: 5s
       retries: 6
@@ -149,7 +138,7 @@ services:
       RESUME_STORAGE_PUBLIC_ENDPOINT: http://localhost:9000
       CLAMAV_HOST: clamav
       CLAMAV_PORT: 3310
-      DOCLING_SERVICE_URL: http://docling-service:8080
+      EXTRACTION_SERVICE_URL: http://document-parser-service:8080
     restart: unless-stopped
     depends_on:
       postgres:
@@ -162,7 +151,7 @@ services:
         condition: service_completed_successfully
       clamav:
         condition: service_healthy
-      docling-service:
+      document-parser-service:
         condition: service_healthy
 
   scheduler:
@@ -192,7 +181,7 @@ services:
     build:
       context: ./backend
     command: ./node_modules/.bin/prisma migrate deploy
-    profiles: ["tools"]
+    profiles: [ "tools" ]
     env_file:
       - ./backend/.env.example
       - ./backend/.env
@@ -208,7 +197,7 @@ services:
     build:
       context: ./backend
     command: ./node_modules/.bin/tsx prisma/seed.ts
-    profiles: ["tools"]
+    profiles: [ "tools" ]
     env_file:
       - ./backend/.env.example
       - ./backend/.env
@@ -221,7 +210,7 @@ services:
 
   adminer:
     image: adminer:4
-    profiles: ["tools"]
+    profiles: [ "tools" ]
     ports:
       - "8080:8080"
     depends_on:

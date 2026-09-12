@@ -66,12 +66,12 @@ export class HealthController {
   @Get("resume-processing")
   async resumeProcessing() {
     const clamav = await this.checkTcp(this.config.resumes.scanning.host, this.config.resumes.scanning.port, 1000);
-    const docling = await this.checkHttp(new URL("/internal/v1/health/ready", this.config.resumes.extraction.serviceUrl).toString(), 1000);
+    const extraction = await this.checkHttp(new URL("/internal/v1/health/ready", this.config.resumes.extraction.serviceUrl).toString(), 1000);
     return {
-      status: clamav && docling ? "ok" : "degraded",
+      status: clamav && extraction ? "ok" : "degraded",
       details: {
         clamav: { status: clamav ? "up" : "down" },
-        docling: { status: docling ? "up" : "down" },
+        extraction: { status: extraction ? "up" : "down" },
         verificationQueue: { status: "configured" },
         storage: { status: "configured" }
       }

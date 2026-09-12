@@ -1,15 +1,18 @@
 import { Injectable, ServiceUnavailableException } from "@nestjs/common";
 import { AppConfigService } from "../../../common/config/app-config.service";
-import { DoclingExtraction, doclingExtractionSchema } from "./docling-contract";
+import {
+  DocumentExtractionResultV1,
+  documentExtractionSchema
+} from "./document-parser-contract";
 
-export class DoclingUnavailableError extends Error {}
-export class DoclingTimeoutError extends Error {}
-export class DoclingProtocolError extends Error {}
-export class DoclingOutputInvalidError extends Error {}
-export class DoclingOutputTooLargeError extends Error {}
+export class DocumentParserUnavailableError extends Error {}
+export class DocumentParserTimeoutError extends Error {}
+export class DocumentParserProtocolError extends Error {}
+export class DocumentParserOutputInvalidError extends Error {}
+export class DocumentParserOutputTooLargeError extends Error {}
 
 @Injectable()
-export class DoclingClientService {
+export class DocumentParserClientService {
   constructor(private readonly config: AppConfigService) {}
 
   async extract(input: {
@@ -18,7 +21,7 @@ export class DoclingClientService {
     bytes: Buffer;
     ocrPolicy: "auto" | "disabled";
     deadlineMs: number;
-  }): Promise<DoclingExtraction> {
+  }): Promise<DocumentExtractionResultV1> {
     const cfg = this.config.resumes.extraction;
     const form = new FormData();
     form.set("contractVersion", "1");
@@ -34,35 +37,37 @@ export class DoclingClientService {
         method: "POST",
         headers: {
           Authorization: `Bearer ${cfg.internalToken}`,
-          "X-RoleBrief-Contract": "docling-v1"
+          "X-RoleBrief-Contract": "document-parser-v1"
         },
         body: form,
         redirect: "error",
         signal: AbortSignal.timeout(Math.min(cfg.timeoutMs, input.deadlineMs))
       });
     } catch (error: any) {
-      if (error?.name === "TimeoutError" || error?.name === "AbortError") throw new DoclingTimeoutError("Docling timed out.");
-      throw new DoclingUnavailableError("Docling is unavailable.");
+      if (error?.name === "TimeoutError" || error?.name === "AbortError") {
+        throw new DocumentParserTimeoutError("Document parser timed out.");
+      }
+      throw new DocumentParserUnavailableError("Document parser is unavailable.");
     }
 
-    if (response.status === 413) throw new DoclingOutputTooLargeError("Docling output too large.");
-    if (response.status === 422) throw new DoclingOutputInvalidError("Docling could not extract the document.");
-    if (response.status === 408 || response.status === 504) throw new DoclingTimeoutError("Docling timed out.");
-    if (response.status === 503 || response.status === 429) throw new DoclingUnavailableError("Docling unavailable.");
-    if (!response.ok || !response.body) throw new DoclingProtocolError("Docling protocol error.");
+    if (response.status === 413) throw new DocumentParserOutputTooLargeError("Document parser output too large.");
+    if (response.status === 422) throw new DocumentParserOutputInvalidError("Document parser could not extract the document.");
+    if (response.status === 408 || response.status === 504) throw new DocumentParserTimeoutError("Document parser timed out.");
+    if (response.status === 503 || response.status === 429) throw new DocumentParserUnavailableError("Document parser unavailable.");
+    if (!response.ok || !response.body) throw new DocumentParserProtocolError("Document parser protocol error.");
 
     const bytes = await this.readBounded(response, cfg.responseMaxBytes);
     let parsed: unknown;
     try {
       parsed = JSON.parse(bytes.toString("utf8"));
     } catch {
-      throw new DoclingOutputInvalidError("Docling returned invalid JSON.");
+      throw new DocumentParserOutputInvalidError("Document parser returned invalid JSON.");
     }
-    const result = doclingExtractionSchema.safeParse(parsed);
-    if (!result.success) throw new DoclingOutputInvalidError("Docling response schema invalid.");
+    const result = documentExtractionSchema.safeParse(parsed);
+    if (!result.success) throw new DocumentParserOutputInvalidError("Document parser response schema invalid.");
     const totalText = result.data.blocks.reduce((sum, block) => sum + Buffer.byteLength(block.text, "utf8"), 0);
     if (result.data.blocks.length > cfg.maxBlocks || totalText > cfg.maxTextBytes) {
-      throw new DoclingOutputTooLargeError("Docling response exceeded configured limits.");
+      throw new DocumentParserOutputTooLargeError("Document parser response exceeded configured limits.");
     }
     return result.data;
   }
@@ -81,14 +86,14 @@ export class DoclingClientService {
 
   private async readBounded(response: Response, maxBytes: number): Promise<Buffer> {
     const reader = response.body?.getReader();
-    if (!reader) throw new ServiceUnavailableException("Docling response unavailable.");
+    if (!reader) throw new ServiceUnavailableException("Document parser response unavailable.");
     const chunks: Buffer[] = [];
     let total = 0;
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
       total += value.byteLength;
-      if (total > maxBytes) throw new DoclingOutputTooLargeError("Docling response exceeded configured limit.");
+      if (total > maxBytes) throw new DocumentParserOutputTooLargeError("Document parser response exceeded configured limit.");
       chunks.push(Buffer.from(value));
     }
     return Buffer.concat(chunks, total);

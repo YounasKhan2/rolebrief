@@ -14,7 +14,7 @@ import { AppConfigService } from "../../common/config/app-config.service";
 import { PrismaService } from "../../prisma/prisma.service";
 import { S3StorageService } from "../../infrastructure/storage/s3-storage.service";
 import { EXTRACT_VERIFIED_RESUME_JOB, QUEUES, VERIFY_RESUME_UPLOAD_JOB } from "../../queue/queue.constants";
-import { DOCLING_EXTRACTION_VERSION } from "../../infrastructure/internal-services/docling/docling-contract";
+import { DOCUMENT_EXTRACTION_VERSION } from "../../infrastructure/internal-services/document-parser/document-parser-contract";
 import { RESUME_MAPPER_VERSION } from "./mapping/resume-mapper.service";
 import { ConfirmResumeUploadDto, CreateResumeUploadSessionDto } from "./dto/resume-upload.dto";
 import { ResumeRateLimitService } from "./resume-rate-limit.service";
@@ -37,7 +37,7 @@ export class ResumeUploadService {
     private readonly storage: S3StorageService,
     private readonly rateLimit: ResumeRateLimitService,
     @InjectQueue(QUEUES.verification) private readonly verificationQueue: Queue
-  ) {}
+  ) { }
 
   async createUploadSession(userId: string, dto: CreateResumeUploadSessionDto, clientIp: string) {
     await this.rateLimit.consume({
@@ -278,7 +278,7 @@ export class ResumeUploadService {
     try {
       await this.verificationQueue.add(
         EXTRACT_VERIFIED_RESUME_JOB,
-        { version: 1, resumeDocumentId: id, sourceSha256: sha256, extractionVersion: DOCLING_EXTRACTION_VERSION, mapperVersion: RESUME_MAPPER_VERSION },
+        { version: 1, resumeDocumentId: id, sourceSha256: sha256, extractionVersion: DOCUMENT_EXTRACTION_VERSION, mapperVersion: RESUME_MAPPER_VERSION },
         {
           jobId: `${EXTRACT_VERIFIED_RESUME_JOB}__${id}__${sha256}__${suffix}`,
           attempts: this.config.resumes.processing.maxAttempts,

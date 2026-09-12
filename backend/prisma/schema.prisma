@@ -865,11 +865,6 @@ enum ResumeFailureCode {
   MALWARE_DETECTED
   SCANNER_UNAVAILABLE
   SCAN_TIMEOUT
-  DOCLING_UNAVAILABLE
-  DOCLING_TIMEOUT
-  DOCLING_PROTOCOL_ERROR
-  DOCLING_OUTPUT_INVALID
-  DOCLING_OUTPUT_TOO_LARGE
   OCR_FAILED
   NO_USABLE_CONTENT
   DOCX_IMAGE_ONLY_UNSUPPORTED
@@ -936,7 +931,7 @@ model ResumeParseAttempt {
   status                   ResumeParseAttemptStatus @default(QUEUED)
   queueJobId               String?                  @unique
   attempt                  Int                      @default(1)
-  doclingArtifactObjectKey String?
+  artifactObjectKey        String?                  @map("doclingArtifactObjectKey")
   artifactSha256           String?
   artifactByteSize         Int?
   artifactContentType      String?
@@ -964,7 +959,7 @@ model ResumeExtractionDraft {
   schemaVersion           Int                @default(1)
   parserVersion           String
   mapperVersion           String
-  extractionVersion       String             @default("docling-contract-v1")
+  extractionVersion       String             @default("document-parser-contract-v1")
   sourceChecksum          String
   artifactObjectKey       String?
   artifactSha256          String?

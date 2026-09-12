@@ -141,14 +141,14 @@ export class AppConfigService {
         timeoutMs: this.config.get("CLAMAV_SCAN_TIMEOUT_MS", { infer: true })
       },
       extraction: {
-        serviceUrl: this.config.get("DOCLING_SERVICE_URL", { infer: true }),
-        internalToken: this.config.get("DOCLING_INTERNAL_TOKEN", { infer: true }),
-        timeoutMs: this.config.get("DOCLING_REQUEST_TIMEOUT_MS", { infer: true }),
-        responseMaxBytes: this.config.get("DOCLING_RESPONSE_MAX_BYTES", { infer: true }),
+        serviceUrl: this.config.get("EXTRACTION_SERVICE_URL", { infer: true }),
+        internalToken: this.config.get("EXTRACTION_INTERNAL_TOKEN", { infer: true }),
+        timeoutMs: this.config.get("EXTRACTION_REQUEST_TIMEOUT_MS", { infer: true }),
+        responseMaxBytes: this.config.get("EXTRACTION_RESPONSE_MAX_BYTES", { infer: true }),
         maxBlocks: this.config.get("RESUME_EXTRACTION_MAX_BLOCKS", { infer: true }),
         maxTextBytes: this.config.get("RESUME_EXTRACTION_MAX_TEXT_BYTES", { infer: true }),
         maxBlockTextBytes: this.config.get("RESUME_EXTRACTION_MAX_BLOCK_TEXT_BYTES", { infer: true }),
-        ocrMinBlocks: this.config.get("RESUME_EXTRACTION_OCR_MIN_BLOCKS", { infer: true }),
+        ocrMinChars: this.config.get("RESUME_EXTRACTION_OCR_MIN_CHARS", { infer: true }),
         maxReconcile: this.config.get("RESUME_EXTRACTION_MAX_RECONCILE", { infer: true })
       }
     };

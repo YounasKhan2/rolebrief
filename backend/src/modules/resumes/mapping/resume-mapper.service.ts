@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { createHash } from "node:crypto";
-import { DoclingExtraction } from "../../../infrastructure/internal-services/docling/docling-contract";
+import { DocumentExtractionResultV1 } from "../../../infrastructure/internal-services/document-parser/document-parser-contract";
 
 export const RESUME_MAPPER_VERSION = "rolebrief-resume-mapper-v1";
 
@@ -51,7 +51,7 @@ type DraftItem = {
   source: {
     blockIds: string[];
     pageNumbers: number[];
-    boundingBoxes: Array<{ x: number; y: number; width: number; height: number }>;
+    boundingBoxes: Array<{ x0: number; y0: number; x1: number; y1: number }>;
     sectionHeading: string | null;
   };
   provenance: "RESUME_PARSED";
@@ -62,7 +62,7 @@ type DraftItem = {
 
 @Injectable()
 export class ResumeMapperService {
-  map(extraction: DoclingExtraction, input: { artifactId: string; sourceChecksum: string }) {
+  map(extraction: DocumentExtractionResultV1, input: { artifactId: string; sourceChecksum: string }) {
     const blocks = extraction.blocks
       .filter((block) => block.text.trim().length > 0)
       .sort((a, b) => a.readingOrder - b.readingOrder);
@@ -75,7 +75,7 @@ export class ResumeMapperService {
 
     for (const block of blocks) {
       const alias = this.headingCategory(block.text);
-      const unknownHeading = !alias && block.kind === "heading" && block.text.trim().length <= 120;
+      const unknownHeading = !alias && block.kind === "HEADING" && block.text.trim().length <= 120;
       if (alias && current.blocks.length > 0) {
         sections.push(current);
         current = { heading: block.text.trim(), category: alias, blocks: [] };
@@ -107,7 +107,7 @@ export class ResumeMapperService {
     return { items, summary, warnings: extraction.warnings };
   }
 
-  private itemFromBlock(section: { heading: string | null; category: string }, block: DoclingExtraction["blocks"][number], input: { artifactId: string }, sectionIndex: number, blockIndex: number): DraftItem {
+  private itemFromBlock(section: { heading: string | null; category: string }, block: DocumentExtractionResultV1["blocks"][number], input: { artifactId: string }, sectionIndex: number, blockIndex: number): DraftItem {
     const sensitive = this.isSensitive(block.text);
     const classification: DraftClassification = sensitive
       ? "SENSITIVE_EXCLUDED"
@@ -135,7 +135,7 @@ export class ResumeMapperService {
     };
   }
 
-  private skillItems(section: { heading: string | null; category: string; blocks: DoclingExtraction["blocks"] }, input: { artifactId: string }, sectionIndex: number): DraftItem[] {
+  private skillItems(section: { heading: string | null; category: string; blocks: DocumentExtractionResultV1["blocks"] }, input: { artifactId: string }, sectionIndex: number): DraftItem[] {
     const sourceBlocks = section.blocks;
     const text = sourceBlocks.map((block) => block.text).join("\n");
     const skills = text.split(/[,;•\n]/).map((part) => part.trim()).filter((part) => part.length >= 2).slice(0, 100);
