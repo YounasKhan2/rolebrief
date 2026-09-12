@@ -28,8 +28,8 @@ export class ResumesController {
   constructor(private readonly uploads: ResumeUploadService) {}
 
   @Get(":id")
-  @ApiOperation({ summary: "Read safe resume validation and malware-scanning status for the current user" })
-  @ApiResponse({ status: 200, description: "Safe processing status without object keys, hashes, scanner output, or queue identifiers" })
+  @ApiOperation({ summary: "Read safe resume validation, scanning, extraction, mapping, and review-readiness status for the current user" })
+  @ApiResponse({ status: 200, description: "Safe processing status without object keys, hashes, scanner/parser output, extraction artifacts, or queue identifiers" })
   @ApiResponse({ status: 404, description: "Resume document not found for the current user" })
   getStatus(@CurrentUser() user: AuthenticatedUser, @Param("id") id: string) {
     return this.uploads.getStatus(user.id, id);
@@ -75,9 +75,9 @@ export class ResumesController {
 
   @Post(":id/retry-verification")
   @UseGuards(CsrfGuard)
-  @ApiOperation({ summary: "Retry verification for a retryable failed resume upload" })
-  @ApiResponse({ status: 201, description: "Verification retry queued, or current terminal status returned when retry is not needed" })
-  @ApiResponse({ status: 409, description: "Resume verification is already active" })
+  @ApiOperation({ summary: "Retry a retryable failed resume verification, scan, extraction, or mapping step" })
+  @ApiResponse({ status: 201, description: "Retry queued, or current terminal status returned when retry is not needed" })
+  @ApiResponse({ status: 409, description: "Resume processing is already active" })
   @ApiResponse({ status: 429, description: "Retry rate limit exceeded" })
   @ApiResponse({ status: 503, description: "Verification queue unavailable; Retry-After may be returned" })
   retryVerification(

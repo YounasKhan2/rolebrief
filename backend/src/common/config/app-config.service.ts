@@ -139,6 +139,17 @@ export class AppConfigService {
         host: this.config.get("CLAMAV_HOST", { infer: true }),
         port: this.config.get("CLAMAV_PORT", { infer: true }),
         timeoutMs: this.config.get("CLAMAV_SCAN_TIMEOUT_MS", { infer: true })
+      },
+      extraction: {
+        serviceUrl: this.config.get("DOCLING_SERVICE_URL", { infer: true }),
+        internalToken: this.config.get("DOCLING_INTERNAL_TOKEN", { infer: true }),
+        timeoutMs: this.config.get("DOCLING_REQUEST_TIMEOUT_MS", { infer: true }),
+        responseMaxBytes: this.config.get("DOCLING_RESPONSE_MAX_BYTES", { infer: true }),
+        maxBlocks: this.config.get("RESUME_EXTRACTION_MAX_BLOCKS", { infer: true }),
+        maxTextBytes: this.config.get("RESUME_EXTRACTION_MAX_TEXT_BYTES", { infer: true }),
+        maxBlockTextBytes: this.config.get("RESUME_EXTRACTION_MAX_BLOCK_TEXT_BYTES", { infer: true }),
+        ocrMinBlocks: this.config.get("RESUME_EXTRACTION_OCR_MIN_BLOCKS", { infer: true }),
+        maxReconcile: this.config.get("RESUME_EXTRACTION_MAX_RECONCILE", { infer: true })
       }
     };
   }

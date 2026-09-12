@@ -13,7 +13,9 @@ import { Queue } from "bullmq";
 import { AppConfigService } from "../../common/config/app-config.service";
 import { PrismaService } from "../../prisma/prisma.service";
 import { S3StorageService } from "../../infrastructure/storage/s3-storage.service";
-import { QUEUES, VERIFY_RESUME_UPLOAD_JOB } from "../../queue/queue.constants";
+import { EXTRACT_VERIFIED_RESUME_JOB, QUEUES, VERIFY_RESUME_UPLOAD_JOB } from "../../queue/queue.constants";
+import { DOCLING_EXTRACTION_VERSION } from "../../infrastructure/internal-services/docling/docling-contract";
+import { RESUME_MAPPER_VERSION } from "./mapping/resume-mapper.service";
 import { ConfirmResumeUploadDto, CreateResumeUploadSessionDto } from "./dto/resume-upload.dto";
 import { ResumeRateLimitService } from "./resume-rate-limit.service";
 
@@ -204,7 +206,11 @@ export class ResumeUploadService {
     if (document.status !== ResumeDocumentStatus.FAILED && document.status !== ResumeDocumentStatus.UPLOADED) {
       throw new ConflictException("Resume verification is already active.");
     }
-    await this.enqueueVerification(document.id, document.sha256, `retry-${document.processingAttemptCount + 1}`);
+    if (document.scannedCleanAt) {
+      await this.enqueueExtraction(document.id, document.sha256, `retry-${document.processingAttemptCount + 1}`);
+    } else {
+      await this.enqueueVerification(document.id, document.sha256, `retry-${document.processingAttemptCount + 1}`);
+    }
     return this.getStatus(userId, id);
   }
 
@@ -263,6 +269,27 @@ export class ResumeUploadService {
     } catch {
       throw new ServiceUnavailableException({
         message: "Resume verification queue is temporarily unavailable.",
+        retryAfterSeconds: 30
+      });
+    }
+  }
+
+  private async enqueueExtraction(id: string, sha256: string, suffix: string) {
+    try {
+      await this.verificationQueue.add(
+        EXTRACT_VERIFIED_RESUME_JOB,
+        { version: 1, resumeDocumentId: id, sourceSha256: sha256, extractionVersion: DOCLING_EXTRACTION_VERSION, mapperVersion: RESUME_MAPPER_VERSION },
+        {
+          jobId: `${EXTRACT_VERIFIED_RESUME_JOB}__${id}__${sha256}__${suffix}`,
+          attempts: this.config.resumes.processing.maxAttempts,
+          backoff: { type: "exponential", delay: 3000 },
+          removeOnComplete: { age: 86400, count: 1000 },
+          removeOnFail: { age: 604800, count: 1000 }
+        }
+      );
+    } catch {
+      throw new ServiceUnavailableException({
+        message: "Resume extraction queue is temporarily unavailable.",
         retryAfterSeconds: 30
       });
     }

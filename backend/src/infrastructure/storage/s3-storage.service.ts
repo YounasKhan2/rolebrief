@@ -187,24 +187,53 @@ export class S3StorageService implements ObjectStorage {
     return Buffer.concat(chunks, total);
   }
 
-  private async signedFetch(method: "GET", key: string, signal: AbortSignal) {
+  async putObjectBuffer(options: {
+    key: string;
+    body: Buffer;
+    contentType: string;
+    metadata?: Record<string, string>;
+  }): Promise<{ sha256: string; byteSize: number }> {
+    const sha256 = createHash("sha256").update(options.body).digest("hex");
+    const response = await this.signedFetch("PUT", options.key, AbortSignal.timeout(5000), {
+      body: options.body,
+      contentType: options.contentType,
+      metadata: { ...(options.metadata ?? {}), sha256 }
+    });
+    if (!response.ok) {
+      throw new ServiceUnavailableException("Resume storage is temporarily unavailable.");
+    }
+    return { sha256, byteSize: options.body.length };
+  }
+
+  private async signedFetch(
+    method: "GET" | "PUT",
+    key: string,
+    signal: AbortSignal,
+    put?: { body: Buffer; contentType: string; metadata: Record<string, string> }
+  ) {
     const cfg = this.config.resumes.storage;
     const endpoint = new URL(cfg.endpoint);
     const host = cfg.forcePathStyle ? endpoint.host : `${cfg.bucket}.${endpoint.host}`;
     const path = cfg.forcePathStyle ? `/${cfg.bucket}/${canonicalPath(key)}` : `/${canonicalPath(key)}`;
     const now = new Date();
     const credentialScope = `${dateStamp(now)}/${cfg.region}/s3/aws4_request`;
-    const signedHeaders = "host;x-amz-content-sha256;x-amz-date";
-    const headers = {
+    const payloadHash = put ? createHash("sha256").update(put.body).digest("hex") : "UNSIGNED-PAYLOAD";
+    const metadataHeaders = Object.fromEntries(
+      Object.entries(put?.metadata ?? {}).map(([key, value]) => [`x-amz-meta-${key.toLowerCase()}`, value])
+    );
+    const headers: Record<string, string> = {
       host,
-      "x-amz-content-sha256": "UNSIGNED-PAYLOAD",
-      "x-amz-date": amzDate(now)
+      "x-amz-content-sha256": payloadHash,
+      "x-amz-date": amzDate(now),
+      ...(put ? { "content-type": put.contentType } : {}),
+      ...metadataHeaders
     };
+    const signedHeaders = Object.keys(headers).sort().join(";");
     const canonicalHeaders = Object.entries(headers)
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([header, value]) => `${header}:${value}\n`)
       .join("");
-    const canonicalRequest = [method, path, "", canonicalHeaders, signedHeaders, "UNSIGNED-PAYLOAD"].join("\n");
+    const canonicalRequest = [method, path, "", canonicalHeaders, signedHeaders, payloadHash].join("\n");
     const stringToSign = ["AWS4-HMAC-SHA256", amzDate(now), credentialScope, hash(canonicalRequest)].join("\n");
     const signingKey = hmac(hmac(hmac(hmac(`AWS4${cfg.secretAccessKey}`, dateStamp(now)), cfg.region), "s3"), "aws4_request");
     const signature = createHmac("sha256", signingKey).update(stringToSign).digest("hex");
@@ -214,11 +243,10 @@ export class S3StorageService implements ObjectStorage {
       return await fetch(url, {
         method,
         headers: {
-          Host: host,
-          "x-amz-content-sha256": "UNSIGNED-PAYLOAD",
-          "x-amz-date": amzDate(now),
+          ...headers,
           Authorization: authorization
         },
+        body: put ? new Uint8Array(put.body) : undefined,
         signal
       });
     } catch {

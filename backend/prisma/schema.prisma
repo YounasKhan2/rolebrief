@@ -865,6 +865,15 @@ enum ResumeFailureCode {
   MALWARE_DETECTED
   SCANNER_UNAVAILABLE
   SCAN_TIMEOUT
+  DOCLING_UNAVAILABLE
+  DOCLING_TIMEOUT
+  DOCLING_PROTOCOL_ERROR
+  DOCLING_OUTPUT_INVALID
+  DOCLING_OUTPUT_TOO_LARGE
+  OCR_FAILED
+  NO_USABLE_CONTENT
+  DOCX_IMAGE_ONLY_UNSUPPORTED
+  EXTRACTION_ARTIFACT_WRITE_FAILED
   PROCESSING_ATTEMPTS_EXHAUSTED
 }
 
@@ -928,6 +937,10 @@ model ResumeParseAttempt {
   queueJobId               String?                  @unique
   attempt                  Int                      @default(1)
   doclingArtifactObjectKey String?
+  artifactSha256           String?
+  artifactByteSize         Int?
+  artifactContentType      String?
+  artifactCompression      String?
   metricsJson              Json?
   failureCode              ResumeFailureCode?
   failureMessageSafe       String?
@@ -951,9 +964,16 @@ model ResumeExtractionDraft {
   schemaVersion           Int                @default(1)
   parserVersion           String
   mapperVersion           String
+  extractionVersion       String             @default("docling-contract-v1")
   sourceChecksum          String
+  artifactObjectKey       String?
+  artifactSha256          String?
+  artifactByteSize        Int?
+  artifactContentType     String?
+  artifactCompression     String?
   itemsJson               Json
   summaryJson             Json?
+  warningsJson            Json?
   reviewRevision          Int                @default(0)
   targetProfileRevision   Int?
   reviewedAt              DateTime?
@@ -964,6 +984,7 @@ model ResumeExtractionDraft {
   resumeDocument          ResumeDocument     @relation(fields: [resumeDocumentId], references: [id], onDelete: Cascade)
 
   @@unique([resumeDocumentId, sourceChecksum, mapperVersion])
+  @@index([sourceChecksum, parserVersion, mapperVersion])
   @@index([userId, status])
   @@index([resumeDocumentId, createdAt])
 }

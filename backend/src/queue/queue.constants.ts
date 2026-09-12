@@ -11,3 +11,4 @@ export const SEND_AUTH_EMAIL_JOB = "auth.email.send";
 export const EVALUATE_JOB_ALERTS_JOB = "alerts.job.evaluate";
 export const SEND_ALERT_DIGEST_JOB = "alerts.digest.send";
 export const VERIFY_RESUME_UPLOAD_JOB = "resumes.verify-upload.v1";
+export const EXTRACT_VERIFIED_RESUME_JOB = "resumes.extract-verified.v1";

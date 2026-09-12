@@ -257,9 +257,9 @@ Expected healthy behavior is a completed or partial run with page and record cou
 
 ## Resume Import Boundaries
 
-Status: resume upload, quarantine, trusted byte validation, and private ClamAV malware scanning are implemented. Processing stops at `VERIFIED_CLEAN`.
+Status: resume upload, quarantine, trusted byte validation, private ClamAV malware scanning, private document extraction, immutable extraction artifacts, and deterministic resume review drafts are implemented. Processing stops at `READY_FOR_REVIEW`.
 
-Not implemented in this boundary: Docling, OCR, parsing, mapping, preview/download access, frontend resume UI, review drafts, profile mutation, Radar refresh, and AI/LLM features.
+Not implemented in these boundaries: preview/download access, frontend resume UI, review mutations, canonical profile mutation, Radar refresh, resume generation/templates, ATS scoring, job tailoring, cover letters, and AI/LLM features.
 
 ### Components
 
@@ -272,6 +272,8 @@ flowchart LR
   Redis["Redis / BullMQ"]
   Worker["Node worker owns processing"]
   ClamAV["Private ClamAV service"]
+  Docling["Private Docling-compatible extraction service"]
+  Artifact["Immutable private extraction artifact"]
   DB["PostgreSQL"]
 
   Browser --> API
@@ -285,9 +287,12 @@ flowchart LR
   Worker --> DB
   Worker --> Storage
   Worker --> ClamAV
+  Worker --> Docling
+  Worker --> Artifact
+  Worker --> DB
 ```
 
-RustFS remains the development object-storage server. RoleBrief business logic talks to the generic S3-compatible storage adapter. ClamAV is private to Docker networking and has no public application route.
+RustFS remains the development object-storage server. RoleBrief business logic talks to the generic S3-compatible storage adapter. ClamAV and Docling are private to Docker networking and have no public application routes or host-bound ports.
 
 ### Upload And Verification Flow
 
@@ -300,6 +305,7 @@ sequenceDiagram
   participant S as Private RustFS/S3 storage
   participant W as Node worker
   participant C as Private ClamAV
+  participant X as Private Docling service
 
   B->>A: POST /api/v1/me/resumes/upload-session
   A->>R: Fail-closed admission limit
@@ -318,16 +324,24 @@ sequenceDiagram
   W->>D: Mark SCANNING
   W->>C: Stream scan through ClamAV INSTREAM
   W->>D: Mark VERIFIED_CLEAN or REJECTED/FAILED
+  W->>R: Add deterministic extraction job
+  R->>W: Deliver extraction job at least once
+  W->>D: Lease VERIFIED_CLEAN and mark EXTRACTING
+  W->>S: Read verified-clean object with byte limit
+  W->>X: Authenticated private extraction request
+  W->>S: Store immutable compressed extraction artifact
+  W->>D: Mark MAPPING and store deterministic review draft
+  W->>D: Mark READY_FOR_REVIEW
 ```
 
-The browser cannot download, preview, parse, or otherwise access quarantined files. Only future code may proceed from `VERIFIED_CLEAN` to preview or Docling extraction.
+The browser cannot download, preview, parse, or otherwise access quarantined files. Only the Node worker may process `VERIFIED_CLEAN` documents through the private Docling-compatible service. The Python service is stateless, cannot access PostgreSQL, Redis, BullMQ, object-storage keys, signed URLs, or user profiles, and cannot mutate canonical career-history tables.
 
 ### State Transitions
 
 Canonical successful path:
 
 ```text
-UPLOADING -> UPLOADED -> VERIFYING -> SCANNING -> VERIFIED_CLEAN
+UPLOADING -> UPLOADED -> VERIFYING -> SCANNING -> VERIFIED_CLEAN -> EXTRACTING -> MAPPING -> READY_FOR_REVIEW
 ```
 
 Permanent rejection branches:
@@ -343,6 +357,7 @@ Retryable operational branches:
 VERIFYING -> FAILED
 SCANNING -> FAILED
 FAILED -> VERIFYING
+FAILED -> EXTRACTING
 ```
 
 `DELETED` wins over processing completion. A worker uses a lease token and conditional updates so stale workers cannot overwrite a newer terminal result.
@@ -459,6 +474,20 @@ CLAMAV_SCAN_TIMEOUT_MS=
 
 No production secret values belong in tracked files.
 
+Resume extraction:
+
+```text
+DOCLING_SERVICE_URL=
+DOCLING_INTERNAL_TOKEN=
+DOCLING_REQUEST_TIMEOUT_MS=
+DOCLING_RESPONSE_MAX_BYTES=
+RESUME_EXTRACTION_MAX_BLOCKS=
+RESUME_EXTRACTION_MAX_TEXT_BYTES=
+RESUME_EXTRACTION_MAX_BLOCK_TEXT_BYTES=
+RESUME_EXTRACTION_OCR_MIN_BLOCKS=
+RESUME_EXTRACTION_MAX_RECONCILE=
+```
+
 ### Retention And Cleanup
 
 Rejected invalid or infected files are quarantined and assigned `retentionDeleteAt` for cleanup. Cleanup is idempotent and must never expose quarantined files. Abandoned uploads, rejected objects, exhausted failures, deleted documents, and temporary future scan/preview artifacts are cleanup-owned concerns.
@@ -481,6 +510,52 @@ Verified local Docker behavior for this boundary:
 - Rejected and infected documents receive a retention cleanup timestamp. Cleanup execution remains a future operational cleanup task.
 - Upload-session admission is lightweight validation plus presigning. Local spaced probe: p50 about 50ms, cold max about 200ms. Full upload plus object PUT plus confirm plus scan is naturally slower and should not be treated as admission latency.
 
+### Boundary 3 Extraction And Mapping
+
+Only `VERIFIED_CLEAN` documents enter extraction. The existing Node worker owns BullMQ consumption, retries, leases, database transitions, object reads, artifact writes, and deterministic mapping. It streams bounded bytes to a private authenticated Docling-compatible HTTP service:
+
+```text
+POST /internal/v1/documents/extract
+GET  /internal/v1/health/live
+GET  /internal/v1/health/ready
+```
+
+The internal request includes a versioned contract, opaque server-owned document reference, safe media type, OCR policy, and deadline metadata. It never includes a user ID, original filename, storage key, storage URL, signed URL, profile data, or callback URL. The service returns a bounded versioned structure containing pages, blocks, warnings, and safe metrics. Node treats the response as untrusted, validates it with a strict TypeScript schema, and rejects malformed or oversized output.
+
+Lossless normalized extraction output is stored as compressed private JSON under an immutable server-generated key. Artifact identity includes the source SHA-256, extraction contract version, parser version, OCR policy/version, and deterministic normalization version. PostgreSQL stores artifact metadata, safe metrics, and the bounded review draft; it does not store original file bytes.
+
+The deterministic RoleBrief mapper runs without LLMs. It separates normalization, section detection, resume-item grouping, taxonomy normalization, and confidence/review classification. Every mapped or preserved item is source-backed with block IDs, page numbers, bounding boxes when available, a review state, reason codes, and `RESUME_PARSED` provenance. Unknown sections are preserved as additional information, ambiguous dates require confirmation, and sensitive data such as birth date, national ID, marital status, photographs, and similar fields are classified as excluded. Login email, canonical profile, career-history rows, preferences, Radar, Match Brief, and Eligibility are not mutated in this boundary.
+
+OCR policy is deterministic: local extraction first; OCR is allowed only by policy when usable extracted text falls below the configured threshold. The current local service reports OCR availability safely and does not claim successful extraction for empty/image-only content.
+
+Extraction failure behavior:
+
+- Docling unavailable, overload, timeout, transient RustFS/PostgreSQL/Redis failures, and worker interruption produce retryable `FAILED` states.
+- Malformed or oversized Docling output, no usable content, image-only unsupported DOCX, artifact write failure, mapper failure, and exhausted attempts use safe failure codes.
+- Duplicate extraction jobs reuse the same logical artifact/draft identity.
+- Stale workers cannot overwrite a newer artifact, draft, deletion, or terminal state because final writes require the current lease token.
+
+Resume extraction health appears in:
+
+```bash
+curl http://127.0.0.1:3000/api/v1/health/resume-processing
+```
+
+General API readiness may remain up when Docling is degraded; resume extraction admission and processing fail or defer safely.
+
+### Boundary 3 Closure Evidence
+
+Verified local Docker behavior for this boundary:
+
+- Private Docling-compatible service has no public host port and reports healthy over Docker networking.
+- API resume-processing health reports ClamAV and Docling readiness without leaking configuration.
+- Clean synthetic PDF and DOCX extraction jobs reach `READY_FOR_REVIEW`.
+- Extraction artifacts are written to private object storage as immutable compressed JSON.
+- Deterministic review drafts are stored in PostgreSQL with source-backed items, stable IDs, summary counts, warnings, parser version, mapper version, and artifact metadata.
+- Malformed extraction output and invalid source documents fail safely without creating drafts.
+- Duplicate jobs and retry paths are idempotent through deterministic job IDs, artifact keys, draft upserts, and lease-guarded transitions.
+- No preview/download route or frontend review UI is exposed.
+
 ### Migration Rollback Considerations
 
 The first resume migration adds resume/career-history models. The scanning migration adds processing lease/scanner metadata and safe failure-code enum values. Existing jobs, auth, saved jobs, tracker, alerts, Radar, Match Brief, and Eligibility data are not rewritten.
@@ -495,38 +570,6 @@ Rollback before production traffic:
 
 Rollback after production traffic requires exporting or intentionally deleting user resume metadata and uploaded objects according to retention policy.
 
-## Planned Full Resume Import Architecture
+## Remaining Resume Import Boundaries
 
-The future architecture still includes Docling and review/profile application, but those are not implemented yet:
-
-```mermaid
-flowchart LR
-  Browser["Browser"]
-  API["RoleBrief NestJS API"]
-  Storage["Private RustFS/S3-compatible storage"]
-  Redis["BullMQ / Redis"]
-  NodeWorker["Node worker owns BullMQ state"]
-  ClamAV["Private ClamAV scanning boundary"]
-  Docling["Private stateless Python Docling HTTP service"]
-  DB["PostgreSQL parsed/review metadata"]
-  Review["User review and approval"]
-  Profile["Candidate profile revision"]
-  Cache["Match Brief / Eligibility cache version change"]
-  Radar["Explicit Radar refresh"]
-
-  Browser --> API
-  API --> Storage
-  API --> Redis
-  Redis --> NodeWorker
-  NodeWorker --> ClamAV
-  NodeWorker --> Docling
-  Docling --> Storage
-  NodeWorker --> DB
-  Browser --> Review
-  Review --> API
-  API --> Profile
-  Profile --> Cache
-  Browser --> Radar
-```
-
-Docling will not be public. The Node worker will call Docling over a private, authenticated, versioned internal HTTP contract with timeouts and payload limits in a later boundary.
+Future boundaries still need preview access, frontend review, user-confirmed profile application, Radar/cache refresh, resume generation/templates, tailoring, cover letters, and any AI/LLM features. Those are intentionally not part of the implemented upload, scanning, extraction, artifact, or draft boundaries.

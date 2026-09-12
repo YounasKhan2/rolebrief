@@ -16,6 +16,7 @@ import {
 import { S3StorageService } from "../../../infrastructure/storage/s3-storage.service";
 import { PrismaService } from "../../../prisma/prisma.service";
 import { ResumeFileValidatorService } from "./resume-file-validator.service";
+import { ResumeExtractionService } from "./resume-extraction.service";
 import { ResumePermanentValidationError, ResumeRetryableProcessingError } from "./resume-validation.types";
 
 export interface VerifyResumeUploadJobV1 {
@@ -35,7 +36,8 @@ export class ResumeProcessingService {
     private readonly config: AppConfigService,
     private readonly storage: S3StorageService,
     private readonly validator: ResumeFileValidatorService,
-    private readonly scanner: ClamAvScannerService
+    private readonly scanner: ClamAvScannerService,
+    private readonly extraction: ResumeExtractionService
   ) {}
 
   async process(job: VerifyResumeUploadJobV1) {
@@ -66,6 +68,7 @@ export class ResumeProcessingService {
         throw new ResumePermanentValidationError(ResumeFailureCode.MALWARE_DETECTED);
       }
       await this.completeClean(document.id, leaseToken);
+      await this.extraction.enqueue(document.id, document.sha256).catch(() => undefined);
       return { verified: true };
     } catch (error) {
       await this.handleProcessingError(document.id, leaseToken, error);

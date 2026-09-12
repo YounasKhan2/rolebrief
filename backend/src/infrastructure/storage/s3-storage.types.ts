@@ -25,4 +25,10 @@ export interface ObjectStorage {
   createPresignedPut(options: CreatePresignedPutOptions): PresignedUpload;
   headObject(key: string): Promise<ObjectHead>;
   getObjectBuffer(key: string, maxBytes: number): Promise<Buffer>;
+  putObjectBuffer(options: {
+    key: string;
+    body: Buffer;
+    contentType: string;
+    metadata?: Record<string, string>;
+  }): Promise<{ sha256: string; byteSize: number }>;
 }
