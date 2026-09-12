@@ -2,6 +2,7 @@ import { Injectable, Logger, ServiceUnavailableException } from "@nestjs/common"
 import { randomUUID } from "node:crypto";
 import { Readable } from "node:stream";
 import {
+  Prisma,
   ResumeDocumentStatus,
   ResumeFailureCode,
   ResumeParseAttemptStatus
@@ -189,6 +190,19 @@ export class ResumeProcessingService {
     const permanent = error instanceof ResumePermanentValidationError;
     const status = permanent ? ResumeDocumentStatus.REJECTED : ResumeDocumentStatus.FAILED;
     const now = new Date();
+    const data: Prisma.ResumeDocumentUpdateManyMutationInput = {
+      status,
+      failureCode: code,
+      failureMessageSafe: permanent ? "Resume file failed validation." : "Resume processing dependency is temporarily unavailable.",
+      processingLeaseToken: null,
+      processingLeaseExpiresAt: null
+    };
+    if (status === ResumeDocumentStatus.REJECTED && code === ResumeFailureCode.MALWARE_DETECTED) {
+      data.scannedAt = now;
+    }
+    if (status === ResumeDocumentStatus.REJECTED) {
+      data.retentionDeleteAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    }
     await this.prisma.resumeDocument.updateMany({
       where: {
         id,
@@ -196,15 +210,7 @@ export class ResumeProcessingService {
         deletedAt: null,
         status: { in: [ResumeDocumentStatus.VERIFYING, ResumeDocumentStatus.SCANNING] }
       },
-      data: {
-        status,
-        failureCode: code,
-        failureMessageSafe: permanent ? "Resume file failed validation." : "Resume processing dependency is temporarily unavailable.",
-        processingLeaseToken: null,
-        processingLeaseExpiresAt: null,
-        scannedAt: status === ResumeDocumentStatus.REJECTED && code === ResumeFailureCode.MALWARE_DETECTED ? now : undefined,
-        retentionDeleteAt: status === ResumeDocumentStatus.REJECTED ? new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000) : undefined
-      }
+      data
     });
     await this.prisma.resumeParseAttempt.updateMany({
       where: { resumeDocumentId: id, status: ResumeParseAttemptStatus.RUNNING },

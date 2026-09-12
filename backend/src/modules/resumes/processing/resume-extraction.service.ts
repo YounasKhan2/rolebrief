@@ -1,6 +1,7 @@
 import { InjectQueue } from "@nestjs/bullmq";
 import { Injectable, Logger, ServiceUnavailableException } from "@nestjs/common";
 import {
+  Prisma,
   ResumeDocumentStatus,
   ResumeDraftStatus,
   ResumeFailureCode,
@@ -36,7 +37,11 @@ export interface ExtractVerifiedResumeJobV1 {
   mapperVersion: string;
 }
 
-const PARSER_VERSION = "docling-service-v1";
+interface StoredExtractionArtifact {
+  key: string;
+  sha256: string;
+  byteSize: number;
+}
 
 @Injectable()
 export class ResumeExtractionService {
@@ -134,6 +139,9 @@ export class ResumeExtractionService {
 
       const mapped = this.mapper.map(extraction, { artifactId: artifact.sha256, sourceChecksum: document.sha256 });
       if (mapped.items.length === 0) throw new ResumePermanentValidationError(ResumeFailureCode.NO_USABLE_CONTENT);
+      const itemsJson = mapped.items as Prisma.InputJsonValue;
+      const summaryJson = mapped.summary as Prisma.InputJsonValue;
+      const warningsJson = mapped.warnings as Prisma.InputJsonValue;
       const draft = await this.prisma.resumeExtractionDraft.upsert({
         where: {
           resumeDocumentId_sourceChecksum_mapperVersion: {
@@ -151,9 +159,9 @@ export class ResumeExtractionService {
           artifactByteSize: artifact.byteSize,
           artifactContentType: "application/json",
           artifactCompression: "gzip",
-          itemsJson: mapped.items as any,
-          summaryJson: mapped.summary,
-          warningsJson: mapped.warnings as any
+          itemsJson,
+          summaryJson,
+          warningsJson
         },
         create: {
           resumeDocumentId: document.id,
@@ -169,9 +177,9 @@ export class ResumeExtractionService {
           artifactByteSize: artifact.byteSize,
           artifactContentType: "application/json",
           artifactCompression: "gzip",
-          itemsJson: mapped.items as any,
-          summaryJson: mapped.summary,
-          warningsJson: mapped.warnings as any,
+          itemsJson,
+          summaryJson,
+          warningsJson,
           targetProfileRevision: null
         }
       });
@@ -262,7 +270,13 @@ export class ResumeExtractionService {
     return { key, ...put };
   }
 
-  private async transition(id: string, leaseToken: string, from: ResumeDocumentStatus, to: ResumeDocumentStatus, data: Record<string, any> = {}) {
+  private async transition(
+    id: string,
+    leaseToken: string,
+    from: ResumeDocumentStatus,
+    to: ResumeDocumentStatus,
+    data: Prisma.ResumeDocumentUpdateManyMutationInput = {}
+  ) {
     const result = await this.prisma.resumeDocument.updateMany({
       where: { id, status: from, processingLeaseToken: leaseToken, deletedAt: null },
       data: { status: to, ...data }
@@ -270,7 +284,7 @@ export class ResumeExtractionService {
     if (result.count !== 1) throw new ResumeRetryableProcessingError(ResumeFailureCode.DOCLING_UNAVAILABLE);
   }
 
-  private async completeReady(id: string, leaseToken: string, draftId: string, parserVersion: string, mapperVersion: string, artifact: { key: string; sha256: string; byteSize: number }, extraction: DoclingExtraction) {
+  private async completeReady(id: string, leaseToken: string, draftId: string, parserVersion: string, mapperVersion: string, artifact: StoredExtractionArtifact, extraction: DoclingExtraction) {
     const now = new Date();
     const result = await this.prisma.resumeDocument.updateMany({
       where: { id, status: ResumeDocumentStatus.MAPPING, processingLeaseToken: leaseToken, deletedAt: null },
@@ -296,7 +310,7 @@ export class ResumeExtractionService {
         artifactByteSize: artifact.byteSize,
         artifactContentType: "application/json",
         artifactCompression: "gzip",
-        metricsJson: extraction.metrics
+        metricsJson: extraction.metrics as Prisma.InputJsonValue
       }
     });
   }
