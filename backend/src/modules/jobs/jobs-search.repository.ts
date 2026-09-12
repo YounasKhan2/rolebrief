@@ -74,10 +74,8 @@ export class JobsSearchRepository {
       LIMIT ${take + 1}
     `;
 
-    const [countResult, rows] = await Promise.all([
-      this.prisma.$queryRawUnsafe<{ totalCount: number }[]>(countQuery, ...params),
-      this.prisma.$queryRawUnsafe<any[]>(dataQuery, ...params)
-    ]);
+    const countResult = await this.prisma.$queryRawUnsafe<{ totalCount: number }[]>(countQuery, ...params);
+    const rows = await this.prisma.$queryRawUnsafe<any[]>(dataQuery, ...params);
 
     const totalCount = countResult[0]?.totalCount ?? 0;
     const items: SearchResultItem[] = rows.map((r) => ({
@@ -161,23 +159,16 @@ export class JobsSearchRepository {
       ORDER BY cnt DESC
     `;
 
-    const [
-      workModes,
-      remoteScopes,
-      employmentTypes,
-      seniorities,
-      countries,
-      categories,
-      providers
-    ] = await Promise.all([
-      this.prisma.$queryRawUnsafe<{ val: string; cnt: number }[]>(workModeSql, ...params).catch(() => []),
-      this.prisma.$queryRawUnsafe<{ val: string; cnt: number }[]>(remoteScopeSql, ...params).catch(() => []),
-      this.prisma.$queryRawUnsafe<{ val: string; cnt: number }[]>(employmentTypeSql, ...params).catch(() => []),
-      this.prisma.$queryRawUnsafe<{ val: string; cnt: number }[]>(senioritySql, ...params).catch(() => []),
-      this.prisma.$queryRawUnsafe<{ val: string; cnt: number }[]>(countrySql, ...params).catch(() => []),
-      this.prisma.$queryRawUnsafe<{ val: string; cnt: number }[]>(categorySql, ...params).catch(() => []),
-      this.prisma.$queryRawUnsafe<{ val: string; cnt: number }[]>(providerSql, ...params).catch(() => [])
-    ]);
+    const runFacet = (sql: string) =>
+      this.prisma.$queryRawUnsafe<{ val: string; cnt: number }[]>(sql, ...params).catch(() => []);
+
+    const workModes = await runFacet(workModeSql);
+    const remoteScopes = await runFacet(remoteScopeSql);
+    const employmentTypes = await runFacet(employmentTypeSql);
+    const seniorities = await runFacet(senioritySql);
+    const countries = await runFacet(countrySql);
+    const categories = await runFacet(categorySql);
+    const providers = await runFacet(providerSql);
 
     return {
       workMode: workModes.map((r) => ({ value: r.val, label: formatLabel(r.val), count: Number(r.cnt) })),
