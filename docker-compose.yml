@@ -60,6 +60,18 @@ services:
       rustfs:
         condition: service_healthy
 
+  clamav:
+    image: clamav/clamav:stable
+    volumes:
+      - rolebrief_clamav:/var/lib/clamav
+      - ./docker/clamav/local.ndb:/var/lib/clamav/local.ndb
+    healthcheck:
+      test: ["CMD-SHELL", "clamdscan --version >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 20
+      start_period: 60s
+
   api:
     image: rolebrief-backend:dev
     build:
@@ -73,6 +85,8 @@ services:
       REDIS_URL: redis://redis:6379
       RESUME_STORAGE_ENDPOINT: http://rustfs:9000
       RESUME_STORAGE_PUBLIC_ENDPOINT: http://localhost:9000
+      CLAMAV_HOST: clamav
+      CLAMAV_PORT: 3310
     ports:
       - "3000:3000"
     restart: unless-stopped
@@ -111,6 +125,8 @@ services:
       REDIS_URL: redis://redis:6379
       RESUME_STORAGE_ENDPOINT: http://rustfs:9000
       RESUME_STORAGE_PUBLIC_ENDPOINT: http://localhost:9000
+      CLAMAV_HOST: clamav
+      CLAMAV_PORT: 3310
     restart: unless-stopped
     depends_on:
       postgres:
@@ -121,6 +137,8 @@ services:
         condition: service_healthy
       rustfs-init:
         condition: service_completed_successfully
+      clamav:
+        condition: service_healthy
 
   scheduler:
     image: rolebrief-backend:dev
@@ -189,3 +207,4 @@ volumes:
   rolebrief_postgres:
   rolebrief_redis:
   rolebrief_rustfs:
+  rolebrief_clamav:

@@ -851,6 +851,21 @@ enum ResumeFailureCode {
   PARSER_TIMEOUT
   PARSER_FAILED
   MAPPER_FAILED
+  FILE_EMPTY
+  FILE_TOO_LARGE
+  SIZE_MISMATCH
+  SIGNATURE_MISMATCH
+  PDF_INVALID
+  PDF_ENCRYPTED
+  PDF_PAGE_LIMIT_EXCEEDED
+  DOCX_INVALID
+  DOCX_ARCHIVE_LIMIT_EXCEEDED
+  DOCX_UNSAFE_PATH
+  DOCX_MACRO_UNSUPPORTED
+  MALWARE_DETECTED
+  SCANNER_UNAVAILABLE
+  SCAN_TIMEOUT
+  PROCESSING_ATTEMPTS_EXHAUSTED
 }
 
 enum CandidateFactSource {
@@ -875,6 +890,15 @@ model ResumeDocument {
   confirmedAt          DateTime?
   verifiedAt           DateTime?
   scannedAt            DateTime?
+  scannedCleanAt       DateTime?
+  processingStartedAt  DateTime?
+  processingLeaseToken String?
+  processingLeaseExpiresAt DateTime?
+  processingAttemptCount Int                 @default(0)
+  verificationVersion  String?
+  scannerName          String?
+  scannerVersion       String?
+  scannerDefinitionVersion String?
   currentDraftId       String?
   parserVersion        String?
   mapperVersion        String?
@@ -893,6 +917,7 @@ model ResumeDocument {
   @@index([userId, status])
   @@index([userId, sha256])
   @@index([status, createdAt])
+  @@index([status, processingLeaseExpiresAt])
   @@index([retentionDeleteAt])
 }
 

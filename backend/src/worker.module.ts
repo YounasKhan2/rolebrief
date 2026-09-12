@@ -11,6 +11,8 @@ import { MatchingModule } from "./modules/matching/matching.module";
 import { EligibilityModule } from "./modules/eligibility/eligibility.module";
 import { AlertEvaluationProcessor } from "./modules/alerts/alert-evaluation.processor";
 import { AlertsModule } from "./modules/alerts/alerts.module";
+import { ResumesModule } from "./modules/resumes/resumes.module";
+import { ResumeVerificationProcessor } from "./modules/resumes/processing/resume-verification.processor";
 
 @Module({
   imports: [
@@ -23,8 +25,9 @@ import { AlertsModule } from "./modules/alerts/alerts.module";
     EmailModule,
     MatchingModule,
     EligibilityModule,
-    AlertsModule
+    AlertsModule,
+    ResumesModule
   ],
-  providers: [EmailDeliveryProcessor, AlertEvaluationProcessor]
+  providers: [EmailDeliveryProcessor, AlertEvaluationProcessor, ResumeVerificationProcessor]
 })
 export class WorkerModule {}

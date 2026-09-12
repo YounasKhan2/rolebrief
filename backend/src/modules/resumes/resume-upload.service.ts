@@ -8,9 +8,12 @@ import {
 } from "@nestjs/common";
 import { randomBytes } from "node:crypto";
 import { ResumeDocumentStatus } from "@prisma/client";
+import { InjectQueue } from "@nestjs/bullmq";
+import { Queue } from "bullmq";
 import { AppConfigService } from "../../common/config/app-config.service";
 import { PrismaService } from "../../prisma/prisma.service";
 import { S3StorageService } from "../../infrastructure/storage/s3-storage.service";
+import { QUEUES, VERIFY_RESUME_UPLOAD_JOB } from "../../queue/queue.constants";
 import { ConfirmResumeUploadDto, CreateResumeUploadSessionDto } from "./dto/resume-upload.dto";
 import { ResumeRateLimitService } from "./resume-rate-limit.service";
 
@@ -30,7 +33,8 @@ export class ResumeUploadService {
     private readonly prisma: PrismaService,
     private readonly config: AppConfigService,
     private readonly storage: S3StorageService,
-    private readonly rateLimit: ResumeRateLimitService
+    private readonly rateLimit: ResumeRateLimitService,
+    @InjectQueue(QUEUES.verification) private readonly verificationQueue: Queue
   ) {}
 
   async createUploadSession(userId: string, dto: CreateResumeUploadSessionDto, clientIp: string) {
@@ -144,7 +148,64 @@ export class ResumeUploadService {
         confirmedAt: new Date()
       }
     });
+    await this.enqueueVerification(updated.id, updated.sha256);
     return this.confirmResponse(updated);
+  }
+
+  async getStatus(userId: string, id: string) {
+    const document = await this.prisma.resumeDocument.findFirst({
+      where: { id, userId, deletedAt: null },
+      select: {
+        id: true,
+        status: true,
+        failureCode: true,
+        confirmedAt: true,
+        verifiedAt: true,
+        scannedAt: true,
+        byteSize: true,
+        mimeType: true,
+        createdAt: true,
+        updatedAt: true
+      }
+    });
+    if (!document) throw new NotFoundException("Resume document not found.");
+    return {
+      resumeDocumentId: document.id,
+      status: document.status,
+      failureCode: document.failureCode,
+      confirmedAt: document.confirmedAt?.toISOString() ?? null,
+      verifiedAt: document.verifiedAt?.toISOString() ?? null,
+      scannedAt: document.scannedAt?.toISOString() ?? null,
+      byteSize: document.byteSize,
+      mimeType: document.mimeType,
+      createdAt: document.createdAt.toISOString(),
+      updatedAt: document.updatedAt.toISOString()
+    };
+  }
+
+  async retryVerification(userId: string, id: string, clientIp: string) {
+    await this.rateLimit.consume({
+      namespace: "retry-verification:user",
+      subject: userId,
+      limit: this.config.resumes.rateLimits.confirmUpload,
+      windowSeconds: 60
+    });
+    await this.rateLimit.consume({
+      namespace: "retry-verification:ip",
+      subject: clientIp || "unknown",
+      limit: this.config.resumes.rateLimits.confirmUpload * 3,
+      windowSeconds: 60
+    });
+    const document = await this.prisma.resumeDocument.findFirst({ where: { id, userId, deletedAt: null } });
+    if (!document) throw new NotFoundException("Resume document not found.");
+    if (document.status === ResumeDocumentStatus.VERIFIED_CLEAN || document.status === ResumeDocumentStatus.REJECTED) {
+      return this.getStatus(userId, id);
+    }
+    if (document.status !== ResumeDocumentStatus.FAILED && document.status !== ResumeDocumentStatus.UPLOADED) {
+      throw new ConflictException("Resume verification is already active.");
+    }
+    await this.enqueueVerification(document.id, document.sha256, `retry-${document.processingAttemptCount + 1}`);
+    return this.getStatus(userId, id);
   }
 
   private validateUpload(mimeType: string, byteSize: number, filename: string) {
@@ -186,18 +247,42 @@ export class ResumeUploadService {
     };
   }
 
+  private async enqueueVerification(id: string, sha256: string, suffix: string = "initial") {
+    try {
+      await this.verificationQueue.add(
+        VERIFY_RESUME_UPLOAD_JOB,
+        { version: 1, resumeDocumentId: id, expectedSha256: sha256 },
+        {
+          jobId: `${VERIFY_RESUME_UPLOAD_JOB}__${id}__${sha256}__${suffix}`,
+          attempts: this.config.resumes.processing.maxAttempts,
+          backoff: { type: "exponential", delay: 2000 },
+          removeOnComplete: { age: 86400, count: 1000 },
+          removeOnFail: { age: 604800, count: 1000 }
+        }
+      );
+    } catch {
+      throw new ServiceUnavailableException({
+        message: "Resume verification queue is temporarily unavailable.",
+        retryAfterSeconds: 30
+      });
+    }
+  }
+
   private confirmResponse(document: { id: string; status: ResumeDocumentStatus; confirmedAt: Date | null; sha256: string; byteSize: number; mimeType: string }) {
     if (document.status !== ResumeDocumentStatus.UPLOADED) {
-      throw new ServiceUnavailableException("Resume upload is not ready for the next processing boundary.");
+      return {
+        resumeDocumentId: document.id,
+        status: document.status,
+        message: "Resume verification is already in progress or complete."
+      };
     }
     return {
       resumeDocumentId: document.id,
       status: document.status,
       confirmedAt: document.confirmedAt?.toISOString() ?? null,
-      sha256: document.sha256,
       byteSize: document.byteSize,
       mimeType: document.mimeType,
-      next: "Verification and malware scanning are intentionally handled in the next implementation boundary."
+      next: "Verification and malware scanning are queued. The file remains quarantined until VERIFIED_CLEAN."
     };
   }
 }

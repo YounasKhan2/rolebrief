@@ -157,4 +157,72 @@ export class S3StorageService implements ObjectStorage {
       metadata
     };
   }
+
+  async getObjectBuffer(key: string, maxBytes: number): Promise<Buffer> {
+    const response = await this.signedFetch("GET", key, AbortSignal.timeout(5000));
+    if (response.status === 404) {
+      throw new ServiceUnavailableException("Resume storage object is unavailable.");
+    }
+    if (!response.ok || !response.body) {
+      throw new ServiceUnavailableException("Resume storage is temporarily unavailable.");
+    }
+
+    const reader = response.body.getReader();
+    const chunks: Buffer[] = [];
+    let total = 0;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        total += value.byteLength;
+        if (total > maxBytes) {
+          throw new ServiceUnavailableException("Resume storage object exceeds the processing limit.");
+        }
+        chunks.push(Buffer.from(value));
+      }
+    } catch (error) {
+      if (error instanceof ServiceUnavailableException) throw error;
+      throw new ServiceUnavailableException("Resume storage is temporarily unavailable.");
+    }
+    return Buffer.concat(chunks, total);
+  }
+
+  private async signedFetch(method: "GET", key: string, signal: AbortSignal) {
+    const cfg = this.config.resumes.storage;
+    const endpoint = new URL(cfg.endpoint);
+    const host = cfg.forcePathStyle ? endpoint.host : `${cfg.bucket}.${endpoint.host}`;
+    const path = cfg.forcePathStyle ? `/${cfg.bucket}/${canonicalPath(key)}` : `/${canonicalPath(key)}`;
+    const now = new Date();
+    const credentialScope = `${dateStamp(now)}/${cfg.region}/s3/aws4_request`;
+    const signedHeaders = "host;x-amz-content-sha256;x-amz-date";
+    const headers = {
+      host,
+      "x-amz-content-sha256": "UNSIGNED-PAYLOAD",
+      "x-amz-date": amzDate(now)
+    };
+    const canonicalHeaders = Object.entries(headers)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([header, value]) => `${header}:${value}\n`)
+      .join("");
+    const canonicalRequest = [method, path, "", canonicalHeaders, signedHeaders, "UNSIGNED-PAYLOAD"].join("\n");
+    const stringToSign = ["AWS4-HMAC-SHA256", amzDate(now), credentialScope, hash(canonicalRequest)].join("\n");
+    const signingKey = hmac(hmac(hmac(hmac(`AWS4${cfg.secretAccessKey}`, dateStamp(now)), cfg.region), "s3"), "aws4_request");
+    const signature = createHmac("sha256", signingKey).update(stringToSign).digest("hex");
+    const authorization = `AWS4-HMAC-SHA256 Credential=${cfg.accessKeyId}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+    const url = new URL(path, `${endpoint.protocol}//${host}`);
+    try {
+      return await fetch(url, {
+        method,
+        headers: {
+          Host: host,
+          "x-amz-content-sha256": "UNSIGNED-PAYLOAD",
+          "x-amz-date": amzDate(now),
+          Authorization: authorization
+        },
+        signal
+      });
+    } catch {
+      throw new ServiceUnavailableException("Resume storage is temporarily unavailable.");
+    }
+  }
 }

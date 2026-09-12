@@ -7,6 +7,7 @@ import {
   PrismaHealthIndicator
 } from "@nestjs/terminus";
 import Redis from "ioredis";
+import { Socket } from "node:net";
 import { AppConfigService } from "../common/config/app-config.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { Public } from "../auth/auth.decorators";
@@ -60,5 +61,33 @@ export class HealthController {
         }
       }
     ]);
+  }
+
+  @Get("resume-processing")
+  async resumeProcessing() {
+    const clamav = await this.checkTcp(this.config.resumes.scanning.host, this.config.resumes.scanning.port, 1000);
+    return {
+      status: clamav ? "ok" : "degraded",
+      details: {
+        clamav: { status: clamav ? "up" : "down" },
+        verificationQueue: { status: "configured" },
+        storage: { status: "configured" }
+      }
+    };
+  }
+
+  private checkTcp(host: string, port: number, timeoutMs: number) {
+    return new Promise<boolean>((resolve) => {
+      const socket = new Socket();
+      const done = (value: boolean) => {
+        socket.destroy();
+        resolve(value);
+      };
+      socket.setTimeout(timeoutMs);
+      socket.once("connect", () => done(true));
+      socket.once("timeout", () => done(false));
+      socket.once("error", () => done(false));
+      socket.connect(port, host);
+    });
   }
 }

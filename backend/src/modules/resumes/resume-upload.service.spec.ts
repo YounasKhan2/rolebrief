@@ -11,6 +11,7 @@ function config() {
     resumes: {
       upload: { maxBytes: 10 * 1024 * 1024, urlTtlSeconds: 300 },
       rateLimits: { uploadSession: 8, confirmUpload: 12 },
+      processing: { maxAttempts: 3 },
       storage: { bucket: "rolebrief-resumes" }
     }
   };
@@ -20,6 +21,7 @@ function createService(overrides: {
   prisma?: any;
   storage?: any;
   rateLimit?: any;
+  verificationQueue?: any;
 } = {}) {
   const docs = new Map<string, any>();
   const byIdempotency = new Map<string, any>();
@@ -68,8 +70,9 @@ function createService(overrides: {
     })
   };
   const rateLimit = overrides.rateLimit ?? { consume: async () => undefined };
+  const verificationQueue = overrides.verificationQueue ?? { add: async () => ({ id: "verify-job" }) };
   return {
-    service: new ResumeUploadService(prisma, config() as any, storage, rateLimit),
+    service: new ResumeUploadService(prisma, config() as any, storage, rateLimit, verificationQueue),
     docs
   };
 }
@@ -173,7 +176,29 @@ test("confirmUpload verifies owner, size, type and SHA-256 metadata", async () =
   }, "127.0.0.1");
 
   assert.equal(confirmed.status, ResumeDocumentStatus.UPLOADED);
-  assert.equal(confirmed.next.includes("next implementation boundary"), true);
+  assert.equal(confirmed.next.includes("queued"), true);
+});
+
+test("confirmUpload fails closed when verification queue is unavailable", async () => {
+  const { service } = createService({
+    verificationQueue: { add: async () => { throw new Error("redis down"); } }
+  });
+  await service.createUploadSession("usr_1", {
+    filename: "resume.pdf",
+    mimeType: "application/pdf",
+    byteSize: 1024,
+    sha256: sha,
+    idempotencyKey: "upload-key-5b"
+  }, "127.0.0.1");
+
+  await assert.rejects(
+    () => service.confirmUpload("usr_1", "res_doc_1", {
+      byteSize: 1024,
+      sha256: sha,
+      idempotencyKey: "confirm-key-1b"
+    }, "127.0.0.1"),
+    ServiceUnavailableException
+  );
 });
 
 test("confirmUpload rejects SHA-256 metadata mismatch", async () => {

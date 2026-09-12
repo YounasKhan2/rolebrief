@@ -124,6 +124,21 @@ export class AppConfigService {
       rateLimits: {
         uploadSession: this.config.get("RESUME_RATE_LIMIT_UPLOAD_SESSION", { infer: true }),
         confirmUpload: this.config.get("RESUME_RATE_LIMIT_CONFIRM_UPLOAD", { infer: true })
+      },
+      processing: {
+        maxAttempts: this.config.get("RESUME_PROCESSING_MAX_ATTEMPTS", { infer: true }),
+        leaseSeconds: this.config.get("RESUME_PROCESSING_LEASE_SECONDS", { infer: true }),
+        timeoutMs: this.config.get("RESUME_PROCESSING_TIMEOUT_MS", { infer: true }),
+        pdfMaxPages: this.config.get("RESUME_PDF_MAX_PAGES", { infer: true }),
+        docxMaxEntries: this.config.get("RESUME_DOCX_MAX_ENTRIES", { infer: true }),
+        docxMaxUncompressedBytes: this.config.get("RESUME_DOCX_MAX_UNCOMPRESSED_BYTES", { infer: true }),
+        docxMaxEntryBytes: this.config.get("RESUME_DOCX_MAX_ENTRY_BYTES", { infer: true }),
+        docxMaxCompressionRatio: this.config.get("RESUME_DOCX_MAX_COMPRESSION_RATIO", { infer: true })
+      },
+      scanning: {
+        host: this.config.get("CLAMAV_HOST", { infer: true }),
+        port: this.config.get("CLAMAV_PORT", { infer: true }),
+        timeoutMs: this.config.get("CLAMAV_SCAN_TIMEOUT_MS", { infer: true })
       }
     };
   }
