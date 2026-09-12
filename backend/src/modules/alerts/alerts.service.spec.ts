@@ -260,6 +260,37 @@ test("JobOutboxDispatcherService - reaps stalled events older than 15 minutes", 
   assert.equal(updateData.status, OutboxStatus.PENDING);
 });
 
+test("JobOutboxDispatcherService - uses BullMQ-safe custom job identifiers", async () => {
+  const { JobOutboxDispatcherService } = await import("./job-outbox-dispatcher.service");
+  const { OutboxStatus } = await import("@prisma/client");
+
+  let queuedJobs: any[] = [];
+  let updatedStatus: any = null;
+  const prisma: any = {
+    $transaction: async (fn: any) => fn(prisma),
+    $queryRaw: async () => [{ id: "outbox-event-1", jobId: "job-1" }],
+    jobOutboxEvent: {
+      updateMany: async ({ data }: any) => {
+        updatedStatus = data.status;
+        return { count: 1 };
+      }
+    }
+  };
+  const mockQueue: any = {
+    addBulk: async (jobs: any[]) => {
+      queuedJobs = jobs;
+    }
+  };
+  const dispatcher = new JobOutboxDispatcherService(prisma, mockQueue);
+
+  const dispatched = await dispatcher.dispatchPendingEvents(10);
+
+  assert.equal(dispatched, 1);
+  assert.equal(updatedStatus, OutboxStatus.PROCESSING);
+  assert.equal(queuedJobs[0].opts.jobId, "outbox__outbox-event-1");
+  assert.equal(queuedJobs[0].opts.jobId.includes(":"), false);
+});
+
 test("JobOutboxDispatcherService - does not touch fresh events when none returned by query", async () => {
   const { JobOutboxDispatcherService } = await import("./job-outbox-dispatcher.service");
 

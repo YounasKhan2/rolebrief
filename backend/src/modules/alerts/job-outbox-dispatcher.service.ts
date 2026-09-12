@@ -45,7 +45,7 @@ export class JobOutboxDispatcherService {
             jobId: event.jobId
           },
           opts: {
-            jobId: `outbox:${event.id}`,
+            jobId: `outbox__${event.id}`,
             removeOnComplete: 100,
             removeOnFail: 200
           }
