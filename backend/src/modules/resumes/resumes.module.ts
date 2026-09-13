@@ -12,11 +12,12 @@ import { ResumeMapperService } from "./mapping/resume-mapper.service";
 import { ResumeRateLimitService } from "./resume-rate-limit.service";
 import { ResumeUploadService } from "./resume-upload.service";
 import { DocumentParserModule } from "../../infrastructure/internal-services/document-parser/document-parser.module";
+import { ResumeReviewService } from "./review/resume-review.service";
 
 @Module({
   imports: [AppConfigModule, PrismaModule, StorageModule, MalwareModule, QueueModule, DocumentParserModule],
   controllers: [ResumesController],
-  providers: [ResumeUploadService, ResumeRateLimitService, ResumeFileValidatorService, ResumeProcessingService, ResumeExtractionService, ResumeMapperService],
+  providers: [ResumeUploadService, ResumeReviewService, ResumeRateLimitService, ResumeFileValidatorService, ResumeProcessingService, ResumeExtractionService, ResumeMapperService],
   exports: [ResumeUploadService, ResumeProcessingService, ResumeExtractionService]
 })
 export class ResumesModule {}

@@ -1,10 +1,12 @@
-import { Body, Controller, Get, Param, Post, Req, Res, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Param, Patch, Post, Req, Res, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
 import type { Request, Response } from "express";
 import { AuthenticatedUser, CurrentUser } from "../../auth/auth.decorators";
 import { CsrfGuard } from "../../auth/csrf.guard";
 import { UserRoleGuard } from "../../auth/user-role.guard";
 import { ConfirmResumeUploadDto, CreateResumeUploadSessionDto } from "./dto/resume-upload.dto";
+import { UpdateResumeDraftReviewDto } from "./dto/review/resume-review.dto";
+import { ResumeReviewService } from "./review/resume-review.service";
 import { ResumeUploadService } from "./resume-upload.service";
 
 async function withRetryAfterHeader<T>(res: Response, operation: () => Promise<T>): Promise<T> {
@@ -25,7 +27,10 @@ async function withRetryAfterHeader<T>(res: Response, operation: () => Promise<T
 @UseGuards(UserRoleGuard)
 @Controller("me/resumes")
 export class ResumesController {
-  constructor(private readonly uploads: ResumeUploadService) {}
+  constructor(
+    private readonly uploads: ResumeUploadService,
+    private readonly reviews: ResumeReviewService
+  ) {}
 
   @Get(":id")
   @ApiOperation({ summary: "Read safe resume validation, scanning, extraction, mapping, and review-readiness status for the current user" })
@@ -87,5 +92,34 @@ export class ResumesController {
     @Res({ passthrough: true }) res: Response
   ) {
     return withRetryAfterHeader(res, () => this.uploads.retryVerification(user.id, id, req.ip ?? ""));
+  }
+
+  @Get(":id/draft")
+  @ApiOperation({ summary: "Read the source-backed resume extraction draft for owner review" })
+  @ApiResponse({ status: 200, description: "Bounded review draft without parser artifact keys, object keys, hashes, queues, or storage URLs" })
+  @ApiResponse({ status: 404, description: "Resume draft not found for the current user" })
+  @ApiResponse({ status: 409, description: "Resume is not ready for review" })
+  getDraft(@CurrentUser() user: AuthenticatedUser, @Param("id") id: string) {
+    return this.reviews.getDraft(user.id, id);
+  }
+
+  @Patch(":id/draft")
+  @UseGuards(CsrfGuard)
+  @ApiOperation({ summary: "Atomically accept, edit, reject, or categorize resume draft items" })
+  @ApiResponse({ status: 200, description: "Review decisions applied once with reviewRevision incremented" })
+  @ApiResponse({ status: 400, description: "Invalid item IDs, duplicate operations, or malformed values" })
+  @ApiResponse({ status: 403, description: "CSRF failure or forbidden administrative account" })
+  @ApiResponse({ status: 409, description: "Review revision conflict or idempotency key reuse" })
+  @ApiResponse({ status: 422, description: "Action not allowed for the item classification" })
+  @ApiResponse({ status: 429, description: "Review mutation rate limit exceeded" })
+  @ApiResponse({ status: 503, description: "Review mutation admission control unavailable; Retry-After may be returned" })
+  updateDraft(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("id") id: string,
+    @Body() body: UpdateResumeDraftReviewDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response
+  ) {
+    return withRetryAfterHeader(res, () => this.reviews.updateDraft(user.id, id, body, req.ip ?? ""));
   }
 }

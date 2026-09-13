@@ -257,9 +257,9 @@ Expected healthy behavior is a completed or partial run with page and record cou
 
 ## Resume Import Boundaries
 
-Status: resume upload, quarantine, trusted byte validation, private ClamAV malware scanning, private document extraction, immutable extraction artifacts, and deterministic resume review drafts are implemented. Processing stops at `READY_FOR_REVIEW`.
+Status: resume upload, quarantine, trusted byte validation, private ClamAV malware scanning, private document extraction, immutable extraction artifacts, deterministic resume review drafts, and owner-scoped draft review APIs are implemented. Processing stops at a versioned reviewed draft that is ready for a future profile-application boundary.
 
-Not implemented in these boundaries: preview/download access, frontend resume UI, review mutations, canonical profile mutation, Radar refresh, resume generation/templates, ATS scoring, job tailoring, cover letters, and AI/LLM features.
+Not implemented in these boundaries: preview/download access, frontend resume UI, canonical profile mutation, career-history mutation, Radar refresh, resume generation/templates, ATS scoring, job tailoring, cover letters, and AI/LLM features.
 
 ### Components
 
@@ -274,6 +274,7 @@ flowchart LR
   ClamAV["Private ClamAV service"]
   Parser["Private document-parser-service"]
   Artifact["Immutable private extraction artifact"]
+  Review["Owner-scoped review API"]
   DB["PostgreSQL"]
 
   Browser --> API
@@ -290,6 +291,8 @@ flowchart LR
   Worker --> Parser
   Worker --> Artifact
   Worker --> DB
+  API --> Review
+  Review --> DB
 ```
 
 RustFS remains the development object-storage server. RoleBrief business logic talks to the generic S3-compatible storage adapter. ClamAV and the document parser are private to Docker networking and have no public application routes or host-bound ports.
@@ -561,21 +564,52 @@ General API readiness may remain up when the document parser is degraded; resume
 
 ### Boundary 3 Closure Evidence
 
-Status: implementation has been corrected from the earlier model-heavy parser attempt to a lightweight private parser. Live Docker/resource verification is pending in this environment because Docker Desktop is not currently reachable from the shell.
-
-Expected checks before locking:
+Verified local Docker behavior for the extraction and mapping boundary:
 
 - private document-parser-service has no public host port and reports healthy over Docker networking;
 - API resume-processing health reports ClamAV and document-parser readiness without leaking configuration;
-- clean synthetic PDF, scanned PDF, and DOCX extraction jobs reach `READY_FOR_REVIEW`;
+- clean synthetic PDF and DOCX extraction jobs reach `READY_FOR_REVIEW`;
 - scanned PDF blocks prove actual Tesseract invocation through `extractionMethod: "OCR"` and `metrics.ocrPages`;
 - extraction artifacts are written to private object storage as immutable compressed JSON;
 - deterministic review drafts are stored in PostgreSQL with source-backed items, stable IDs, summary counts, warnings, parser version, mapper version, and artifact metadata;
 - malformed or oversized parser output and invalid source documents fail safely without creating drafts;
 - duplicate jobs and retry paths are idempotent through deterministic job IDs, artifact keys, draft upserts, and lease-guarded transitions;
+- parser outage produces retryable `FAILED` and recovery reaches `READY_FOR_REVIEW`;
 - no preview/download route or frontend review UI is exposed;
 - runtime works with outbound networking disabled;
 - dependency scan confirms the active parser runtime contains only the lightweight parser stack documented above.
+
+### Boundary 4 Draft Review API
+
+Boundary 4 exposes secure, owner-scoped APIs for reviewing the deterministic extraction draft. It does not expose parser artifacts and does not mutate canonical profile or career-history tables.
+
+```text
+Private parser artifact
+  -> versioned review draft
+  -> GET /api/v1/me/resumes/:resumeDocumentId/draft
+  -> PATCH /api/v1/me/resumes/:resumeDocumentId/draft
+  -> accept/edit/reject/categorize decisions
+  -> atomic reviewRevision
+  -> profile revision comparison
+  -> ready for future profile application
+```
+
+Review API rules:
+
+- `GET /api/v1/me/resumes/:resumeDocumentId/draft` returns a bounded review representation only: sections, safe snippets, source page/bounding-box references where available, review state, review summary, parser/mapper versions, and profile revision comparison.
+- `PATCH /api/v1/me/resumes/:resumeDocumentId/draft` accepts 1-100 operations and applies the whole batch atomically.
+- Every successful mutation increments `reviewRevision` exactly once.
+- Stale writes return `409 REVIEW_REVISION_CONFLICT` with the current revision and `refetchRequired: true`; the conflict response does not include the full draft.
+- Idempotency keys are durable and scoped by user, draft and mutation. Replaying the same key with the same payload returns the original result; reusing the key with a different payload returns `409 IDEMPOTENCY_KEY_REUSED`.
+- Parser evidence is immutable. Clients cannot replace item objects, source block IDs, page numbers, bounding boxes, original text, parser classification, reason codes or confidence.
+- Sensitive items cannot be accepted or edited into canonical suggestions. They may only remain excluded/categorized as sensitive.
+- Unsupported or unreadable items cannot become canonical suggestions through arbitrary categories.
+- Unknown/custom sections remain preserved and may be categorized through a versioned allowlist.
+- `targetProfileRevision` is captured during extraction. Draft reads compare it with the current candidate profile revision and return `profileChangedSinceExtraction`.
+- Review may continue after profile changes; future profile application must reconcile using the latest expected profile revision.
+- Mutations are USER-only, CSRF-protected, owner-scoped and rate-limited. Guests receive 401, ADMIN receives 403 through the existing user-role guard, and cross-user access returns 404.
+
+Boundary 4 intentionally does not implement frontend review UI, preview/download URLs, canonical profile application, career-history mutation, profile completeness changes, Radar refresh, or any AI/LLM behavior.
 
 ### Migration Rollback Considerations
 
@@ -610,10 +644,10 @@ docker compose up -d postgres
 docker compose run --rm migrate
 ```
 
-This is intentional local environment debt. It does not block Boundary 3 or any future boundary.
+This is intentional local environment debt. It does not block Boundary 3, Boundary 4, or any future boundary.
 
 ---
 
 ## Remaining Resume Import Boundaries
 
-Future boundaries still need preview access, frontend review, user-confirmed profile application, Radar/cache refresh, resume generation/templates, tailoring, cover letters, and any AI/LLM features. Those are intentionally not part of the implemented upload, scanning, extraction, artifact, or draft boundaries.
+Future boundaries still need preview access, frontend review, user-confirmed profile application, Radar/cache refresh, resume generation/templates, tailoring, cover letters, and any AI/LLM features. Those are intentionally not part of the implemented upload, scanning, extraction, artifact, draft, or review-API boundaries.

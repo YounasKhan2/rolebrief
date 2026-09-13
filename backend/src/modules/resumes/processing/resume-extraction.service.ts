@@ -144,6 +144,11 @@ export class ResumeExtractionService {
       const itemsJson = mapped.items as Prisma.InputJsonValue;
       const summaryJson = mapped.summary as Prisma.InputJsonValue;
       const warningsJson = mapped.warnings as Prisma.InputJsonValue;
+      const profile = await this.prisma.candidateProfile.findUnique({
+        where: { userId: document.userId },
+        select: { revision: true }
+      });
+      const targetProfileRevision = profile?.revision ?? 0;
       const draft = await this.prisma.resumeExtractionDraft.upsert({
         where: {
           resumeDocumentId_sourceChecksum_mapperVersion: {
@@ -163,7 +168,8 @@ export class ResumeExtractionService {
           artifactCompression: "gzip",
           itemsJson,
           summaryJson,
-          warningsJson
+          warningsJson,
+          targetProfileRevision
         },
         create: {
           resumeDocumentId: document.id,
@@ -182,7 +188,7 @@ export class ResumeExtractionService {
           itemsJson,
           summaryJson,
           warningsJson,
-          targetProfileRevision: null
+          targetProfileRevision
         }
       });
       await this.completeReady(document.id, leaseToken, draft.id, parserVersion, job.mapperVersion, artifact, extraction);

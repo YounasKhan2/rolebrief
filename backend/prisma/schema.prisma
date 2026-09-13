@@ -984,6 +984,22 @@ model ResumeExtractionDraft {
   @@index([resumeDocumentId, createdAt])
 }
 
+model ResumeReviewMutation {
+  id                 String   @id @default(cuid())
+  userId             String
+  resumeDocumentId   String
+  draftId            String
+  idempotencyKey     String
+  requestHash        String
+  responseJson       Json
+  expiresAt          DateTime
+  createdAt          DateTime @default(now())
+
+  @@unique([userId, draftId, idempotencyKey])
+  @@index([draftId, createdAt])
+  @@index([expiresAt])
+}
+
 model CandidateExperience {
   id               String              @id @default(cuid())
   profileId        String
